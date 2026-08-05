@@ -1,0 +1,5 @@
+# Limpar dados do PostgreSQL
+docker exec -it atlas-postgres psql -U atlas -d atlas_db -c "TRUNCATE accounts, characters, character_inventories CASCADE;"
+
+# Limpar cache do Redis
+docker exec -it atlas-redis redis-cli FLUSHALL

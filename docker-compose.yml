@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: atlas-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: atlas
+      POSTGRES_PASSWORD: atlas_password
+      POSTGRES_DB: atlas_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    command: postgres -c shared_buffers=128MB -c max_connections=50
+
+  redis:
+    image: redis:7-alpine
+    container_name: atlas-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --maxmemory 50mb --maxmemory-policy allkeys-lru
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: atlas-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=atlas
+      - DB_PASSWORD=atlas_password
+      - DB_NAME=atlas_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PORT=8080
+    depends_on:
+      - postgres
+      - redis
+
+volumes:
+  postgres_data:
+  redis_data:
