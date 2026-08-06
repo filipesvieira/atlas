@@ -28,12 +28,13 @@ type ClientAction struct {
 	Action   string `json:"action"`
 	ItemID   string `json:"item_id"`
 	Slot     string `json:"slot"`
-	RegionID string `json:"region_id"`
-	Region   string `json:"region"`
-	Stance   string `json:"stance"`
-	Skill    string `json:"skill"`
-	Stat     string `json:"stat"`
-	Pack     string `json:"pack"`
+	RegionID string   `json:"region_id"`
+	Region   string   `json:"region"`
+	Stance   string   `json:"stance"`
+	Skill    string   `json:"skill"`
+	Stat     string   `json:"stat"`
+	Pack     string   `json:"pack"`
+	ItemIDs  []string `json:"item_ids"`
 }
 
 
@@ -42,28 +43,31 @@ func convertDBCharToGameChar(c *db.Character) *game.CharacterData {
 		return nil
 	}
 	return &game.CharacterData{
-		ID:         c.ID,
-		AccountID:  c.AccountID,
-		Name:       c.Name,
-		Vocation:   c.Vocation,
-		Origin:     c.Origin,
-		Level:      c.Level,
-		Experience: c.Experience,
-		Health:     c.Health,
-		MaxHealth:  c.MaxHealth,
-		Mana:       c.Mana,
-		MaxMana:    c.MaxMana,
-		GoldBank:      c.GoldBank,
-		STR:           c.STR,
-		DEX:           c.DEX,
-		INT:           c.INT,
-		VIT:           c.VIT,
-		UnspentPoints: c.UnspentPoints,
-		Masteries:     c.Masteries,
-		LearnedSkills: c.LearnedSkills,
-		ActiveSkills:  c.ActiveSkills,
-		LastLogin:     c.LastLogin,
-		LastLogout:    c.LastLogout,
+		ID:                 c.ID,
+		AccountID:          c.AccountID,
+		Name:               c.Name,
+		Vocation:           c.Vocation,
+		Origin:             c.Origin,
+		Level:              c.Level,
+		Experience:         c.Experience,
+		Health:             c.Health,
+		MaxHealth:          c.MaxHealth,
+		Mana:               c.Mana,
+		MaxMana:            c.MaxMana,
+		GoldBank:           c.GoldBank,
+		STR:                c.STR,
+		DEX:                c.DEX,
+		INT:                c.INT,
+		VIT:                c.VIT,
+		UnspentPoints:      c.UnspentPoints,
+		Masteries:          c.Masteries,
+		LearnedSkills:      c.LearnedSkills,
+		ActiveSkills:       c.ActiveSkills,
+		UnlockedRegions:    c.UnlockedRegions,
+		IsExpeditionActive: c.IsExpeditionActive,
+		ActiveRegion:       c.ActiveRegion,
+		LastLogin:          c.LastLogin,
+		LastLogout:         c.LastLogout,
 	}
 }
 
@@ -94,28 +98,31 @@ func convertGameCharToDBChar(c *game.CharacterData) *db.Character {
 		return nil
 	}
 	return &db.Character{
-		ID:         c.ID,
-		AccountID:  c.AccountID,
-		Name:       c.Name,
-		Vocation:   c.Vocation,
-		Origin:     c.Origin,
-		Level:      c.Level,
-		Experience: c.Experience,
-		Health:     c.Health,
-		MaxHealth:  c.MaxHealth,
-		Mana:       c.Mana,
-		MaxMana:    c.MaxMana,
-		GoldBank:      c.GoldBank,
-		STR:           c.STR,
-		DEX:           c.DEX,
-		INT:           c.INT,
-		VIT:           c.VIT,
-		UnspentPoints: c.UnspentPoints,
-		Masteries:     c.Masteries,
-		LearnedSkills: c.LearnedSkills,
-		ActiveSkills:  c.ActiveSkills,
-		LastLogin:     c.LastLogin,
-		LastLogout:    c.LastLogout,
+		ID:                 c.ID,
+		AccountID:          c.AccountID,
+		Name:               c.Name,
+		Vocation:           c.Vocation,
+		Origin:             c.Origin,
+		Level:              c.Level,
+		Experience:         c.Experience,
+		Health:             c.Health,
+		MaxHealth:          c.MaxHealth,
+		Mana:               c.Mana,
+		MaxMana:            c.MaxMana,
+		GoldBank:           c.GoldBank,
+		STR:                c.STR,
+		DEX:                c.DEX,
+		INT:                c.INT,
+		VIT:                c.VIT,
+		UnspentPoints:      c.UnspentPoints,
+		Masteries:          c.Masteries,
+		LearnedSkills:      c.LearnedSkills,
+		ActiveSkills:       c.ActiveSkills,
+		UnlockedRegions:    c.UnlockedRegions,
+		IsExpeditionActive: c.IsExpeditionActive,
+		ActiveRegion:       c.ActiveRegion,
+		LastLogin:          c.LastLogin,
+		LastLogout:         c.LastLogout,
 	}
 }
 
@@ -166,7 +173,6 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 		
 		getLootWrapper := func(level int) *game.Item {
-			// random source created per call or you could persist one
 			r := rand.New(rand.NewSource(time.Now().UnixNano()))
 			return db.GetRandomLoot(level, r)
 		}
@@ -179,8 +185,21 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		session = game.NewGameSession(gameChar, gameInv, saveInvWrapper, saveCharWrapper, getLootWrapper, getMonsterWrapper)
 		activeSessions[charID] = session
 		go session.StartTicker()
+	} else {
+		session.EnsureTickerRunning()
 	}
 	sessionsMu.Unlock()
+
+	defer func() {
+		sessionsMu.Lock()
+		if currentSess, ok := activeSessions[charID]; ok && currentSess == session {
+			delete(activeSessions, charID)
+			session.StopTicker()
+			_ = db.SetCharacterOffline(charID, session.IsExpeditionActive, session.ActiveRegion)
+			log.Printf("🔌 Cliente %s desconectado. Estado offline salvo (Expedição: %v, Região: %s).", charID, session.IsExpeditionActive, session.ActiveRegion)
+		}
+		sessionsMu.Unlock()
+	}()
 
 	// Goroutine de Leitura de Ações do Cliente (Ações do Inventário / Expedição)
 	go func() {
@@ -213,6 +232,8 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 				session.AllocateStat(act.Stat)
 			case "CHOOSE_STARTER_PACK":
 				session.ChooseStarterPack(act.Pack)
+			case "BULK_SELL":
+				session.BulkSell(act.ItemIDs)
 			}
 		}
 	}()

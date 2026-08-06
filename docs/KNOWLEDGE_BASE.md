@@ -84,34 +84,34 @@ $$\text{DPS} = \left( \frac{\text{AtaqueTotal}}{0.75\text{s}} \right) \times \te
 
 ---
 
-## 🎯 5. Tabelas de Loot Determinísticas (Monster Loot Tables)
+## 🎯 5. Tabelas de Loot, Tiers e Requisitos de Nível (REFACT V3)
 
-### Princípio do Loot Alvo
-Em vez de drops 100% aleatórios, cada monstro possui sua própria **Tabela de Drops (`GenerateLootForMonster`)** associada ao seu nível e região, com limite de raridade (*Rarity Cap*):
+### Requisitos de Nível (`RequiredLevel`) & Atributos Bônus
+Todo equipamento possui um **Nível Mínimo para Equipar (`required_level`)**. Heróis que não atingirem o nível exigido recebem um aviso visual `🔒 Requer Nível X` e têm a ação travada pelo servidor Go (`EquipItem`).
 
-- **Monstros de Nível 1–5 (Tier 1)**:
-  - *Goblin Salteador*: *Espada do Aprendiz*, *Capacete de Couro*, *Pequena Bolsa*, *Flechas de Madeira*. *(Max: Incomum)*
-  - *Lobo Selvagem*: *Amuleto do Lobo*, *Botas de Couro*, *Calça de Couro*. *(Max: Incomum)*
-  - *Aranha de Espinhos*: *Arco Curvo*, *Flechas de Madeira*, *Varinha do Aprendiz*. *(Max: Incomum)*
-- **Monstros de Nível 5–20 (Tiers 2–3)**:
-  - *Orc Guerreiro*: *Espada de Aço*, *Machado Orc*, *Cota de Malha*, *Escudo de Batalha*. *(Max: Raro)*
-  - *Esqueleto Guardião*: *Elmo Rúnico*, *Orbe Protetor*, *Lâmina de Greiscu*, *Cetro do Esquelético*. *(Max: Raro)*
-  - *Dementador / Voldemorte*: *Robe Místico*, *Cajado Rúnico*, *Varinha das Relíquias*. *(Max: Lendário)*
-- **Monstros de Nível 20+ (Tiers 4–5)**:
-  - *Espectro / Golem / Atenas*: *Escudo do Zodíaco*, *Armadura de Ouro*, *Arco dos Ventos*. *(Max: Lendário)*
-  - *Dragão / Demônio / Vingador*: *Espada Mítica do Vingador*, *Arco dos Ventos*, *Flechas Incendiárias*. *(Max: Lendário)*
+Além dos atributos primários de Ataque e Defesa, os equipamentos agora concedem **Bônus Ativos & Passivos**:
+- **Atributos Primários**: `BonusSTR` (💪), `BonusDEX` (🎯), `BonusINT` (🔮) (aumentam os atributos do herói e o dano).
+- **Vida & Mana**: `BonusHP` (❤️), `BonusMP` (💙) (aumentam MaxHP e MaxMP diretamente no `CalculateStats`).
+- **Passivas Especiais**: `GoldBonus` (💰 % Ouro extra em drops), `Lifesteal` (🩸 % Cura ao causar dano), `ManaRegen` (💧 MP/s extra no tick) e `CritChance` (⚡ % Acerto Crítico extra).
+
+### Progressão em 5 Tiers de Nível
+1. **Tier 1 (Nível 1+)**: Espada do Aprendiz, Túnica de Couro (+5 HP), Pequena Bolsa, Flechas de Madeira. *(Monstros: Goblin, Lobo, Aranha)*
+2. **Tier 2 (Nível 8+)**: Sabre de Bronze (+1 STR), Cota de Malha (+15 HP), Mochila de Aventureiro (+15 HP, +5% Ouro), Colar de Prata (+15 MP). *(Monstros: Pirata, Alma Negra)*
+3. **Tier 3 (Nível 20+)**: Espada de Aço (+3 STR), Elmo Rúnico (+20 HP, +2 STR), Bolsa Rúnica (+30 MP, +3 INT, +10% Ouro). *(Monstros: Orc, Esqueleto)*
+4. **Tier 4 (Nível 35+)**: Katana da Fúria (+5 STR, +3% Crit), Marreta Biônica (+5 STR, +2% Lifesteal), Mochila Dragônica (+50 HP, +4 STR, +15% Ouro). *(Monstros: Dementador, Voldemorte)*
+5. **Tier 5 (Nível 50+)**: Espada Mítica do Vingador (+12 STR, +6% Crit), Armadura de Ouro (+80 HP, +6 STR), Mochila do Zodíaco (+80 HP, +60 MP, +5 All Stats, +25% Ouro). *(Monstros: Atenas, Espectro, Dragão)*
 
 ### Os 11 Slots de Equipamento Estilo Tibia
-1. `head` (Capacetes, Elmos, Coroas)
+1. `head` (Capacetes, Elmos, Coroas de Ouro)
 2. `chest` (Túnicas, Cotas, Peitorais, Armaduras de Ouro)
-3. `legs` (Calças, Grevas, Saiotes)
-4. `boots` (Sandálias, Botas de Couro, Botas de Ferro)
-5. `mainhand` (Espadas, Machados, Clavas, Arcos, Cajados)
+3. `legs` (Calças, Grevas, Saiotes dos Magos)
+4. `boots` (Sandálias Ágeis, Botas de Couro, Botas de Ferro, Botas Celestiais)
+5. `mainhand` (Espadas, Machados, Clavas, Arcos, Varinhas, Cajados)
 6. `offhand` (Broquéis, Escudos de Batalha, Orbes, Escudo do Zodíaco)
-7. `bag` (Pequena Bolsa, Mochila de Aventureiro, Bolsa Rúnica)
-8. `ammo` (Flechas de Madeira, Virotes Perfurantes, Flechas Incendiárias)
-9. `necklace` (Amuleto do Lobo, Colar de Rubi)
-10. `ring` (Anel de Ouro, Anel do Combate)
+7. `bag` (Pequena Bolsa, Mochila de Aventureiro, Bolsa Rúnica, Mochila Dragônica, Mochila do Zodíaco)
+8. `ammo` (Flechas de Madeira, Flechas de Aço, Flechas Incendiárias, Flechas Divinas, Virotes Perfurantes)
+9. `necklace` (Amuleto do Lobo, Colar de Rubi, Amuleto Dragônico, Amuleto do Zodíaco)
+10. `ring` (Anel de Cobre, Anel de Prata, Anel de Ouro, Anel Místico)
 11. `skill_book` (Livros de Habilidade: Golpe Giratório, Tiro Quádruplo, Bola de Fogo, Cura Divina)
 
 ---

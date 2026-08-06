@@ -64,7 +64,10 @@ func LoadBaseItems() {
 		item := &game.Item{
 			ID:            id, // We'll override this when spawning so they don't stack perfectly, or keep base ID + random suffix
 			Name:          name,
-			Attack:        atk,
+			PhysicalAttack: atk,
+			MagicAttack:    0,
+			Hands:          1,
+			ValueGold:      int64(10 * tier),
 			Defense:       def,
 			Weight:        weight,
 			Rarity:        rarity,
@@ -242,17 +245,20 @@ func GetRandomLoot(playerLevel int, r *rand.Rand) *game.Item {
 	rarityRoll := r.Float64()
 	if rarityRoll < 0.05 {
 		newItem.Name = "Lendário " + newItem.Name
-		newItem.Attack = int(float64(newItem.Attack) * 1.5)
+		newItem.PhysicalAttack = int(float64(newItem.PhysicalAttack) * 1.5)
+		newItem.MagicAttack = int(float64(newItem.MagicAttack) * 1.5)
 		newItem.Defense = int(float64(newItem.Defense) * 1.5)
 		newItem.Rarity = "Lendário"
 	} else if rarityRoll < 0.20 {
 		newItem.Name = "Raro " + newItem.Name
-		newItem.Attack = int(float64(newItem.Attack) * 1.25)
+		newItem.PhysicalAttack = int(float64(newItem.PhysicalAttack) * 1.25)
+		newItem.MagicAttack = int(float64(newItem.MagicAttack) * 1.25)
 		newItem.Defense = int(float64(newItem.Defense) * 1.25)
 		newItem.Rarity = "Raro"
 	} else if rarityRoll < 0.50 {
 		newItem.Name = "Incomum " + newItem.Name
-		newItem.Attack = int(float64(newItem.Attack) * 1.1)
+		newItem.PhysicalAttack = int(float64(newItem.PhysicalAttack) * 1.1)
+		newItem.MagicAttack = int(float64(newItem.MagicAttack) * 1.1)
 		newItem.Defense = int(float64(newItem.Defense) * 1.1)
 		newItem.Rarity = "Incomum"
 	}

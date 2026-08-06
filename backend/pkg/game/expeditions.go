@@ -32,7 +32,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🌲",
 		MaxStages:          5,
 		RequiresUnlockFrom: "",
-		DropsPreview:       []string{"Espada do Aprendiz", "Arco Curvo", "Varinha do Aprendiz", "Capacete de Couro", "Pequena Bolsa"},
+		DropsPreview:       []string{"Espada do Aprendiz", "Arco Curvo", "Varinha do Aprendiz", "Capacete de Couro", "Pequena Bolsa", "Amuleto do Lobo"},
 		Monsters: []Monster{
 			{Name: "Goblin Salteador", Level: 1, Health: 60, MaxHealth: 60, Attack: 7, AttackType: AttackTypeMelee},
 			{Name: "Lobo Selvagem", Level: 3, Health: 90, MaxHealth: 90, Attack: 11, AttackType: AttackTypeMelee},
@@ -51,7 +51,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🍞",
 		MaxStages:          5,
 		RequiresUnlockFrom: "",
-		DropsPreview:       []string{"Clava de Madeira", "Escudo de Madeira", "Túnica de Couro", "Sandálias Ágeis"},
+		DropsPreview:       []string{"Clava de Madeira", "Machadinha de Madeira", "Broquel de Madeira", "Túnica de Couro", "Sandálias Ágeis", "Tome: Golpe Giratório"},
 		Monsters: []Monster{
 			{Name: "Ogre Verde", Level: 2, Health: 80, MaxHealth: 80, Attack: 9, AttackType: AttackTypeMelee},
 			{Name: "Burro Falante", Level: 4, Health: 100, MaxHealth: 100, Attack: 12, AttackType: AttackTypeMelee},
@@ -69,7 +69,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🎩",
 		MaxStages:          5,
 		RequiresUnlockFrom: "",
-		DropsPreview:       []string{"Sabre de Bronze", "Coifa de Prata", "Marreta Biônica", "Flechas de Madeira"},
+		DropsPreview:       []string{"Sabre de Bronze", "Coifa de Prata", "Anel de Cobre", "Flechas de Madeira", "Manual: Tiro Quádruplo"},
 		Monsters: []Monster{
 			{Name: "Pirata Alma Negra", Level: 3, Health: 95, MaxHealth: 95, Attack: 11, AttackType: AttackTypeMelee},
 			{Name: "Tripa Seca", Level: 4, Health: 105, MaxHealth: 105, Attack: 13, AttackType: AttackTypeMelee},
@@ -89,7 +89,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🏰",
 		MaxStages:          5,
 		RequiresUnlockFrom: "forest",
-		DropsPreview:       []string{"Espada de Aço", "Machado Orc", "Cota de Malha", "Lâmina de Greiscu", "Bolsa Rúnica"},
+		DropsPreview:       []string{"Machado Orc", "Espada de Aço", "Cota de Malha", "Escudo de Madeira", "Mochila de Aventureiro"},
 		Monsters: []Monster{
 			{Name: "Orc Guerreiro", Level: 6, Health: 150, MaxHealth: 150, Attack: 16, AttackType: AttackTypeMelee},
 			{Name: "Esqueleto Guardião", Level: 8, Health: 190, MaxHealth: 190, Attack: 21, AttackType: AttackTypeRanged},
@@ -108,7 +108,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🥷",
 		MaxStages:          5,
 		RequiresUnlockFrom: "forest",
-		DropsPreview:       []string{"Arco Longo", "Katana da Fúria", "Peitoral de Platina", "Virotes Perfurantes"},
+		DropsPreview:       []string{"Arco Longo", "Maça de Batalha", "Calça de Couro", "Botas de Couro", "Colar de Prata", "Virotes Perfurantes"},
 		Monsters: []Monster{
 			{Name: "Ninja do Clã do Pé", Level: 7, Health: 165, MaxHealth: 165, Attack: 18, AttackType: AttackTypeRanged},
 			{Name: "Rato Mutante", Level: 9, Health: 200, MaxHealth: 200, Attack: 23, AttackType: AttackTypeMelee},
@@ -128,7 +128,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🧙‍♂️",
 		MaxStages:          5,
 		RequiresUnlockFrom: "orcruins",
-		DropsPreview:       []string{"Cajado Rúnico", "Varinha das Relíquias", "Robe Místico", "Livro: Bola de Fogo"},
+		DropsPreview:       []string{"Cajado Rúnico", "Varinha das Relíquias", "Robe Místico", "Elmo Rúnico", "Bolsa Rúnica", "Livro: Bola de Fogo"},
 		Monsters: []Monster{
 			{Name: "Dementador das Sombras", Level: 13, Health: 310, MaxHealth: 310, Attack: 34, AttackType: AttackTypeRanged},
 			{Name: "Trasgo das Cavernas", Level: 16, Health: 420, MaxHealth: 420, Attack: 42, AttackType: AttackTypeMelee},
@@ -148,7 +148,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🛡️",
 		MaxStages:          5,
 		RequiresUnlockFrom: "rogartes",
-		DropsPreview:       []string{"Escudo do Zodíaco", "Armadura de Ouro", "Botas de Ferro", "Colar de Rubi"},
+		DropsPreview:       []string{"Katana da Fúria", "Marreta Biônica", "Arco dos Ventos", "Escudo do Zodíaco", "Armadura de Ouro", "Mochila Dragônica"},
 		Monsters: []Monster{
 			{Name: "Lorde Espectro", Level: 21, Health: 480, MaxHealth: 480, Attack: 48, AttackType: AttackTypeRanged},
 			{Name: "Golem de Gelo", Level: 26, Health: 620, MaxHealth: 620, Attack: 58, AttackType: AttackTypeMelee},
@@ -169,7 +169,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🌋",
 		MaxStages:          5,
 		RequiresUnlockFrom: "frozen",
-		DropsPreview:       []string{"Espada Mítica do Vingador", "Arco dos Ventos", "Flechas Incendiárias", "Coroa de Ouro"},
+		DropsPreview:       []string{"Espada Mítica do Vingador", "Lâmina de Greiscu", "Arco Apocalíptico", "Cajado da Eternidade", "Mochila do Zodíaco", "Flechas Divinas"},
 		IsSecret:           true,
 		Monsters: []Monster{
 			{Name: "Dragão Cinderino", Level: 38, Health: 1100, MaxHealth: 1100, Attack: 95, AttackType: AttackTypeRanged},

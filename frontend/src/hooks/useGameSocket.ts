@@ -3,11 +3,25 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 export interface Item {
   id: string;
   name: string;
-  attack: number;
+  attack?: number;
+  physical_attack?: number;
+  magic_attack?: number;
   defense: number;
   weight: number;
   rarity: string;
   special_effect: string;
+  required_level?: number;
+  bonus_str?: number;
+  bonus_dex?: number;
+  bonus_int?: number;
+  bonus_hp?: number;
+  bonus_mp?: number;
+  gold_bonus?: number;
+  crit_chance?: number;
+  lifesteal?: number;
+  mana_regen?: number;
+  weapon_type?: string;
+  slot_type?: string;
 }
 
 export interface EquipmentSlots {
@@ -132,7 +146,11 @@ export function useGameSocket(token: string, characterId: string) {
         }
 
         if (msg.inventory) {
-          setInventory(msg.inventory);
+          setInventory({
+            equipment: msg.inventory.equipment || {},
+            backpack: Array.isArray(msg.inventory.backpack) ? msg.inventory.backpack : [],
+            cap: msg.inventory.cap || 1500,
+          });
         }
 
         if (msg.total_attack !== undefined) {
@@ -257,6 +275,12 @@ export function useGameSocket(token: string, characterId: string) {
     }
   };
 
+  const bulkSell = (itemIds: string[]) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ action: 'BULK_SELL', item_ids: itemIds }));
+    }
+  };
+
   return {
     character,
     inventory,
@@ -282,6 +306,7 @@ export function useGameSocket(token: string, characterId: string) {
     toggleSkill,
     allocateStat,
     chooseStarterPack,
+    bulkSell,
     setOnCombatEvent,
   };
 }

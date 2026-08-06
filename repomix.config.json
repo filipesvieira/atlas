@@ -20,15 +20,18 @@
     "useDefaultPatterns": true,
     "customPatterns": [
       "**/node_modules/**",
+      "**/.vite/**",
       "**/dist/**",
       "**/build/**",
       "**/.git/**",
       "**/.gemini/**",
       "**/coverage/**",
-      "**/backend/server",
       "repomix-output.xml",
+      "backend/server",
+      "backend/cmd/server/server",
       "*.bin",
-      "*.exe"
+      "*.exe",
+      "*.map"
     ]
   }
 }

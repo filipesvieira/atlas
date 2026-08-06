@@ -1,6 +1,7 @@
 package game
 
 import (
+	"math/rand"
 	"time"
 )
 
@@ -11,8 +12,8 @@ type OfflineResult struct {
 	ItemsFound     []Item `json:"items_found"`
 }
 
-func CalculateOfflineProgress(lastLogout time.Time, playerLevel int, activeRegion string, playerAtk int, playerDef int) OfflineResult {
-	if lastLogout.IsZero() || lastLogout.Year() < 2020 {
+func CalculateOfflineProgress(isExpeditionActive bool, lastLogout time.Time, playerLevel int, activeRegion string, playerAtk int, playerDef int) OfflineResult {
+	if !isExpeditionActive || lastLogout.IsZero() || lastLogout.Year() < 2020 {
 		return OfflineResult{}
 	}
 
@@ -25,37 +26,34 @@ func CalculateOfflineProgress(lastLogout time.Time, playerLevel int, activeRegio
 		minutes = 720
 	}
 
-	if minutes < 5 {
+	// Mínimo de 3 minutos para registrar expedição offline
+	if minutes < 3 {
 		return OfflineResult{}
 	}
 
-	// Estatísticas da Região para a Simulação Offline
-	avgHP := 80.0
-	avgAtk := 15
-	avgXP := 50.0
-	avgGold := 15.0
-	reqDef := 10
-
-	switch activeRegion {
-	case "orcruins":
-		avgHP = 160.0
-		avgAtk = 24
-		avgXP = 110.0
-		avgGold = 35.0
-		reqDef = 22
-	case "frozen":
-		avgHP = 320.0
-		avgAtk = 40
-		avgXP = 240.0
-		avgGold = 70.0
-		reqDef = 45
-	case "abyss":
-		avgHP = 650.0
-		avgAtk = 75
-		avgXP = 500.0
-		avgGold = 160.0
-		reqDef = 85
+	// Buscar estatísticas dinâmicas da região
+	reg, exists := ExpeditionRegions[activeRegion]
+	if !exists {
+		reg = ExpeditionRegions["forest"]
 	}
+
+	totalHP := 0
+	totalAtk := 0
+	for _, m := range reg.Monsters {
+		totalHP += m.Health
+		totalAtk += m.Attack
+	}
+	mCount := float64(len(reg.Monsters))
+	if mCount == 0 {
+		mCount = 1
+	}
+
+	avgHP := float64(totalHP) / mCount
+	avgAtk := float64(totalAtk) / mCount
+	reqDef := int(avgAtk * 0.7)
+
+	avgXP := float64(25 + (reg.Tier * 35) + (playerLevel * 5))
+	avgGold := float64(10 + (reg.Tier * 15) + (playerLevel * 2))
 
 	// 1. DPS do Jogador
 	dps := float64(playerAtk) / 0.75
@@ -70,7 +68,7 @@ func CalculateOfflineProgress(lastLogout time.Time, playerLevel int, activeRegio
 	totalSeconds := float64(minutes * 60)
 	totalKills := totalSeconds / timePerKill
 
-	// 4. Penalidade de Defesa Insuficiente (baseada na média de ataque dos monstros da região)
+	// 4. Penalidade de Defesa Insuficiente
 	if playerDef < reqDef {
 		defRatio := float64(playerDef) / float64(reqDef)
 		if defRatio < 0.4 {
@@ -78,7 +76,6 @@ func CalculateOfflineProgress(lastLogout time.Time, playerLevel int, activeRegio
 		}
 		totalKills *= defRatio
 	}
-	_ = avgAtk
 
 	if totalKills < 1 {
 		totalKills = 1
@@ -87,14 +84,20 @@ func CalculateOfflineProgress(lastLogout time.Time, playerLevel int, activeRegio
 	xpGained := int64(totalKills * avgXP)
 	goldGained := int64(totalKills * avgGold)
 
-	// Rolls de Loot (máximo 10 itens por sessão offline)
+	// Rolls de Loot baseados nos monstros da região (máximo 10 itens por sessão offline)
 	var items []Item
 	lootRolls := int(totalKills * 0.05)
 	if lootRolls > 10 {
 		lootRolls = 10
 	}
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < lootRolls; i++ {
-		items = append(items, GenerateProceduralLoot())
+		mobTemplate := reg.Monsters[r.Intn(len(reg.Monsters))]
+		itemPtr := GenerateLootForMonster(mobTemplate.Name, playerLevel)
+		if itemPtr != nil {
+			items = append(items, *itemPtr)
+		}
 	}
 
 	return OfflineResult{

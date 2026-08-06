@@ -219,11 +219,16 @@ func HandleClaimOfflineProgress(w http.ResponseWriter, r *http.Request) {
 		char = chars[0]
 	}
 
+	activeReg := char.ActiveRegion
+	if activeReg == "" {
+		activeReg = "forest"
+	}
+
 	playerAtk := 15 + (char.STR * 2)
 	playerDef := 5 + (char.VIT / 2)
-	result := game.CalculateOfflineProgress(char.LastLogout, char.Level, "forest", playerAtk, playerDef)
+	result := game.CalculateOfflineProgress(char.IsExpeditionActive, char.LastLogout, char.Level, activeReg, playerAtk, playerDef)
 
-	if result.MinutesOffline >= 5 {
+	if result.MinutesOffline >= 3 {
 		char.Experience += result.XPGained
 		char.GoldBank += result.GoldGained
 		_ = db.UpdateCharacterState(char)

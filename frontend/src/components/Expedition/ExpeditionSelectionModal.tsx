@@ -30,6 +30,7 @@ export const WORLD_REGIONS: RegionData[] = [
       { name: 'Varinha do Aprendiz', icon: '🔮' },
       { name: 'Capacete de Couro', icon: '🪖' },
       { name: 'Pequena Bolsa', icon: '🎒' },
+      { name: 'Amuleto do Lobo', icon: '🐺' },
     ],
   },
   {
@@ -43,9 +44,11 @@ export const WORLD_REGIONS: RegionData[] = [
     bossName: 'Fiona Arrazadora 🐸',
     dropsPreview: [
       { name: 'Clava de Madeira', icon: '🏏' },
-      { name: 'Escudo de Madeira', icon: '🛡️' },
+      { name: 'Machadinha de Madeira', icon: '🪓' },
+      { name: 'Broquel de Madeira', icon: '🛡️' },
       { name: 'Túnica de Couro', icon: '👕' },
       { name: 'Sandálias Ágeis', icon: '🥾' },
+      { name: 'Tome: Golpe Giratório', icon: '📜' },
     ],
   },
   {
@@ -59,9 +62,10 @@ export const WORLD_REGIONS: RegionData[] = [
     bossName: 'Alma Negra de Greiscu 🏴‍☠️',
     dropsPreview: [
       { name: 'Sabre de Bronze', icon: '🗡️' },
-      { name: 'Marreta Biônica', icon: '🔨' },
       { name: 'Coifa de Prata', icon: '🪖' },
+      { name: 'Anel de Cobre', icon: '💍' },
       { name: 'Flechas de Madeira', icon: '🎯' },
+      { name: 'Manual: Tiro Quádruplo', icon: '📜' },
     ],
   },
 
@@ -77,11 +81,11 @@ export const WORLD_REGIONS: RegionData[] = [
     bossName: 'Esquelético Pacato 💀',
     requiresUnlockFrom: 'forest',
     dropsPreview: [
-      { name: 'Espada de Aço', icon: '⚔️' },
       { name: 'Machado Orc', icon: '🪓' },
-      { name: 'Lâmina de Greiscu', icon: '🗡️' },
+      { name: 'Espada de Aço', icon: '⚔️' },
       { name: 'Cota de Malha', icon: '🛡️' },
-      { name: 'Bolsa Rúnica', icon: '🎒' },
+      { name: 'Escudo de Madeira', icon: '🛡️' },
+      { name: 'Mochila de Aventureiro', icon: '🎒' },
     ],
   },
   {
@@ -96,8 +100,10 @@ export const WORLD_REGIONS: RegionData[] = [
     requiresUnlockFrom: 'forest',
     dropsPreview: [
       { name: 'Arco Longo', icon: '🏹' },
-      { name: 'Katana da Fúria', icon: '⚔️' },
-      { name: 'Peitoral de Platina', icon: '🛡️' },
+      { name: 'Maça de Batalha', icon: '🏏' },
+      { name: 'Calça de Couro', icon: '👖' },
+      { name: 'Botas de Couro', icon: '🥾' },
+      { name: 'Colar de Prata', icon: '𓓿' },
       { name: 'Virotes Perfurantes', icon: '🎯' },
     ],
   },
@@ -117,6 +123,8 @@ export const WORLD_REGIONS: RegionData[] = [
       { name: 'Cajado Rúnico', icon: '🔮' },
       { name: 'Varinha das Relíquias', icon: '🪄' },
       { name: 'Robe Místico', icon: '🥋' },
+      { name: 'Elmo Rúnico', icon: '🪖' },
+      { name: 'Bolsa Rúnica', icon: '🎒' },
       { name: 'Livro: Bola de Fogo', icon: '📜' },
     ],
   },
@@ -133,10 +141,12 @@ export const WORLD_REGIONS: RegionData[] = [
     bossName: 'Mestre do Santuário 🌟',
     requiresUnlockFrom: 'rogartes',
     dropsPreview: [
+      { name: 'Katana da Fúria', icon: '⚔️' },
+      { name: 'Marreta Biônica', icon: '🔨' },
+      { name: 'Arco dos Ventos', icon: '🏹' },
       { name: 'Escudo do Zodíaco', icon: '🛡️' },
       { name: 'Armadura de Ouro', icon: '👑' },
-      { name: 'Botas de Ferro', icon: '🥾' },
-      { name: 'Colar de Rubi', icon: '𓓿' },
+      { name: 'Mochila Dragônica', icon: '🎒' },
     ],
   },
 
@@ -152,10 +162,12 @@ export const WORLD_REGIONS: RegionData[] = [
     bossName: 'Vingador de Chifres 🐲',
     requiresUnlockFrom: 'frozen',
     dropsPreview: [
-      { name: 'Espada Mítica', icon: '🗡️' },
-      { name: 'Arco dos Ventos', icon: '🏹' },
-      { name: 'Flechas Incendiárias', icon: '🔥' },
-      { name: 'Coroa de Ouro', icon: '👑' },
+      { name: 'Espada Mítica do Vingador', icon: '⚔️' },
+      { name: 'Lâmina de Greiscu', icon: '🗡️' },
+      { name: 'Arco Apocalíptico', icon: '🏹' },
+      { name: 'Cajado da Eternidade', icon: '🔮' },
+      { name: 'Mochila do Zodíaco', icon: '🎒' },
+      { name: 'Flechas Divinas', icon: '🎯' },
     ],
   },
 ];

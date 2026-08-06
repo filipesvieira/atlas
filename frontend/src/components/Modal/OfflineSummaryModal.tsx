@@ -9,7 +9,7 @@ interface OfflineSummaryModalProps {
 }
 
 export function OfflineSummaryModal({ data, onClose }: OfflineSummaryModalProps) {
-  if (!data || data.minutes_offline < 5) return null;
+  if (!data || data.minutes_offline < 3) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-in fade-in">

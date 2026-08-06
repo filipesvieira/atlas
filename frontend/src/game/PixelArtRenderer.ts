@@ -89,6 +89,56 @@ export class PixelArtRenderer {
     });
   }
 
+  /** Cenário: Acampamento / Safezone */
+  public static getCampBackground(w = 500, h = 260): HTMLCanvasElement {
+    return this.getOffscreenCanvas('bg_camp', w, h, (ctx) => {
+      // Fundo em gradiente noturno escuro
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, h * 0.5);
+      skyGrad.addColorStop(0, '#020617'); // slate-950
+      skyGrad.addColorStop(1, '#0f172a'); // slate-900
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, w, h * 0.5);
+
+      // Piso escuro de acampamento
+      ctx.fillStyle = '#1e293b'; // slate-800
+      ctx.fillRect(0, h * 0.5, w, h * 0.5);
+
+      // Grid simples
+      ctx.strokeStyle = '#334155'; // slate-700
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= w; x += 32) {
+        ctx.beginPath();
+        ctx.moveTo(x, h * 0.5);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
+      for (let y = h * 0.5; y <= h; y += 32) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // Fogueira no Tile GridX=7, GridY=4 (Aprox. x=224, y=h*0.5 + 128)
+      const fireX = 224;
+      const fireY = h * 0.5 + 4 * 32 - 16;
+      
+      // Troncos da fogueira
+      ctx.fillStyle = '#451a03'; // marrom escuro
+      ctx.fillRect(fireX, fireY, 24, 8);
+      ctx.fillRect(fireX + 4, fireY - 4, 16, 12);
+      
+      // Brilho no chão da fogueira
+      const glow = ctx.createRadialGradient(fireX + 12, fireY, 5, fireX + 12, fireY, 60);
+      glow.addColorStop(0, 'rgba(234, 88, 12, 0.4)'); // orange
+      glow.addColorStop(1, 'rgba(234, 88, 12, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(fireX + 12, fireY, 60, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
   /** Cenário: Ruínas Orcs (Pedra mística, colunas quebradas, piso de pedra) */
   public static getOrcRuinsBackground(w = 500, h = 260): HTMLCanvasElement {
     return this.getOffscreenCanvas('bg_orcruins', w, h, (ctx) => {

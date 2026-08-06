@@ -1,31 +1,11 @@
 import { useState } from 'react';
-import { TibiaBackpackModal } from './TibiaBackpackModal';
-import { ItemIcon, getCleanItemName } from './ItemIcon';
+import { TibiaBackpackModal, Item, EquipmentSlots } from './TibiaBackpackModal';
+import { ItemIcon, getCleanItemName, getItemAttack } from './ItemIcon';
 
-export interface Item {
-  id: string;
-  name: string;
-  attack: number;
-  defense: number;
-  weight: number;
-  rarity: string;
-  special_effect: string;
-}
-
-export interface EquipmentSlots {
-  head?: Item | null;
-  necklace?: Item | null;
-  chest?: Item | null;
-  mainhand?: Item | null;
-  offhand?: Item | null;
-  legs?: Item | null;
-  boots?: Item | null;
-  ring?: Item | null;
-  ammo?: Item | null;
-  bag?: Item | null;
-}
+export type { Item, EquipmentSlots };
 
 interface TibiaEquipmentGridProps {
+  character?: any;
   equipment?: EquipmentSlots;
   backpack?: Item[];
   cap?: number;
@@ -38,6 +18,7 @@ interface TibiaEquipmentGridProps {
   onEquipItem?: (itemId: string, slot: string) => void;
   onUnequipItem?: (slot: string) => void;
   onDiscardItem?: (itemId: string) => void;
+  onBulkSell?: (itemIds: string[]) => void;
 }
 
 interface SlotItemProps {
@@ -75,15 +56,13 @@ function SlotItem({ item, placeholderIcon, label, slotKey, onUnequip }: SlotItem
 
   const cleanName = item ? getCleanItemName(item.name) : label;
 
+  const isRightSlot = slotKey === 'bag' || slotKey === 'offhand' || slotKey === 'ammo';
+  const tooltipPos = isRightSlot ? 'right-full mr-2 -top-2' : 'left-full ml-2 -top-2';
+
   return (
     <div
       onClick={() => item && onUnequip && onUnequip(slotKey)}
-      title={
-        item
-          ? `${cleanName} (${item.rarity})\nAtk: +${item.attack} | Def: +${item.defense}\nPeso: ${item.weight || 0} oz\nClique para desequipar`
-          : label
-      }
-      className={`w-11 h-11 rounded-lg border flex flex-col items-center justify-center relative cursor-pointer transition-all group ${
+      className={`w-11 h-11 rounded-lg border flex flex-col items-center justify-center relative cursor-pointer transition-all group hover:z-40 ${
         item
           ? `${rarityBorder} shadow-md`
           : 'bg-slate-950/80 border-slate-800 text-slate-600 hover:border-slate-700'
@@ -98,9 +77,9 @@ function SlotItem({ item, placeholderIcon, label, slotKey, onUnequip }: SlotItem
             size="md"
             className={`${rarityText} opacity-90 transition-transform group-hover:scale-110`}
           />
-          {(item.attack > 0 || item.defense > 0) && (
+          {(getItemAttack(item) > 0 || (item.defense || 0) > 0) && (
             <div className="text-[8px] font-mono text-emerald-400 font-bold leading-none mt-0.5">
-              +{item.attack > 0 ? `${item.attack}A` : `${item.defense}D`}
+              +{getItemAttack(item) > 0 ? `${getItemAttack(item)}A` : `${item.defense}D`}
             </div>
           )}
         </div>
@@ -110,11 +89,33 @@ function SlotItem({ item, placeholderIcon, label, slotKey, onUnequip }: SlotItem
       <span className="text-[8px] font-sans text-slate-500 absolute -bottom-1 bg-slate-900 px-0.5 rounded border border-slate-800 scale-90">
         {label}
       </span>
+      
+      {/* Super Tooltip Hover com Posicionamento Inteligente */}
+      {item && (
+        <div className={`hidden group-hover:flex absolute z-50 flex-col w-40 p-2 text-left bg-slate-900 border border-slate-700 rounded-lg shadow-2xl pointer-events-none ${tooltipPos}`}>
+          <div className={`font-bold text-[11px] mb-1 ${rarityText}`}>{cleanName}</div>
+          <div className="text-[9px] text-slate-400 mb-1 border-b border-slate-700 pb-1">
+            {item.rarity} {label}
+          </div>
+          <div className="flex justify-between text-[10px] mb-1">
+            <span className="text-rose-400">Atk: +{getItemAttack(item)}</span>
+            <span className="text-sky-400">Def: +{item.defense || 0}</span>
+          </div>
+          <div className="text-[10px] text-slate-400 mb-1">Peso: {item.weight} oz</div>
+          {item.special_effect && (
+            <div className="text-[10px] text-purple-400 italic leading-tight mt-1">{item.special_effect}</div>
+          )}
+          <div className="mt-2 text-[9px] text-amber-500 font-bold border-t border-slate-700 pt-1">
+            (Clique para desequipar)
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export function TibiaEquipmentGrid({
+  character,
   equipment = {},
   backpack = [],
   cap = 1500,
@@ -127,8 +128,12 @@ export function TibiaEquipmentGrid({
   onEquipItem,
   onUnequipItem,
   onDiscardItem,
+  onBulkSell,
 }: TibiaEquipmentGridProps) {
   const [isBackpackOpen, setIsBackpackOpen] = useState(false);
+
+  const safeBackpack = Array.isArray(backpack) ? backpack : [];
+  const safeEquipment = equipment || {};
 
   const hpPercent = Math.max(0, Math.min(100, Math.round((health / maxHealth) * 100)));
   const manaPercent = Math.max(0, Math.min(100, Math.round((mana / maxMana) * 100)));
@@ -137,8 +142,8 @@ export function TibiaEquipmentGrid({
   let bagCapBonus = 0;
   let bagSlotsBonus = 0;
 
-  if (equipment.bag) {
-    switch (equipment.bag.rarity) {
+  if (safeEquipment.bag) {
+    switch (safeEquipment.bag.rarity) {
       case 'Comum':
         bagCapBonus = 200;
         bagSlotsBonus = 4;
@@ -165,13 +170,13 @@ export function TibiaEquipmentGrid({
   const effectiveCap = cap + bagCapBonus;
 
   // Peso total da mochila
-  const backpackWeight = backpack.reduce((sum, item) => sum + (item.weight || 0), 0);
+  const backpackWeight = safeBackpack.reduce((sum, item) => sum + (item ? (item.weight || 0) : 0), 0);
   
   // Peso dos equipamentos
   const equipWeight = [
-    equipment.head, equipment.chest, equipment.legs, equipment.boots,
-    equipment.mainhand, equipment.offhand, equipment.necklace, equipment.ring,
-    equipment.ammo, equipment.bag
+    safeEquipment.head, safeEquipment.chest, safeEquipment.legs, safeEquipment.boots,
+    safeEquipment.mainhand, safeEquipment.offhand, safeEquipment.necklace, safeEquipment.ring,
+    safeEquipment.ammo, safeEquipment.bag
   ].reduce((sum, item) => sum + (item ? (item.weight || 0) : 0), 0);
 
   const totalWeight = backpackWeight + equipWeight;
@@ -224,29 +229,29 @@ export function TibiaEquipmentGrid({
       <div className="flex flex-col items-center justify-center bg-slate-950 p-3 rounded-xl border border-slate-800 shadow-inner">
         {/* Linha 1: Necklace | Head | Backpack */}
         <div className="flex gap-2.5 mb-2">
-          <SlotItem item={equipment.necklace} placeholderIcon="📿" label="Necklace" slotKey="necklace" onUnequip={onUnequipItem} />
-          <SlotItem item={equipment.head} placeholderIcon="🪖" label="Head" slotKey="head" onUnequip={onUnequipItem} />
-          <SlotItem item={equipment.bag} placeholderIcon="🎒" label="Bag" slotKey="bag" onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.necklace} placeholderIcon="📿" label="Necklace" slotKey="necklace" onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.head} placeholderIcon="🪖" label="Head" slotKey="head" onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.bag} placeholderIcon="🎒" label="Bag" slotKey="bag" onUnequip={onUnequipItem} />
         </div>
 
         {/* Linha 2: MainHand | Chest | OffHand */}
         <div className="flex gap-2.5 mb-2">
-          <SlotItem item={equipment.mainhand} placeholderIcon="⚔️" label="Weapon" slotKey="mainhand" onUnequip={onUnequipItem} />
-          <SlotItem item={equipment.chest} placeholderIcon="🛡️" label="Chest" slotKey="chest" onUnequip={onUnequipItem} />
-          <SlotItem item={equipment.offhand} placeholderIcon="🛡️" label="Shield" slotKey="offhand" onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.mainhand} placeholderIcon="⚔️" label="Weapon" slotKey="mainhand" onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.chest} placeholderIcon="🛡️" label="Chest" slotKey="chest" onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.offhand} placeholderIcon="🛡️" label="Shield" slotKey="offhand" onUnequip={onUnequipItem} />
         </div>
 
         {/* Linha 3: Ring | Legs | Ammo */}
         <div className="flex gap-2.5 mb-2">
-          <SlotItem item={equipment.ring} placeholderIcon="💍" label="Ring" slotKey="ring" onUnequip={onUnequipItem} />
-          <SlotItem item={equipment.legs} placeholderIcon="👖" label="Legs" slotKey="legs" onUnequip={onUnequipItem} />
-          <SlotItem item={equipment.ammo} placeholderIcon="🏹" label="Ammo" slotKey="ammo" onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.ring} placeholderIcon="💍" label="Ring" slotKey="ring" onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.legs} placeholderIcon="👖" label="Legs" slotKey="legs" onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.ammo} placeholderIcon="🏹" label="Ammo" slotKey="ammo" onUnequip={onUnequipItem} />
         </div>
 
         {/* Linha 4: Boots */}
         <div className="flex gap-2.5">
           <div className="w-11 h-11"></div>
-          <SlotItem item={equipment.boots} placeholderIcon="🥾" label="Boots" slotKey="boots" onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.boots} placeholderIcon="🥾" label="Boots" slotKey="boots" onUnequip={onUnequipItem} />
           <div className="w-11 h-11"></div>
         </div>
 
@@ -257,32 +262,38 @@ export function TibiaEquipmentGrid({
         </div>
       </div>
 
-      {/* Botão de Abertura da Mochila em Grade */}
+      {/* Botão de Abertura da Mochila em Modal */}
       <div className="space-y-2">
         <button
           onClick={() => setIsBackpackOpen(true)}
           className="w-full py-2.5 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-500 text-slate-950 font-bold rounded-xl text-xs flex justify-between items-center px-4 shadow-lg transition-all border border-amber-400/40"
         >
           <span className="flex items-center gap-1.5">
-            <span>🎒</span> Inspeccionar Mochila (Grid)
+            <span>🎒</span> Abrir Mochila & Inventário
           </span>
           <span className="font-mono bg-slate-950/80 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30 text-[10px]">
-            {backpack.length} / {maxSlots} Slots
+            {safeBackpack.length} / {maxSlots} Slots
           </span>
         </button>
       </div>
 
-      {/* Modal da Mochila Estilo Tibia */}
+      {/* Modal da Mochila Estilo Tibia com Equipamentos e Multi-seleção */}
       <TibiaBackpackModal
         isOpen={isBackpackOpen}
         onClose={() => setIsBackpackOpen(false)}
-        backpack={backpack}
-        equippedBag={equipment.bag}
+        character={character}
+        backpack={safeBackpack}
+        equipment={safeEquipment}
+        equippedBag={safeEquipment.bag}
+        totalAttack={totalAttack}
+        totalDefense={totalDefense}
         totalWeight={totalWeight}
         maxCapacity={effectiveCap}
         maxSlots={maxSlots}
-        onEquipItem={(id, slot) => onEquipItem && onEquipItem(id, slot)}
-        onDiscardItem={(id) => onDiscardItem && onDiscardItem(id)}
+        onEquipItem={onEquipItem}
+        onUnequipItem={onUnequipItem}
+        onDiscardItem={onDiscardItem}
+        onBulkSell={onBulkSell}
       />
     </div>
   );

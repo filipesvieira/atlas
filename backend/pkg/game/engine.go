@@ -68,29 +68,31 @@ type MasteriesData struct {
 }
 
 type CharacterData struct {
-	ID              string        `json:"id"`
-	AccountID       string        `json:"account_id"`
-	Name            string        `json:"name"`
-	Vocation        string        `json:"vocation"`
-	Origin          string        `json:"origin"`
-	Level           int           `json:"level"`
-	Experience      int64         `json:"experience"`
-	Health          int           `json:"health"`
-	MaxHealth       int           `json:"max_health"`
-	Mana            int           `json:"mana"`
-	MaxMana         int           `json:"max_mana"`
-	GoldBank        int64         `json:"gold_bank"`
-	STR             int           `json:"str"`
-	DEX             int           `json:"dex"`
-	INT             int           `json:"int_stat"`
-	VIT             int           `json:"vit"`
-	UnspentPoints   int           `json:"unspent_points"`
-	Masteries       MasteriesData `json:"masteries"`
-	LearnedSkills   []string      `json:"learned_skills"`
-	ActiveSkills    []string      `json:"active_skills"`
-	UnlockedRegions []string      `json:"unlocked_regions"`
-	LastLogin       time.Time     `json:"last_login"`
-	LastLogout      time.Time     `json:"last_logout"`
+	ID                 string        `json:"id"`
+	AccountID          string        `json:"account_id"`
+	Name               string        `json:"name"`
+	Vocation           string        `json:"vocation"`
+	Origin             string        `json:"origin"`
+	Level              int           `json:"level"`
+	Experience         int64         `json:"experience"`
+	Health             int           `json:"health"`
+	MaxHealth          int           `json:"max_health"`
+	Mana               int           `json:"mana"`
+	MaxMana            int           `json:"max_mana"`
+	GoldBank           int64         `json:"gold_bank"`
+	STR                int           `json:"str"`
+	DEX                int           `json:"dex"`
+	INT                int           `json:"int_stat"`
+	VIT                int           `json:"vit"`
+	UnspentPoints      int           `json:"unspent_points"`
+	Masteries          MasteriesData `json:"masteries"`
+	LearnedSkills      []string      `json:"learned_skills"`
+	ActiveSkills       []string      `json:"active_skills"`
+	UnlockedRegions    []string      `json:"unlocked_regions"`
+	IsExpeditionActive bool          `json:"is_expedition_active"`
+	ActiveRegion       string        `json:"active_region"`
+	LastLogin          time.Time     `json:"last_login"`
+	LastLogout         time.Time     `json:"last_logout"`
 }
 
 type CombatMessage struct {
@@ -148,17 +150,24 @@ func NewGameSession(char *CharacterData, inv *InventoryData, saveInv func(string
 			Backpack:  []Item{},
 			Cap:       1500,
 		}
+	} else if inv.Backpack == nil {
+		inv.Backpack = []Item{}
 	}
 	if char.LearnedSkills == nil {
 		char.LearnedSkills = []string{"whirlwind"}
 	}
 	EnsureUnlockedRegionsForLevel(char)
 
+	activeReg := char.ActiveRegion
+	if activeReg == "" {
+		activeReg = "forest"
+	}
+
 	return &GameSession{
 		Character:          char,
 		Inventory:          inv,
-		IsExpeditionActive: false,
-		ActiveRegion:       "forest",
+		IsExpeditionActive: char.IsExpeditionActive,
+		ActiveRegion:       activeReg,
 		ActiveStance:       "balanced",
 		CurrentStage:       1,
 		MaxStages:          5,
@@ -195,29 +204,63 @@ func (s *GameSession) CalculateStats() (int, int) {
 	}
 
 	// Max HP & Max Mana derivados dos Atributos Primários VIT, INT e Level
-	s.Character.MaxHealth = 100 + (s.Character.VIT * 25) + (s.Character.Level * 10)
-	s.Character.MaxMana = 30 + (s.Character.INT * 15) + (s.Character.Level * 5)
-
 	eq := s.Inventory.Equipment
+	bonusSTR, bonusDEX, bonusINT, bonusHP, bonusMP := 0, 0, 0, 0, 0
+
+	equippedList := []*Item{
+		eq.Head, eq.Chest, eq.Legs, eq.Boots,
+		eq.MainHand, eq.OffHand, eq.Necklace, eq.Ring,
+		eq.Ammo, eq.Bag,
+	}
+
+	for _, item := range equippedList {
+		if item != nil {
+			bonusSTR += item.BonusSTR
+			bonusDEX += item.BonusDEX
+			bonusINT += item.BonusINT
+			bonusHP += item.BonusHP
+			bonusMP += item.BonusMP
+		}
+	}
+
+	effectiveSTR := s.Character.STR + bonusSTR
+	effectiveDEX := s.Character.DEX + bonusDEX
+	effectiveINT := s.Character.INT + bonusINT
+
+	s.Character.MaxHealth = 100 + (s.Character.VIT * 25) + (s.Character.Level * 10) + bonusHP
+	s.Character.MaxMana = 30 + (effectiveINT * 15) + (s.Character.Level * 5) + bonusMP
+
 	totalAtk := 0
 
-	// Ataque Base derivado do atributo primário da arma
+	// Ataque Base derivado do atributo primário e da arma
 	if eq.MainHand != nil {
 		wType := GetItemWeaponType(eq.MainHand)
 		switch wType {
 		case WeaponTypeBow:
 			ammoAtk := 0
 			if eq.Ammo != nil {
-				ammoAtk = eq.Ammo.Attack
+				ammoAtk = eq.Ammo.PhysicalAttack + eq.Ammo.Attack
 			}
-			totalAtk = int(float64(s.Character.DEX)*1.5) + eq.MainHand.Attack + ammoAtk
+			baseDmg := float64(eq.MainHand.PhysicalAttack + eq.MainHand.Attack + ammoAtk)
+			if baseDmg == 0 {
+				baseDmg = 1
+			}
+			totalAtk = int(baseDmg * (1.0 + (float64(effectiveDEX) / 100.0)))
 		case WeaponTypeWand:
-			totalAtk = int(float64(s.Character.INT)*2.0) + eq.MainHand.Attack
+			baseDmg := float64(eq.MainHand.MagicAttack + eq.MainHand.Attack)
+			if baseDmg == 0 {
+				baseDmg = 1
+			}
+			totalAtk = int(baseDmg * (1.0 + (float64(effectiveINT) / 100.0)))
 		default:
-			totalAtk = int(float64(s.Character.STR)*1.5) + eq.MainHand.Attack
+			baseDmg := float64(eq.MainHand.PhysicalAttack + eq.MainHand.Attack)
+			if baseDmg == 0 {
+				baseDmg = 1
+			}
+			totalAtk = int(baseDmg * (1.0 + (float64(effectiveSTR) / 100.0)))
 		}
 	} else {
-		totalAtk = int(float64(s.Character.STR) * 1.5)
+		totalAtk = int(5.0 * (1.0 + (float64(effectiveSTR) / 100.0)))
 	}
 
 	// Aplica Bônus de Maestria (1 ponto de Atk a cada 4 níveis de maestria acima de 10)
@@ -246,36 +289,16 @@ func (s *GameSession) CalculateStats() (int, int) {
 
 	// Defesa Física Total: (VIT * 0.5) + Equipamentos
 	totalDef := int(float64(s.Character.VIT) * 0.5)
+	for _, item := range equippedList {
+		if item != nil {
+			totalDef += item.Defense
+		}
+	}
 	if eq.OffHand != nil {
 		shieldLevel := GetMasteryLevel(s.Character.Masteries.ShieldMastery)
 		if shieldLevel > 10 {
 			totalDef += (shieldLevel - 10) / 4
 		}
-		totalDef += eq.OffHand.Defense
-	}
-
-	if eq.Head != nil {
-		totalDef += eq.Head.Defense
-	}
-	if eq.Chest != nil {
-		totalDef += eq.Chest.Defense
-	}
-	if eq.Legs != nil {
-		totalDef += eq.Legs.Defense
-	}
-	if eq.Boots != nil {
-		totalDef += eq.Boots.Defense
-	}
-	if eq.Ring != nil {
-		totalAtk += eq.Ring.Attack
-		totalDef += eq.Ring.Defense
-	}
-	if eq.Necklace != nil {
-		totalAtk += eq.Necklace.Attack
-		totalDef += eq.Necklace.Defense
-	}
-	if eq.Ammo != nil {
-		totalAtk += eq.Ammo.Attack
 	}
 
 	// Modificadores de Postura Tática
@@ -343,6 +366,28 @@ func (s *GameSession) StartTicker() {
 	}
 }
 
+func (s *GameSession) StopTicker() {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	select {
+	case <-s.StopChan:
+	default:
+		close(s.StopChan)
+	}
+}
+
+func (s *GameSession) EnsureTickerRunning() {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	select {
+	case <-s.StopChan:
+		s.StopChan = make(chan struct{})
+		go s.StartTicker()
+	default:
+		// Ticker está ativo e rodando
+	}
+}
+
 func (s *GameSession) processTick() {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	totalAtk, totalDef := s.CalculateStats()
@@ -368,6 +413,21 @@ func (s *GameSession) processTick() {
 			bossMob.GridY = GridHeight / 2
 			bossMob.State = "CHASE"
 			s.CurrentMonsters = []Monster{bossMob}
+			
+			// Guarda-costas
+			for i := 0; i < 2; i++ {
+				var m Monster
+				if s.GetMonsterFunc != nil {
+					m = s.GetMonsterFunc(s.ActiveRegion, s.Character.Level)
+				} else {
+					m = Monster{Name: "Guarda-Costas", Level: 1, Health: 60, MaxHealth: 60, Attack: 7, AttackType: AttackTypeMelee}
+				}
+				m.ID = fmt.Sprintf("mob_%d_%d", time.Now().UnixNano(), i)
+				m.GridX = GridWidth - 1
+				m.GridY = 2 + (i * 2)
+				m.State = "CHASE"
+				s.CurrentMonsters = append(s.CurrentMonsters, m)
+			}
 
 			s.broadcastMessage(CombatMessage{
 				Type:         "COMBAT_EVENT",
@@ -389,9 +449,9 @@ func (s *GameSession) processTick() {
 		} else {
 			// ESTÁGIOS 1 A 4: SPAWN DE MONSTROS NORMAIS
 			s.IsBossStage = false
-			count := 2
-			if s.ActiveRegion == "frozen" || s.ActiveRegion == "abyss" {
-				count = 3
+			count := s.CurrentStage
+			if count < 1 {
+				count = 1
 			}
 			for i := 0; i < count; i++ {
 				var m Monster
@@ -477,6 +537,19 @@ func (s *GameSession) processTick() {
 
 
 	// Regeneração contínua de HP e Mana durante a expedição
+	eq := s.Inventory.Equipment
+	manaRegenExtra := 0
+	equippedListForTick := []*Item{
+		eq.Head, eq.Chest, eq.Legs, eq.Boots,
+		eq.MainHand, eq.OffHand, eq.Necklace, eq.Ring,
+		eq.Ammo, eq.Bag,
+	}
+	for _, it := range equippedListForTick {
+		if it != nil {
+			manaRegenExtra += it.ManaRegen
+		}
+	}
+
 	if s.Character.Health < s.Character.MaxHealth {
 		s.Character.Health += 1
 		if s.Character.Health > s.Character.MaxHealth {
@@ -484,7 +557,7 @@ func (s *GameSession) processTick() {
 		}
 	}
 	if s.Character.Mana < s.Character.MaxMana {
-		s.Character.Mana += 3
+		s.Character.Mana += 3 + manaRegenExtra
 		if s.Character.Mana > s.Character.MaxMana {
 			s.Character.Mana = s.Character.MaxMana
 		}
@@ -495,7 +568,6 @@ func (s *GameSession) processTick() {
 	totalDamageDealt := 0
 	// FASE 4: Consumo Ativo de Mana & Habilidades Especiais Aprendidas (Apenas Ativas)
 	skillCastLog := ""
-	eq := s.Inventory.Equipment
 
 	if len(s.Character.ActiveSkills) > 0 {
 		skillKey := s.Character.ActiveSkills[r.Intn(len(s.Character.ActiveSkills))]
@@ -563,8 +635,14 @@ func (s *GameSession) processTick() {
 		}
 	}
 
-	// 1. Dano do Aventureiro com Variância (±15%) e Chance de Crítico por DEX
-	critChance := 0.05 + (float64(s.Character.DEX) * 0.0025)
+	// 1. Dano do Aventureiro com Variância (±15%) e Chance de Crítico por DEX + Equipamento
+	extraCritChance := 0.0
+	for _, it := range equippedListForTick {
+		if it != nil {
+			extraCritChance += it.CritChance
+		}
+	}
+	critChance := 0.05 + (float64(s.Character.DEX) * 0.0025) + (extraCritChance / 100.0)
 	baseAtkFuzz := int(float64(totalAtk) * (0.85 + r.Float64()*0.30))
 	isCrit := r.Float64() <= critChance
 
@@ -668,10 +746,34 @@ func (s *GameSession) processTick() {
 		logMsg += fmt.Sprintf(" [EMERGÊNCIA/CURA] +%d HP!", healAmt)
 	}
 
+	// 3.5 Lifesteal Application
+	lifestealPct := 0.0
+	if eq.MainHand != nil { lifestealPct += eq.MainHand.Lifesteal }
+	if eq.OffHand != nil { lifestealPct += eq.OffHand.Lifesteal }
+	if eq.Head != nil { lifestealPct += eq.Head.Lifesteal }
+	if eq.Chest != nil { lifestealPct += eq.Chest.Lifesteal }
+	if eq.Legs != nil { lifestealPct += eq.Legs.Lifesteal }
+	if eq.Boots != nil { lifestealPct += eq.Boots.Lifesteal }
+	if eq.Necklace != nil { lifestealPct += eq.Necklace.Lifesteal }
+	if eq.Ring != nil { lifestealPct += eq.Ring.Lifesteal }
+
+	if lifestealPct > 0 && playerAtk > 0 {
+		heal := int(float64(playerAtk) * (lifestealPct / 100.0))
+		if heal > 0 {
+			s.Character.Health += heal
+			if s.Character.Health > s.Character.MaxHealth {
+				s.Character.Health = s.Character.MaxHealth
+			}
+			logMsg += fmt.Sprintf(" 🩸 Roubo de Vida (+%d HP)", heal)
+		}
+	}
+
 	// 4. Morte do Aventureiro
 	if s.Character.Health <= 0 {
 		s.Character.Health = int(float64(s.Character.MaxHealth) * 0.4)
 		s.IsExpeditionActive = false
+		s.CurrentStage = 1
+		s.IsBossStage = false
 		s.CurrentMonsters = []Monster{}
 		s.broadcastMessage(CombatMessage{
 			Type:         "COMBAT_EVENT",
@@ -684,7 +786,7 @@ func (s *GameSession) processTick() {
 			TotalDefense: totalDef,
 			ActiveRegion: s.ActiveRegion,
 			ActiveStance: s.ActiveStance,
-			LogText:      "PERIGO! Seu HP zerou. Recuo de emergência para o acampamento!",
+			LogText:      "Você foi gravemente ferido e resgatado para o acampamento. A expedição foi reiniciada.",
 			IsActive:     false,
 		})
 		return
@@ -707,7 +809,15 @@ func (s *GameSession) processTick() {
 				}
 			}
 			xpGained := int64(rawXP * xpMult)
-			goldGained := int64(15 + r.Intn(25))
+			baseGold := float64(15 + r.Intn(25))
+			
+			goldBonusPct := 0.0
+			for _, it := range equippedListForTick {
+				if it != nil {
+					goldBonusPct += it.GoldBonus
+				}
+			}
+			goldGained := int64(baseGold * (1.0 + (goldBonusPct / 100.0)))
 
 			s.Character.Experience += xpGained
 			s.Character.GoldBank += goldGained
@@ -728,7 +838,7 @@ func (s *GameSession) processTick() {
 					maxSlots := s.GetMaxSlotCapacity()
 
 					if currentWeight+item.Weight > maxWeight || len(s.Inventory.Backpack) >= maxSlots {
-						goldValue := int64((item.Attack + item.Defense) * 15)
+						goldValue := item.ValueGold
 						if goldValue < 10 {
 							goldValue = 10
 						}
@@ -898,6 +1008,24 @@ func (s *GameSession) EquipItem(itemID string, slot string) {
 		}
 	}
 
+	// Validação de Nível Mínimo para Equipar
+	if targetItem.RequiredLevel > 0 && s.Character.Level < targetItem.RequiredLevel {
+		totalAtk, totalDef := s.CalculateStats()
+		s.broadcastMessage(CombatMessage{
+			Type:         "INVENTORY_UPDATE",
+			Timestamp:    time.Now().Format("15:04:05"),
+			Character:    s.Character,
+			Inventory:    s.Inventory,
+			TotalAttack:  totalAtk,
+			TotalDefense: totalDef,
+			ActiveRegion: s.ActiveRegion,
+			ActiveStance: s.ActiveStance,
+			LogText:      fmt.Sprintf("🔒 Nível insuficiente! Requer Nível %d para equipar [%s].", targetItem.RequiredLevel, targetItem.Name),
+			IsActive:     s.IsExpeditionActive,
+		})
+		return
+	}
+
 	// Validação do slot Ammo: só pode equipar se estiver usando arma de distância
 	eq := &s.Inventory.Equipment
 	if slot == "ammo" {
@@ -931,13 +1059,15 @@ func (s *GameSession) EquipItem(itemID string, slot string) {
 	var oldItem *Item
 
 	if slot == "mainhand" {
-		if strings.Contains(nameLower, "arco") || strings.Contains(nameLower, "besta") || strings.Contains(nameLower, "montante") {
+		if targetItem.Hands == 2 {
 			if eq.OffHand != nil {
 				s.Inventory.Backpack = append([]Item{*eq.OffHand}, s.Inventory.Backpack...)
 				eq.OffHand = nil
 			}
-		} else {
-			// Se trocou para arma melee ou cajado, desequipa munição automaticamente
+		}
+		
+		// Se trocou para arma melee ou cajado, desequipa munição automaticamente
+		if targetItem.Hands == 1 || (GetItemWeaponType(&targetItem) != WeaponTypeBow) {
 			if eq.Ammo != nil {
 				s.Inventory.Backpack = append([]Item{*eq.Ammo}, s.Inventory.Backpack...)
 				eq.Ammo = nil
@@ -945,12 +1075,9 @@ func (s *GameSession) EquipItem(itemID string, slot string) {
 		}
 	}
 	if slot == "offhand" {
-		if eq.MainHand != nil {
-			mainLower := strings.ToLower(eq.MainHand.Name)
-			if strings.Contains(mainLower, "arco") || strings.Contains(mainLower, "besta") || strings.Contains(mainLower, "montante") {
-				s.Inventory.Backpack = append([]Item{*eq.MainHand}, s.Inventory.Backpack...)
-				eq.MainHand = nil
-			}
+		if eq.MainHand != nil && eq.MainHand.Hands == 2 {
+			s.Inventory.Backpack = append([]Item{*eq.MainHand}, s.Inventory.Backpack...)
+			eq.MainHand = nil
 		}
 	}
 
@@ -1007,22 +1134,7 @@ func (s *GameSession) EquipItem(itemID string, slot string) {
 		}
 	}
 
-	// Duas Mãos: Se equipou um arco/cajado e tem escudo, desequipar o escudo automaticamente
-	if slot == "mainhand" && s.Inventory.Equipment.OffHand != nil {
-		wType := GetItemWeaponType(&targetItem)
-		if wType == WeaponTypeBow || wType == WeaponTypeWand {
-			s.Inventory.Backpack = append([]Item{*s.Inventory.Equipment.OffHand}, s.Inventory.Backpack...)
-			s.Inventory.Equipment.OffHand = nil
-		}
-	}
-	// Duas Mãos Inverso: Se equipar escudo e tem arco/cajado, desequipar a arma de duas mãos
-	if slot == "offhand" && s.Inventory.Equipment.MainHand != nil {
-		wType := GetItemWeaponType(s.Inventory.Equipment.MainHand)
-		if wType == WeaponTypeBow || wType == WeaponTypeWand {
-			s.Inventory.Backpack = append([]Item{*s.Inventory.Equipment.MainHand}, s.Inventory.Backpack...)
-			s.Inventory.Equipment.MainHand = nil
-		}
-	}
+	// Duas Mãos logic is now handled before adding to equipment slots.
 
 	if s.SaveInvFunc != nil {
 		_ = s.SaveInvFunc(s.Character.ID, s.Inventory)
@@ -1146,6 +1258,58 @@ func (s *GameSession) DiscardItem(itemID string) {
 	})
 }
 
+func (s *GameSession) BulkSell(itemIDs []string) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+
+	newBackpack := make([]Item, 0)
+	var totalGoldGained int64
+	var itemsSold int
+
+	// Convertendo slice de strings em mapa (Set) para busca O(1)
+	sellSet := make(map[string]bool)
+	for _, id := range itemIDs {
+		sellSet[id] = true
+	}
+
+	for _, item := range s.Inventory.Backpack {
+		if sellSet[item.ID] {
+			totalGoldGained += item.ValueGold
+			itemsSold++
+		} else {
+			newBackpack = append(newBackpack, item)
+		}
+	}
+
+	if itemsSold == 0 {
+		return
+	}
+
+	s.Inventory.Backpack = newBackpack
+	s.Character.GoldBank += totalGoldGained
+
+	if s.SaveInvFunc != nil {
+		_ = s.SaveInvFunc(s.Character.ID, s.Inventory)
+	}
+	if s.SaveCharFunc != nil {
+		_ = s.SaveCharFunc(s.Character)
+	}
+
+	totalAtk, totalDef := s.CalculateStats()
+	s.broadcastMessage(CombatMessage{
+		Type:         "INVENTORY_UPDATE",
+		Timestamp:    time.Now().Format("15:04:05"),
+		Character:    s.Character,
+		Inventory:    s.Inventory,
+		TotalAttack:  totalAtk,
+		TotalDefense: totalDef,
+		ActiveRegion: s.ActiveRegion,
+		ActiveStance: s.ActiveStance,
+		LogText:      fmt.Sprintf("Você vendeu %d item(ns) por %d de ouro!", itemsSold, totalGoldGained),
+		IsActive:     s.IsExpeditionActive,
+	})
+}
+
 func (s *GameSession) GetTotalCapacity() float64 {
 	baseCap := float64(1000 + (s.Character.Level * 10))
 	if s.Character.STR > 0 {
@@ -1240,6 +1404,10 @@ func (s *GameSession) SetRegion(regionID string) {
 	defer s.Mu.Unlock()
 	if _, exists := ExpeditionRegions[regionID]; exists {
 		s.ActiveRegion = regionID
+		s.Character.ActiveRegion = regionID
+		if s.SaveCharFunc != nil {
+			_ = s.SaveCharFunc(s.Character)
+		}
 		s.CurrentMonsters = []Monster{} // Reseta horda ao mudar de região
 		s.CurrentStage = 1
 		s.IsBossStage = false
@@ -1306,11 +1474,41 @@ func (s *GameSession) broadcastMessage(msg CombatMessage) {
 
 func (s *GameSession) ToggleExpedition() bool {
 	s.Mu.Lock()
-	defer s.Mu.Unlock()
 	s.IsExpeditionActive = !s.IsExpeditionActive
+	s.Character.IsExpeditionActive = s.IsExpeditionActive
 	if !s.IsExpeditionActive {
 		s.CurrentMonsters = []Monster{}
 	}
+	if s.SaveCharFunc != nil {
+		_ = s.SaveCharFunc(s.Character)
+	}
+
+	totalAtk, totalDef := s.CalculateStats()
+	logMsg := "⚔️ Expedição iniciada! Caçando em marcha pelo mapa..."
+	if !s.IsExpeditionActive {
+		logMsg = "⛺ Expedição pausada. Personagem descansando no acampamento."
+	}
+	s.Mu.Unlock()
+
+	s.EnsureTickerRunning()
+
+	s.broadcastMessage(CombatMessage{
+		Type:         "EXPEDITION_STATUS",
+		Timestamp:    time.Now().Format("15:04:05"),
+		Character:    s.Character,
+		Inventory:    s.Inventory,
+		Monsters:     s.CurrentMonsters,
+		TotalAttack:  totalAtk,
+		TotalDefense: totalDef,
+		ActiveRegion: s.ActiveRegion,
+		ActiveStance: s.ActiveStance,
+		CurrentStage: s.CurrentStage,
+		MaxStages:    s.MaxStages,
+		IsBossStage:  s.IsBossStage,
+		LogText:      logMsg,
+		IsActive:     s.IsExpeditionActive,
+	})
+
 	return s.IsExpeditionActive
 }
 
@@ -1331,6 +1529,7 @@ func (s *GameSession) ToggleSkill(skillKey string) {
 				Timestamp:    time.Now().Format("15:04:05"),
 				Character:    s.Character,
 				LogText:      fmt.Sprintf("Habilidade desativada: %s", skillKey),
+				IsActive:     s.IsExpeditionActive,
 			})
 			return
 		}
@@ -1365,6 +1564,7 @@ func (s *GameSession) ToggleSkill(skillKey string) {
 			Timestamp:    time.Now().Format("15:04:05"),
 			Character:    s.Character,
 			LogText:      fmt.Sprintf("Habilidade equipada: %s", skillKey),
+			IsActive:     s.IsExpeditionActive,
 		})
 	}
 }
@@ -1431,6 +1631,10 @@ func (s *GameSession) ChooseStarterPack(pack string) {
 			ID:            fmt.Sprintf("starter_bow_%d", time.Now().UnixNano()),
 			Name:          "Arco de Aprendiz",
 			Attack:        14,
+			PhysicalAttack: 14,
+			MagicAttack:    0,
+			Hands:          2,
+			ValueGold:      10,
 			Defense:       0,
 			Rarity:        "Comum",
 			Weight:        25.0,
@@ -1442,6 +1646,10 @@ func (s *GameSession) ChooseStarterPack(pack string) {
 			ID:            fmt.Sprintf("starter_arrows_%d", time.Now().UnixNano()),
 			Name:          "Flechas de Caça",
 			Attack:        4,
+			PhysicalAttack: 4,
+			MagicAttack:    0,
+			Hands:          1,
+			ValueGold:      5,
 			Defense:       0,
 			Rarity:        "Comum",
 			Weight:        5.0,
@@ -1458,6 +1666,10 @@ func (s *GameSession) ChooseStarterPack(pack string) {
 			ID:            fmt.Sprintf("starter_wand_%d", time.Now().UnixNano()),
 			Name:          "Cajado Rúnico",
 			Attack:        16,
+			PhysicalAttack: 0,
+			MagicAttack:    16,
+			Hands:          2,
+			ValueGold:      15,
 			Defense:       0,
 			Rarity:        "Comum",
 			Weight:        18.5,
@@ -1469,6 +1681,10 @@ func (s *GameSession) ChooseStarterPack(pack string) {
 			ID:            fmt.Sprintf("skill_book_fireball_%d", time.Now().UnixNano()),
 			Name:          "Livro: Bola de Fogo",
 			Attack:        0,
+			PhysicalAttack: 0,
+			MagicAttack:    0,
+			Hands:          1,
+			ValueGold:      20,
 			Defense:       0,
 			Rarity:        "Incomum",
 			Weight:        10.0,
@@ -1485,6 +1701,10 @@ func (s *GameSession) ChooseStarterPack(pack string) {
 			ID:            fmt.Sprintf("starter_sword_%d", time.Now().UnixNano()),
 			Name:          "Espada do Aprendiz",
 			Attack:        12,
+			PhysicalAttack: 12,
+			MagicAttack:    0,
+			Hands:          1,
+			ValueGold:      10,
 			Defense:       4,
 			Rarity:        "Comum",
 			Weight:        32.0,
@@ -1496,6 +1716,10 @@ func (s *GameSession) ChooseStarterPack(pack string) {
 			ID:            fmt.Sprintf("starter_shield_%d", time.Now().UnixNano()),
 			Name:          "Escudo de Madeira",
 			Attack:        0,
+			PhysicalAttack: 0,
+			MagicAttack:    0,
+			Hands:          1,
+			ValueGold:      10,
 			Defense:       8,
 			Rarity:        "Comum",
 			Weight:        28.0,

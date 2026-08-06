@@ -273,13 +273,11 @@ export function ItemIcon({
 
 export function getCleanItemName(fullName: string = ''): string {
   if (!fullName) return '';
+  return fullName.replace(/^(Comum|Incomum|Raro|Épico|Lendário)\s+/i, '').trim();
+}
 
-  // Remove os numerais e prefixos de raridade no início
-  const words = fullName.replace(/^(Comum|Incomum|Raro|Lendário)\s+/i, '').split(' ');
-  if (words.length <= 2) {
-    return words.join(' ');
-  }
-
-  // Se for nome composto longo (ex: Espada de Aço Incandescente), pega as duas primeiras palavras
-  return `${words[0]} ${words[1]}`;
+export function getItemAttack(item?: { attack?: number; physical_attack?: number; magic_attack?: number } | null): number {
+  if (!item) return 0;
+  if (typeof item.attack === 'number' && item.attack > 0) return item.attack;
+  return (item.physical_attack || 0) + (item.magic_attack || 0);
 }

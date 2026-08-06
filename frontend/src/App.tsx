@@ -30,7 +30,7 @@ export function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data && data.minutes_offline >= 5) {
+        if (data && data.minutes_offline >= 3) {
           setOfflineData(data);
         }
       }

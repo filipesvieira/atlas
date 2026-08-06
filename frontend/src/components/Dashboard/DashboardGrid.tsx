@@ -40,6 +40,7 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
     toggleSkill,
     allocateStat,
     chooseStarterPack,
+    bulkSell,
     setOnCombatEvent,
   } = useGameSocket(token, initialChar.id);
 
@@ -74,6 +75,7 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
         {/* Painel Esquerdo: Equipamentos & Status do Aventureiro (4 Colunas) */}
         <div className="md:col-span-3 flex flex-col gap-4">
           <TibiaEquipmentGrid
+            character={char}
             equipment={inventory.equipment}
             backpack={inventory.backpack}
             cap={baseCapacity}
@@ -86,6 +88,7 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
             onEquipItem={equipItem}
             onUnequipItem={unequipItem}
             onDiscardItem={discardItem}
+            onBulkSell={bulkSell}
           />
         </div>
 

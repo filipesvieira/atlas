@@ -20,29 +20,31 @@ type Account struct {
 }
 
 type Character struct {
-	ID         string    `json:"id"`
-	AccountID  string    `json:"account_id"`
-	Name       string    `json:"name"`
-	Vocation   string    `json:"vocation"`
-	Origin     string    `json:"origin"`
-	Level      int       `json:"level"`
-	Experience int64     `json:"experience"`
-	Health     int       `json:"health"`
-	MaxHealth  int       `json:"max_health"`
-	Mana       int       `json:"mana"`
-	MaxMana       int                 `json:"max_mana"`
-	GoldBank      int64               `json:"gold_bank"`
-	STR           int                 `json:"str"`
-	DEX           int                 `json:"dex"`
-	INT           int                 `json:"int_stat"`
-	VIT           int                 `json:"vit"`
-	UnspentPoints int                 `json:"unspent_points"`
-	Masteries     game.MasteriesData  `json:"masteries"`
-	LearnedSkills   []string            `json:"learned_skills"`
-	ActiveSkills    []string            `json:"active_skills"`
-	UnlockedRegions []string            `json:"unlocked_regions"`
-	LastLogin       time.Time           `json:"last_login"`
-	LastLogout      time.Time           `json:"last_logout"`
+	ID                 string             `json:"id"`
+	AccountID          string             `json:"account_id"`
+	Name               string             `json:"name"`
+	Vocation           string             `json:"vocation"`
+	Origin             string             `json:"origin"`
+	Level              int                `json:"level"`
+	Experience         int64              `json:"experience"`
+	Health             int                `json:"health"`
+	MaxHealth          int                `json:"max_health"`
+	Mana               int                `json:"mana"`
+	MaxMana            int                `json:"max_mana"`
+	GoldBank           int64              `json:"gold_bank"`
+	STR                int                `json:"str"`
+	DEX                int                `json:"dex"`
+	INT                int                `json:"int_stat"`
+	VIT                int                `json:"vit"`
+	UnspentPoints      int                `json:"unspent_points"`
+	Masteries          game.MasteriesData `json:"masteries"`
+	LearnedSkills      []string           `json:"learned_skills"`
+	ActiveSkills       []string           `json:"active_skills"`
+	UnlockedRegions    []string           `json:"unlocked_regions"`
+	IsExpeditionActive bool               `json:"is_expedition_active"`
+	ActiveRegion       string             `json:"active_region"`
+	LastLogin          time.Time          `json:"last_login"`
+	LastLogout         time.Time          `json:"last_logout"`
 }
 
 type EquipmentSlots struct {
@@ -87,6 +89,8 @@ func InitDB(connStr string) (*sql.DB, error) {
 	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS learned_skills JSONB DEFAULT '[]'::jsonb;`)
 	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS active_skills JSONB DEFAULT '[]'::jsonb;`)
 	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS unlocked_regions JSONB DEFAULT '["forest", "shereque", "chapolin"]'::jsonb;`)
+	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS is_expedition_active BOOLEAN DEFAULT false;`)
+	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS active_region VARCHAR(50) DEFAULT 'forest';`)
 	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS str INT DEFAULT 5;`)
 	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS dex INT DEFAULT 5;`)
 	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS int_stat INT DEFAULT 5;`)
@@ -151,6 +155,10 @@ func CreateCharacter(accountID, name, vocation, origin string) (*Character, erro
 			ID:            "starter_sword",
 			Name:          "Espada do Aprendiz",
 			Attack:        12,
+			PhysicalAttack: 12,
+			MagicAttack:    0,
+			Hands:          1,
+			ValueGold:      10,
 			Defense:       4,
 			Rarity:        "Comum",
 			SpecialEffect: "Arma Inicial",
@@ -159,6 +167,10 @@ func CreateCharacter(accountID, name, vocation, origin string) (*Character, erro
 			ID:            "starter_shield",
 			Name:          "Escudo de Madeira",
 			Attack:        0,
+			PhysicalAttack: 0,
+			MagicAttack:    0,
+			Hands:          1,
+			ValueGold:      10,
 			Defense:       8,
 			Rarity:        "Comum",
 			SpecialEffect: "Escudo Inicial",
@@ -176,7 +188,7 @@ func CreateCharacter(accountID, name, vocation, origin string) (*Character, erro
 
 func GetCharactersByAccountID(accountID string) ([]*Character, error) {
 	query := `
-		SELECT id, account_id, name, vocation, COALESCE(origin, 'wanderer'), level, experience, health, max_health, mana, max_mana, gold_bank, COALESCE(str, 5), COALESCE(dex, 5), COALESCE(int_stat, 5), COALESCE(vit, 5), COALESCE(unspent_points, 0), COALESCE(masteries, '{}'::jsonb), COALESCE(learned_skills, '[]'::jsonb), COALESCE(active_skills, '[]'::jsonb), COALESCE(unlocked_regions, '["forest", "shereque", "chapolin"]'::jsonb), last_login, last_logout
+		SELECT id, account_id, name, vocation, COALESCE(origin, 'wanderer'), level, experience, health, max_health, mana, max_mana, gold_bank, COALESCE(str, 5), COALESCE(dex, 5), COALESCE(int_stat, 5), COALESCE(vit, 5), COALESCE(unspent_points, 0), COALESCE(masteries, '{}'::jsonb), COALESCE(learned_skills, '[]'::jsonb), COALESCE(active_skills, '[]'::jsonb), COALESCE(unlocked_regions, '["forest", "shereque", "chapolin"]'::jsonb), COALESCE(is_expedition_active, false), COALESCE(active_region, 'forest'), last_login, last_logout
 		FROM characters WHERE account_id = $1
 	`
 	rows, err := DB.Query(query, accountID)
@@ -193,7 +205,7 @@ func GetCharactersByAccountID(accountID string) ([]*Character, error) {
 			&c.ID, &c.AccountID, &c.Name, &c.Vocation, &c.Origin,
 			&c.Level, &c.Experience, &c.Health, &c.MaxHealth,
 			&c.Mana, &c.MaxMana, &c.GoldBank, &c.STR, &c.DEX, &c.INT, &c.VIT, &c.UnspentPoints,
-			&masteriesRaw, &skillsRaw, &activeRaw, &unlockedRaw, &c.LastLogin, &c.LastLogout,
+			&masteriesRaw, &skillsRaw, &activeRaw, &unlockedRaw, &c.IsExpeditionActive, &c.ActiveRegion, &c.LastLogin, &c.LastLogout,
 		); err != nil {
 			return nil, err
 		}
@@ -214,7 +226,7 @@ func GetCharactersByAccountID(accountID string) ([]*Character, error) {
 
 func GetCharacterByID(id string) (*Character, error) {
 	query := `
-		SELECT id, account_id, name, vocation, COALESCE(origin, 'wanderer'), level, experience, health, max_health, mana, max_mana, gold_bank, COALESCE(str, 5), COALESCE(dex, 5), COALESCE(int_stat, 5), COALESCE(vit, 5), COALESCE(unspent_points, 0), COALESCE(masteries, '{}'::jsonb), COALESCE(learned_skills, '[]'::jsonb), COALESCE(active_skills, '[]'::jsonb), COALESCE(unlocked_regions, '["forest", "shereque", "chapolin"]'::jsonb), last_login, last_logout
+		SELECT id, account_id, name, vocation, COALESCE(origin, 'wanderer'), level, experience, health, max_health, mana, max_mana, gold_bank, COALESCE(str, 5), COALESCE(dex, 5), COALESCE(int_stat, 5), COALESCE(vit, 5), COALESCE(unspent_points, 0), COALESCE(masteries, '{}'::jsonb), COALESCE(learned_skills, '[]'::jsonb), COALESCE(active_skills, '[]'::jsonb), COALESCE(unlocked_regions, '["forest", "shereque", "chapolin"]'::jsonb), COALESCE(is_expedition_active, false), COALESCE(active_region, 'forest'), last_login, last_logout
 		FROM characters WHERE id = $1
 	`
 	c := &Character{}
@@ -223,7 +235,7 @@ func GetCharacterByID(id string) (*Character, error) {
 		&c.ID, &c.AccountID, &c.Name, &c.Vocation, &c.Origin,
 		&c.Level, &c.Experience, &c.Health, &c.MaxHealth,
 		&c.Mana, &c.MaxMana, &c.GoldBank, &c.STR, &c.DEX, &c.INT, &c.VIT, &c.UnspentPoints,
-		&masteriesRaw, &skillsRaw, &activeRaw, &unlockedRaw, &c.LastLogin, &c.LastLogout,
+		&masteriesRaw, &skillsRaw, &activeRaw, &unlockedRaw, &c.IsExpeditionActive, &c.ActiveRegion, &c.LastLogin, &c.LastLogout,
 	)
 	if err != nil {
 		return nil, err
@@ -306,10 +318,24 @@ func UpdateCharacterState(c *Character) error {
 	unlockedJSON, _ := json.Marshal(c.UnlockedRegions)
 	query := `
 		UPDATE characters
-		SET vocation=$2, level=$3, experience=$4, health=$5, max_health=$6, mana=$7, max_mana=$8, gold_bank=$9, str=$10, dex=$11, int_stat=$12, vit=$13, unspent_points=$14, masteries=$15, learned_skills=$16, active_skills=$17, unlocked_regions=$18, last_logout=$19
+		SET vocation=$2, level=$3, experience=$4, health=$5, max_health=$6, mana=$7, max_mana=$8, gold_bank=$9, str=$10, dex=$11, int_stat=$12, vit=$13, unspent_points=$14, masteries=$15, learned_skills=$16, active_skills=$17, unlocked_regions=$18, is_expedition_active=$19, active_region=$20, last_logout=$21
 		WHERE id=$1
 	`
-	_, err := DB.Exec(query, c.ID, c.Vocation, c.Level, c.Experience, c.Health, c.MaxHealth, c.Mana, c.MaxMana, c.GoldBank, c.STR, c.DEX, c.INT, c.VIT, c.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, time.Now())
+	lastLogout := c.LastLogout
+	if lastLogout.IsZero() {
+		lastLogout = time.Now()
+	}
+	_, err := DB.Exec(query, c.ID, c.Vocation, c.Level, c.Experience, c.Health, c.MaxHealth, c.Mana, c.MaxMana, c.GoldBank, c.STR, c.DEX, c.INT, c.VIT, c.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, c.IsExpeditionActive, c.ActiveRegion, lastLogout)
+	return err
+}
+
+func SetCharacterOffline(charID string, isExpeditionActive bool, activeRegion string) error {
+	query := `
+		UPDATE characters
+		SET last_logout = NOW(), is_expedition_active = $2, active_region = $3
+		WHERE id = $1
+	`
+	_, err := DB.Exec(query, charID, isExpeditionActive, activeRegion)
 	return err
 }
 

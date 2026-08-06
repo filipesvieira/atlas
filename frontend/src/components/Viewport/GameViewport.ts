@@ -69,6 +69,8 @@ export class GameViewport {
   // Efeitos visuais
   private floatingTexts: FloatingText[] = [];
   private projectiles: Projectile[] = [];
+  private isActive = true;
+  private particles: { x: number; y: number; alpha: number; speed: number; phase: number }[] = [];
 
   constructor() {}
 
@@ -169,6 +171,30 @@ export class GameViewport {
         this.floatingTexts.splice(i, 1);
       }
     }
+
+    // 5. Atualizar Partículas (Campfire/Stars)
+    if (!this.isActive) {
+      // Cria partículas (fagulhas da fogueira ou vagalumes)
+      if (Math.random() < 0.1) {
+        this.particles.push({
+          x: 236 + (Math.random() * 20 - 10),
+          y: this.height * 0.5 + 128 - 20,
+          alpha: 1.0,
+          speed: 0.5 + Math.random(),
+          phase: Math.random() * Math.PI * 2,
+        });
+      }
+    }
+    
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.y -= p.speed;
+      p.x += Math.sin(p.phase + p.y * 0.05) * 0.5;
+      p.alpha -= 0.02;
+      if (p.alpha <= 0 || this.isActive) {
+        this.particles.splice(i, 1);
+      }
+    }
   }
 
   // ─── RENDERIZAÇÃO PRINCIPAL 60 FPS ─────────────────────────────────────────
@@ -179,34 +205,48 @@ export class GameViewport {
 
     // 1. Desenhar Cenário do Bioma Ativo
     let bgBuffer: HTMLCanvasElement;
-    switch (this.regionId) {
-      case 'shereque':
-        bgBuffer = PixelArtRenderer.getSherequeBackground(this.width, this.height);
-        break;
-      case 'chapolin':
-        bgBuffer = PixelArtRenderer.getChapolinBackground(this.width, this.height);
-        break;
-      case 'orcruins':
-        bgBuffer = PixelArtRenderer.getOrcRuinsBackground(this.width, this.height);
-        break;
-      case 'esgotos':
-        bgBuffer = PixelArtRenderer.getEsgotosBackground(this.width, this.height);
-        break;
-      case 'rogartes':
-        bgBuffer = PixelArtRenderer.getRogartesBackground(this.width, this.height);
-        break;
-      case 'frozen':
-        bgBuffer = PixelArtRenderer.getFrozenBackground(this.width, this.height);
-        break;
-      case 'abyss':
-        bgBuffer = PixelArtRenderer.getAbyssBackground(this.width, this.height);
-        break;
-      case 'forest':
-      default:
-        bgBuffer = PixelArtRenderer.getForestBackground(this.width, this.height);
-        break;
+    
+    if (!this.isActive) {
+      bgBuffer = PixelArtRenderer.getCampBackground(this.width, this.height);
+      this.targetHeroX = 200; // Move herói para perto da fogueira
+    } else {
+      this.targetHeroX = 100;
+      switch (this.regionId) {
+        case 'shereque':
+          bgBuffer = PixelArtRenderer.getSherequeBackground(this.width, this.height);
+          break;
+        case 'chapolin':
+          bgBuffer = PixelArtRenderer.getChapolinBackground(this.width, this.height);
+          break;
+        case 'orcruins':
+          bgBuffer = PixelArtRenderer.getOrcRuinsBackground(this.width, this.height);
+          break;
+        case 'esgotos':
+          bgBuffer = PixelArtRenderer.getEsgotosBackground(this.width, this.height);
+          break;
+        case 'rogartes':
+          bgBuffer = PixelArtRenderer.getRogartesBackground(this.width, this.height);
+          break;
+        case 'frozen':
+          bgBuffer = PixelArtRenderer.getFrozenBackground(this.width, this.height);
+          break;
+        case 'abyss':
+          bgBuffer = PixelArtRenderer.getAbyssBackground(this.width, this.height);
+          break;
+        case 'forest':
+        default:
+          bgBuffer = PixelArtRenderer.getForestBackground(this.width, this.height);
+          break;
+      }
     }
+    
     ctx.drawImage(bgBuffer, 0, 0);
+
+    // Desenhar partículas
+    this.particles.forEach((p) => {
+      ctx.fillStyle = `rgba(251, 146, 60, ${Math.max(0, p.alpha)})`; // orange-400
+      ctx.fillRect(p.x, p.y, 2, 2);
+    });
 
     // 2. Desenhar Herói do Jogador (Com Animação de Caminhada / Bobbing)
     const heroBob = Math.sin(this.heroWalkFrame) * 3;
@@ -370,6 +410,10 @@ export class GameViewport {
       if (msg.character.vocation || msg.character.origin) {
         this.vocation = (msg.character.vocation || msg.character.origin).toLowerCase();
       }
+    }
+
+    if (msg.is_active !== undefined) {
+      this.isActive = msg.is_active;
     }
 
     // 2. Atualizar Bioma da Região
