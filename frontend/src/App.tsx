@@ -8,6 +8,8 @@ export function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('atlas_token'));
   const [character, setCharacter] = useState<any>(null);
   const [offlineData, setOfflineData] = useState<any | null>(null);
+  const [selectingCharacterId, setSelectingCharacterId] = useState<string | null>(null);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
 
   const handleAuthSuccess = (newToken: string) => {
     setToken(newToken);
@@ -17,45 +19,73 @@ export function App() {
   const handleLogout = () => {
     setToken(null);
     setCharacter(null);
+    setSelectionError(null);
     localStorage.removeItem('atlas_token');
   };
 
   const handleSelectCharacter = async (char: any) => {
-    setCharacter(char);
-    // Busca progresso offline
+    if (!token || selectingCharacterId) return;
+
+    // O Dashboard/WebSocket só é montado depois que o claim transacional termina.
+    // Isso impede a sessão em memória de sobrescrever o snapshot recém-reconciliado.
+    setSelectingCharacterId(char.id);
+    setSelectionError(null);
+    setOfflineData(null);
     try {
       const res = await fetch(`http://localhost:8080/api/v1/expedition/claim?character_id=${char.id}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.minutes_offline >= 3) {
-          setOfflineData(data);
-        }
+      if (!res.ok) {
+        throw new Error(`Falha no claim offline (${res.status})`);
+      }
+
+      const claim = await res.json();
+      if (!claim.character) {
+        throw new Error('Resposta sem snapshot autoritativo do personagem');
+      }
+      setCharacter(claim.character);
+      if (claim.report?.minutes_offline >= 3) {
+        setOfflineData(claim.report);
       }
     } catch (e) {
-      console.warn('Erro ao buscar progresso offline:', e);
+      console.warn('Erro ao reconciliar progresso offline:', e);
+      // Não abre o WebSocket sem consumir a janela offline. Entrar com um
+      // snapshot antigo poderia fechar a janela e perder recompensas pendentes.
+      setCharacter(null);
+      setSelectionError('Não foi possível reconciliar a expedição. Tente selecionar o personagem novamente.');
+    } finally {
+      setSelectingCharacterId(null);
     }
   };
 
   const handleCharacterUpdate = useCallback((updatedChar: any) => {
     if (updatedChar) {
-      setCharacter((prev: any) => {
-        if (!prev || prev.level !== updatedChar.level || prev.name !== updatedChar.name) {
-          return { ...prev, ...updatedChar };
-        }
-        return prev;
-      });
+      // XP, ouro, HP, região e fase também são autoritativos; não apenas nome/nível.
+      setCharacter((prev: any) => ({ ...prev, ...updatedChar }));
     }
   }, []);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      {selectingCharacterId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm">
+          <div className="rounded-xl border border-amber-500/40 bg-slate-900 px-5 py-4 text-sm text-amber-300 shadow-2xl">
+            Reconciliando a expedição offline…
+          </div>
+        </div>
+      )}
       {!token ? (
         <AuthScreen onSuccess={handleAuthSuccess} />
       ) : !character ? (
-        <CharacterScreen token={token} onSelectCharacter={handleSelectCharacter} />
+        <>
+          {selectionError && (
+            <div className="mx-auto mt-4 w-full max-w-xl rounded-xl border border-rose-500/40 bg-rose-950/30 px-4 py-3 text-center text-sm text-rose-200">
+              {selectionError}
+            </div>
+          )}
+          <CharacterScreen token={token} onSelectCharacter={handleSelectCharacter} />
+        </>
       ) : (
         <>
           <OfflineSummaryModal data={offlineData} onClose={() => setOfflineData(null)} />

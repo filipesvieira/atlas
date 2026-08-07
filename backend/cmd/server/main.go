@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/atlas/backend/internal/db"
-	"github.com/atlas/backend/pkg/game"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -200,52 +199,43 @@ func HandleCreateCharacter(w http.ResponseWriter, r *http.Request) {
 func HandleClaimOfflineProgress(w http.ResponseWriter, r *http.Request) {
 	claims := r.Context().Value("claims").(*Claims)
 	charID := r.URL.Query().Get("character_id")
-
-	var char *db.Character
-	var err error
-
-	if charID != "" {
-		char, err = db.GetCharacterByID(charID)
-		if err != nil || char == nil || char.AccountID != claims.AccountID {
-			jsonError(w, http.StatusNotFound, "Personagem não encontrado")
-			return
-		}
-	} else {
-		chars, err := db.GetCharactersByAccountID(claims.AccountID)
-		if err != nil || len(chars) == 0 {
-			jsonError(w, http.StatusNotFound, "Nenhum personagem encontrado")
-			return
-		}
-		char = chars[0]
+	if charID == "" {
+		jsonError(w, http.StatusBadRequest, "character_id é obrigatório")
+		return
 	}
 
-	activeReg := char.ActiveRegion
-	if activeReg == "" {
-		activeReg = "forest"
+	lifecycleLock := getCharacterLifecycleLock(charID)
+	lifecycleLock.Lock()
+	defer lifecycleLock.Unlock()
+
+	sessionsMu.Lock()
+	_, sessionAlreadyActive := activeSessions[charID]
+	sessionsMu.Unlock()
+	if sessionAlreadyActive {
+		jsonError(w, http.StatusConflict, "A sessão em tempo real já está ativa; o progresso offline não pode ser reivindicado novamente")
+		return
 	}
 
-	playerAtk := 15 + (char.STR * 2)
-	playerDef := 5 + (char.VIT / 2)
-	result := game.CalculateOfflineProgress(char.IsExpeditionActive, char.LastLogout, char.Level, activeReg, playerAtk, playerDef)
-
-	if result.MinutesOffline >= 3 {
-		char.Experience += result.XPGained
-		char.GoldBank += result.GoldGained
-		_ = db.UpdateCharacterState(char)
-		_ = db.RecordExpeditionLog(char.ID, result.MinutesOffline, result.XPGained, result.GoldGained, result.ItemsFound)
+	claim, err := db.ClaimOfflineProgress(claims.AccountID, charID, time.Now().UTC())
+	if err != nil {
+		log.Printf("Erro no claim offline do personagem %s: %v", charID, err)
+		jsonError(w, http.StatusInternalServerError, "Não foi possível reconciliar o progresso offline")
+		return
 	}
-
-	jsonResponse(w, http.StatusOK, result)
+	jsonResponse(w, http.StatusOK, claim)
 }
 
 func HandleAdminTelemetry(w http.ResponseWriter, r *http.Request) {
+	sessionsMu.Lock()
+	activeCount := len(activeSessions)
+	sessionsMu.Unlock()
 	telemetry := map[string]any{
 		"ram_usage_mb":    22.4,
 		"uptime_hours":    142,
-		"active_ccu":      len(activeSessions),
+		"active_ccu":      activeCount,
 		"db_status":       "connected",
 		"redis_status":    "connected",
-		"active_sessions": len(activeSessions),
+		"active_sessions": activeCount,
 	}
 	jsonResponse(w, http.StatusOK, telemetry)
 }

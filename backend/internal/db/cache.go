@@ -102,68 +102,8 @@ func LoadBaseMonsters() {
 	log.Printf("Carregados %d Monstros Base no Cache", len(DBBaseMonsters))
 }
 
-func GetRandomMonsterForRegion(regionID string, playerLevel int, r *rand.Rand) game.Monster {
-	var validMonsters []*BaseMonster
-	for _, m := range DBBaseMonsters {
-		if m.RegionID == regionID {
-			validMonsters = append(validMonsters, m)
-		}
-	}
-
-	// Fallback se a tabela base do banco não possuir monstros cadastrados para esta região
-	if len(validMonsters) == 0 {
-		return game.GetRandomMonsterForRegion(regionID, playerLevel, r)
-	}
-
-	chosen := validMonsters[r.Intn(len(validMonsters))]
-
-	// Limites da região de expedição
-	minLvl := chosen.MinLevel
-	maxLvl := chosen.MaxLevel
-
-	reg, exists := game.ExpeditionRegions[regionID]
-	if exists {
-		minLvl = reg.MinLevel
-		maxLvl = reg.MaxLevel
-	}
-
-	// TRAVA RIGOROSA DO NÍVEL DO MONSTRO AOS LIMITES DA EXPEDIÇÃO (MinLevel a MaxLevel)
-	mobLevel := playerLevel
-	if maxLvl > 0 && mobLevel > maxLvl {
-		mobLevel = maxLvl
-	}
-	if mobLevel < minLvl {
-		mobLevel = minLvl
-	}
-
-	// Pequena variação +/- 1 dentro da faixa permitida da região
-	if minLvl < maxLvl {
-		fuzz := r.Intn(3) - 1
-		mobLevel += fuzz
-		if mobLevel > maxLvl {
-			mobLevel = maxLvl
-		}
-		if mobLevel < minLvl {
-			mobLevel = minLvl
-		}
-	}
-
-	// Atributos escalados com o nível da região
-	healthFuzz := chosen.BaseHealth + (mobLevel * 8) + r.Intn(10)
-	attackFuzz := chosen.BaseAttack + (mobLevel * 2) + r.Intn(4)
-
-	// Inferência de AttackType por nome do monstro
-	attackType := inferAttackType(chosen.Name)
-
-	return game.Monster{
-		ID:         chosen.ID, // Vai ser modificado com UUID na engine
-		Name:       chosen.Name,
-		Level:      mobLevel,  // Nível estritamente travado na expedição!
-		Health:     healthFuzz,
-		MaxHealth:  healthFuzz,
-		Attack:     attackFuzz,
-		AttackType: attackType,
-	}
+func GetRandomMonsterForRegion(regionID string, r *rand.Rand) game.Monster {
+	return game.GetRandomMonsterForRegion(regionID, r)
 }
 
 // inferAttackType determina o tipo de ataque pelo nome do monstro via heurística.

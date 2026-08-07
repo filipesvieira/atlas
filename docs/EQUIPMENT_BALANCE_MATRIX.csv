@@ -1,0 +1,346 @@
+item,slot,weapon_type,required_level,tier,rarity,attack,magic_attack,defense,bonus_hp,bonus_mp,bonus_str,bonus_dex,bonus_int,crit,lifesteal,gold_bonus,weight,item_power,value_gold
+Espada do Aprendiz,mainhand,sword,1,1,Comum,8,0,0,0,0,0,0,0,0.0,0.0,0.0,15.0,16,16
+Espada do Aprendiz,mainhand,sword,1,1,Incomum,10,0,0,0,0,0,0,0,0.0,0.0,0.0,15.0,20,25
+Espada do Aprendiz,mainhand,sword,1,1,Raro,20,0,0,0,0,0,0,0,1.5,0.0,0.0,15.0,45,95
+Espada do Aprendiz,mainhand,sword,1,1,Épico,28,0,0,0,0,0,0,0,3.0,2.0,0.0,15.0,73,237
+Espada do Aprendiz,mainhand,sword,1,1,Lendário,39,0,0,0,0,0,0,0,4.5,0.0,0.0,15.0,92,506
+Machadinha de Madeira,mainhand,axe,1,1,Comum,9,0,0,0,0,0,0,0,0.0,0.0,0.0,18.0,18,18
+Machadinha de Madeira,mainhand,axe,1,1,Incomum,12,0,0,0,0,0,0,0,0.0,0.0,0.0,18.0,24,30
+Machadinha de Madeira,mainhand,axe,1,1,Raro,22,0,0,0,0,0,0,0,1.5,1.0,0.0,18.0,53,111
+Machadinha de Madeira,mainhand,axe,1,1,Épico,31,0,0,0,0,0,0,0,3.0,0.0,0.0,18.0,71,231
+Machadinha de Madeira,mainhand,axe,1,1,Lendário,42,0,0,0,0,0,0,0,4.5,0.0,0.0,18.0,98,539
+Clava de Madeira,mainhand,club,1,1,Comum,9,0,1,0,0,0,0,0,0.0,0.0,0.0,20.0,20,20
+Clava de Madeira,mainhand,club,1,1,Incomum,12,0,2,0,0,0,0,0,0.0,0.0,0.0,20.0,28,35
+Clava de Madeira,mainhand,club,1,1,Raro,22,0,2,0,0,0,0,0,1.5,0.0,0.0,20.0,53,111
+Clava de Madeira,mainhand,club,1,1,Épico,31,0,3,0,0,0,0,0,3.0,0.0,0.0,20.0,78,254
+Clava de Madeira,mainhand,club,1,1,Lendário,42,0,4,0,0,0,0,0,4.5,3.0,0.0,20.0,118,649
+Arco Curvo,mainhand,bow,1,1,Comum,8,0,0,0,0,0,0,0,0.0,0.0,0.0,12.0,16,16
+Arco Curvo,mainhand,bow,1,1,Incomum,10,0,0,0,0,0,0,0,0.0,0.0,0.0,12.0,20,25
+Arco Curvo,mainhand,bow,1,1,Raro,20,0,0,0,0,0,0,0,1.5,0.0,0.0,12.0,45,95
+Arco Curvo,mainhand,bow,1,1,Épico,28,0,0,0,0,0,0,0,3.0,0.0,0.0,12.0,65,211
+Arco Curvo,mainhand,bow,1,1,Lendário,39,0,0,0,0,0,0,0,4.5,0.0,0.0,12.0,92,506
+Varinha do Aprendiz,mainhand,wand,1,1,Comum,0,10,0,0,0,0,0,0,0.0,0.0,0.0,8.0,20,20
+Varinha do Aprendiz,mainhand,wand,1,1,Incomum,0,13,0,0,0,0,0,0,0.0,0.0,0.0,8.0,26,33
+Varinha do Aprendiz,mainhand,wand,1,1,Raro,0,24,0,0,0,0,0,0,1.5,1.0,0.0,8.0,57,120
+Varinha do Aprendiz,mainhand,wand,1,1,Épico,0,33,0,0,0,0,0,0,3.0,0.0,0.0,8.0,75,244
+Varinha do Aprendiz,mainhand,wand,1,1,Lendário,0,45,0,0,0,0,0,0,4.5,3.0,0.0,8.0,116,638
+Capacete de Couro,head,none,1,1,Comum,0,0,3,0,0,0,0,0,0.0,0.0,0.0,12.0,7,7
+Capacete de Couro,head,none,1,1,Incomum,0,0,5,3,0,0,0,0,0.0,0.0,0.0,12.0,11,14
+Capacete de Couro,head,none,1,1,Raro,0,0,11,15,0,0,0,0,0.0,0.0,0.0,12.0,26,55
+Capacete de Couro,head,none,1,1,Épico,0,0,17,27,0,0,0,0,0.0,0.0,0.0,12.0,41,133
+Capacete de Couro,head,none,1,1,Lendário,0,0,24,42,0,0,0,0,0.0,0.0,0.0,12.0,58,319
+Túnica de Couro,chest,none,1,1,Comum,0,0,4,5,0,0,0,0,0.0,0.0,0.0,25.0,9,9
+Túnica de Couro,chest,none,1,1,Incomum,0,0,6,11,0,0,0,0,0.0,0.0,0.0,25.0,15,19
+Túnica de Couro,chest,none,1,1,Raro,0,0,13,34,0,0,0,0,0.0,0.0,0.0,25.0,33,69
+Túnica de Couro,chest,none,1,1,Épico,0,0,19,56,0,0,0,0,0.0,0.0,0.0,25.0,49,159
+Túnica de Couro,chest,none,1,1,Lendário,0,0,27,84,0,0,0,0,0.0,0.0,0.0,25.0,70,385
+Calça de Tecido,legs,none,1,1,Comum,0,0,2,0,0,0,0,0,0.0,0.0,0.0,10.0,4,5
+Calça de Tecido,legs,none,1,1,Incomum,0,0,4,4,0,0,0,0,0.0,0.0,0.0,10.0,9,11
+Calça de Tecido,legs,none,1,1,Raro,0,0,9,20,0,0,0,0,0.0,0.0,0.0,10.0,22,46
+Calça de Tecido,legs,none,1,1,Épico,0,0,14,36,0,0,0,0,0.0,0.0,0.0,10.0,35,114
+Calça de Tecido,legs,none,1,1,Lendário,0,0,21,56,0,0,0,0,0.0,0.0,0.0,10.0,53,292
+Sandálias Ágeis,boots,none,1,1,Comum,0,0,1,0,0,0,1,0,0.0,0.0,0.0,5.0,8,8
+Sandálias Ágeis,boots,none,1,1,Incomum,0,0,3,2,0,0,2,0,0.0,0.0,0.0,5.0,19,24
+Sandálias Ágeis,boots,none,1,1,Raro,0,0,7,10,0,0,3,0,0.0,0.0,0.0,5.0,35,74
+Sandálias Ágeis,boots,none,1,1,Épico,0,0,12,18,0,0,5,0,0.0,0.0,0.0,5.0,59,192
+Sandálias Ágeis,boots,none,1,1,Lendário,0,0,18,28,0,0,6,0,0.0,0.0,0.0,5.0,79,435
+Broquel de Madeira,offhand,shield,1,1,Comum,0,0,6,5,0,0,0,0,0.0,0.0,0.0,14.0,14,14
+Broquel de Madeira,offhand,shield,1,1,Incomum,0,0,8,10,0,0,0,0,0.0,0.0,0.0,14.0,19,24
+Broquel de Madeira,offhand,shield,1,1,Raro,0,0,17,29,0,0,0,0,0.0,0.0,0.0,14.0,41,86
+Broquel de Madeira,offhand,shield,1,1,Épico,0,0,24,47,0,0,0,0,0.0,0.0,0.0,14.0,59,192
+Broquel de Madeira,offhand,shield,1,1,Lendário,0,0,33,70,0,0,0,0,0.0,0.0,0.0,14.0,81,446
+Pequena Bolsa,bag,none,1,1,Comum,0,0,0,0,0,0,0,0,0.0,0.0,0.0,5.0,0,5
+Pequena Bolsa,bag,none,1,1,Incomum,0,0,0,5,4,0,0,0,0.0,0.0,1.5,5.0,2,5
+Pequena Bolsa,bag,none,1,1,Raro,0,0,0,25,20,0,0,0,0.0,0.0,7.5,5.0,8,17
+Pequena Bolsa,bag,none,1,1,Épico,0,0,0,45,36,0,0,0,0.0,0.0,13.5,5.0,14,46
+Pequena Bolsa,bag,none,1,1,Lendário,0,0,0,70,56,0,0,0,0.0,0.0,21.0,5.0,22,121
+Flechas de Madeira,ammo,none,1,1,Comum,4,0,0,0,0,0,0,0,0.0,0.0,0.0,1.5,8,8
+Flechas de Madeira,ammo,none,1,1,Incomum,6,0,0,0,0,0,0,0,0.0,0.0,0.0,1.5,12,15
+Flechas de Madeira,ammo,none,1,1,Raro,13,0,0,0,0,0,0,0,1.0,0.0,0.0,1.5,29,61
+Flechas de Madeira,ammo,none,1,1,Épico,19,0,0,0,0,0,0,0,2.0,0.0,0.0,1.5,44,143
+Flechas de Madeira,ammo,none,1,1,Lendário,27,0,0,0,0,0,0,0,3.0,0.0,0.0,1.5,63,347
+Amuleto do Lobo,necklace,none,1,1,Comum,1,0,1,0,0,1,0,0,0.0,0.0,0.0,1.5,10,10
+Amuleto do Lobo,necklace,none,1,1,Incomum,2,0,2,3,3,3,0,0,0.0,0.0,0.0,1.5,27,34
+Amuleto do Lobo,necklace,none,1,1,Raro,2,0,4,15,15,7,0,0,0.0,0.0,0.0,1.5,58,122
+Amuleto do Lobo,necklace,none,1,1,Épico,3,0,7,27,27,12,0,0,0.0,0.0,0.0,1.5,99,322
+Amuleto do Lobo,necklace,none,1,1,Lendário,4,0,11,42,42,17,0,0,0.0,0.0,0.0,1.5,144,792
+Anel de Cobre,ring,none,1,1,Comum,0,0,1,10,0,0,0,0,0.0,0.0,0.0,0.8,3,5
+Anel de Cobre,ring,none,1,1,Incomum,0,0,2,14,3,1,0,0,0.0,0.0,0.0,0.8,12,15
+Anel de Cobre,ring,none,1,1,Raro,0,0,4,32,15,5,0,0,0.0,0.0,0.0,0.8,44,92
+Anel de Cobre,ring,none,1,1,Épico,0,0,7,48,27,9,0,0,0.0,0.0,0.0,0.8,78,254
+Anel de Cobre,ring,none,1,1,Lendário,0,0,11,70,42,14,0,0,0.0,0.0,0.0,0.8,121,666
+Sabre de Bronze,mainhand,sword,8,2,Comum,16,0,1,0,0,1,0,0,0.0,0.0,0.0,22.0,40,80
+Sabre de Bronze,mainhand,sword,8,2,Incomum,19,0,2,0,0,2,0,0,0.0,0.0,0.0,22.0,54,135
+Sabre de Bronze,mainhand,sword,8,2,Raro,35,0,2,0,0,2,0,0,1.5,0.0,0.0,22.0,91,382
+Sabre de Bronze,mainhand,sword,8,2,Épico,47,0,3,0,0,3,0,0,3.0,2.0,0.0,22.0,136,884
+Sabre de Bronze,mainhand,sword,8,2,Lendário,64,0,4,0,0,3,0,0,4.5,0.0,0.0,22.0,168,1848
+Machado Orc,mainhand,axe,8,2,Comum,18,0,0,0,0,1,0,0,0.0,0.0,0.0,45.0,42,84
+Machado Orc,mainhand,axe,8,2,Incomum,22,0,0,0,0,2,0,0,0.0,0.0,0.0,45.0,56,140
+Machado Orc,mainhand,axe,8,2,Raro,39,0,0,0,0,2,0,0,1.5,0.0,0.0,45.0,95,399
+Machado Orc,mainhand,axe,8,2,Épico,52,0,0,0,0,3,0,0,3.0,2.0,0.0,45.0,139,904
+Machado Orc,mainhand,axe,8,2,Lendário,70,0,0,0,0,3,0,0,4.5,0.0,0.0,45.0,172,1892
+Maça de Batalha,mainhand,club,8,2,Comum,17,0,2,0,0,1,0,0,0.0,0.0,0.0,38.0,44,88
+Maça de Batalha,mainhand,club,8,2,Incomum,21,0,3,0,0,2,0,0,0.0,0.0,0.0,38.0,61,153
+Maça de Batalha,mainhand,club,8,2,Raro,37,0,4,0,0,2,0,0,1.5,1.0,0.0,38.0,103,433
+Maça de Batalha,mainhand,club,8,2,Épico,49,0,5,0,0,3,0,0,3.0,0.0,0.0,38.0,136,884
+Maça de Batalha,mainhand,club,8,2,Lendário,67,0,7,0,0,3,0,0,4.5,3.0,0.0,38.0,193,2123
+Arco Longo,mainhand,bow,8,2,Comum,16,0,1,0,0,0,0,0,2.0,0.0,0.0,22.0,40,80
+Arco Longo,mainhand,bow,8,2,Incomum,19,0,2,0,0,0,0,0,2.3,0.0,0.0,22.0,49,123
+Arco Longo,mainhand,bow,8,2,Raro,35,0,2,0,0,0,0,0,4.9,0.0,0.0,22.0,89,374
+Arco Longo,mainhand,bow,8,2,Épico,47,0,3,0,0,0,0,0,7.4,0.0,0.0,22.0,123,800
+Arco Longo,mainhand,bow,8,2,Lendário,64,0,4,0,0,0,0,0,10.5,0.0,0.0,22.0,168,1848
+Cajado Rúnico,mainhand,wand,8,2,Comum,0,20,0,0,15,0,0,1,0.0,0.0,0.0,18.5,48,96
+Cajado Rúnico,mainhand,wand,8,2,Incomum,0,24,0,0,17,0,0,2,0.0,0.0,0.0,18.5,62,155
+Cajado Rúnico,mainhand,wand,8,2,Raro,0,42,0,0,25,0,0,2,1.5,1.0,0.0,18.5,107,449
+Cajado Rúnico,mainhand,wand,8,2,Épico,0,56,0,0,32,0,0,3,3.0,0.0,0.0,18.5,142,923
+Cajado Rúnico,mainhand,wand,8,2,Lendário,0,76,0,0,42,0,0,3,4.5,3.0,0.0,18.5,200,2200
+Coifa de Prata,head,none,8,2,Comum,0,0,7,10,0,0,0,0,0.0,0.0,0.0,25.0,17,34
+Coifa de Prata,head,none,8,2,Incomum,0,0,9,14,0,0,0,0,0.0,0.0,0.0,25.0,22,55
+Coifa de Prata,head,none,8,2,Raro,0,0,18,32,0,0,0,0,0.0,0.0,0.0,25.0,44,185
+Coifa de Prata,head,none,8,2,Épico,0,0,26,48,0,0,0,0,0.0,0.0,0.0,25.0,63,410
+Coifa de Prata,head,none,8,2,Lendário,0,0,36,70,0,0,0,0,0.0,0.0,0.0,25.0,88,968
+Cota de Malha,chest,none,8,2,Comum,0,0,10,15,0,0,0,0,0.0,0.0,0.0,75.0,24,48
+Cota de Malha,chest,none,8,2,Incomum,0,0,13,22,0,0,0,0,0.0,0.0,0.0,75.0,31,78
+Cota de Malha,chest,none,8,2,Raro,0,0,24,50,0,0,0,0,0.0,0.0,0.0,75.0,59,248
+Cota de Malha,chest,none,8,2,Épico,0,0,33,77,0,0,0,0,0.0,0.0,0.0,75.0,82,533
+Cota de Malha,chest,none,8,2,Lendário,0,0,45,112,0,0,0,0,0.0,0.0,0.0,75.0,113,1243
+Calça de Couro,legs,none,8,2,Comum,0,0,5,0,0,1,0,0,0.0,0.0,0.0,18.0,17,34
+Calça de Couro,legs,none,8,2,Incomum,0,0,7,4,0,2,0,0,0.0,0.0,0.0,18.0,28,70
+Calça de Couro,legs,none,8,2,Raro,0,0,15,20,0,2,0,0,0.0,0.0,0.0,18.0,48,202
+Calça de Couro,legs,none,8,2,Épico,0,0,21,36,0,3,0,0,0.0,0.0,0.0,18.0,69,449
+Calça de Couro,legs,none,8,2,Lendário,0,0,30,56,0,3,0,0,0.0,0.0,0.0,18.0,91,1001
+Botas de Couro,boots,none,8,2,Comum,0,0,3,0,0,0,1,0,0.0,0.0,0.0,9.0,13,26
+Botas de Couro,boots,none,8,2,Incomum,0,0,5,2,0,0,2,0,0.0,0.0,0.0,9.0,23,58
+Botas de Couro,boots,none,8,2,Raro,0,0,11,10,0,0,3,0,0.0,0.0,0.0,9.0,43,181
+Botas de Couro,boots,none,8,2,Épico,0,0,17,18,0,0,5,0,0.0,0.0,0.0,9.0,70,455
+Botas de Couro,boots,none,8,2,Lendário,0,0,24,28,0,0,6,0,0.0,0.0,0.0,9.0,92,1012
+Escudo de Madeira,offhand,shield,8,2,Comum,0,0,9,10,0,0,0,0,0.0,0.0,0.0,30.0,21,42
+Escudo de Madeira,offhand,shield,8,2,Incomum,0,0,12,15,0,0,0,0,0.0,0.0,0.0,30.0,28,70
+Escudo de Madeira,offhand,shield,8,2,Raro,0,0,22,37,0,0,0,0,0.0,0.0,0.0,30.0,53,223
+Escudo de Madeira,offhand,shield,8,2,Épico,0,0,31,57,0,0,0,0,0.0,0.0,0.0,30.0,75,488
+Escudo de Madeira,offhand,shield,8,2,Lendário,0,0,42,84,0,0,0,0,0.0,0.0,0.0,30.0,103,1133
+Mochila de Aventureiro,bag,none,8,2,Comum,0,0,1,15,0,0,0,0,0.0,0.0,5.0,15.0,6,12
+Mochila de Aventureiro,bag,none,8,2,Incomum,0,0,2,22,4,0,0,0,0.0,0.0,7.3,15.0,10,25
+Mochila de Aventureiro,bag,none,8,2,Raro,0,0,2,50,20,0,0,0,0.0,0.0,16.0,15.0,18,76
+Mochila de Aventureiro,bag,none,8,2,Épico,0,0,3,77,36,0,0,0,0.0,0.0,24.5,15.0,28,182
+Mochila de Aventureiro,bag,none,8,2,Lendário,0,0,4,112,56,0,0,0,0.0,0.0,36.0,15.0,41,451
+Flechas de Aço,ammo,none,8,2,Comum,9,0,0,0,0,0,0,0,0.0,0.0,0.0,2.0,18,36
+Flechas de Aço,ammo,none,8,2,Incomum,12,0,0,0,0,0,0,0,0.0,0.0,0.0,2.0,24,60
+Flechas de Aço,ammo,none,8,2,Raro,22,0,0,0,0,0,0,0,1.0,0.0,0.0,2.0,47,197
+Flechas de Aço,ammo,none,8,2,Épico,31,0,0,0,0,0,0,0,2.0,0.0,0.0,2.0,68,442
+Flechas de Aço,ammo,none,8,2,Lendário,42,0,0,0,0,0,0,0,3.0,0.0,0.0,2.0,93,1023
+Colar de Prata,necklace,none,8,2,Comum,2,0,2,0,15,0,0,0,0.0,0.0,0.0,1.5,10,20
+Colar de Prata,necklace,none,8,2,Incomum,3,0,3,3,20,1,0,0,0.0,0.0,0.0,1.5,21,53
+Colar de Prata,necklace,none,8,2,Raro,4,0,6,15,40,5,0,0,0.0,0.0,0.0,1.5,57,239
+Colar de Prata,necklace,none,8,2,Épico,5,0,9,27,59,9,0,0,0.0,0.0,0.0,1.5,93,605
+Colar de Prata,necklace,none,8,2,Lendário,7,0,14,42,84,14,0,0,0.0,0.0,0.0,1.5,142,1562
+Anel de Prata,ring,none,8,2,Comum,0,2,2,0,0,0,0,2,0.0,0.0,0.0,0.8,20,40
+Anel de Prata,ring,none,8,2,Incomum,0,3,3,3,3,0,0,4,0.0,0.0,0.0,0.8,37,93
+Anel de Prata,ring,none,8,2,Raro,0,4,6,15,15,0,0,9,0.0,0.0,0.0,0.8,79,332
+Anel de Prata,ring,none,8,2,Épico,0,5,9,27,27,0,0,14,0.0,0.0,0.0,0.8,120,780
+Anel de Prata,ring,none,8,2,Lendário,0,7,14,42,42,0,0,20,0.0,0.0,0.0,0.8,174,1914
+Espada de Aço,mainhand,sword,20,3,Comum,30,0,2,0,0,3,0,0,0.0,0.0,0.0,35.5,82,246
+Espada de Aço,mainhand,sword,20,3,Incomum,35,0,3,0,0,4,0,0,0.0,0.0,0.0,35.5,101,379
+Espada de Aço,mainhand,sword,20,3,Raro,61,0,4,0,0,5,0,0,1.5,0.0,0.0,35.5,165,1040
+Espada de Aço,mainhand,sword,20,3,Épico,80,0,5,0,0,7,0,0,3.0,0.0,0.0,35.5,222,2165
+Espada de Aço,mainhand,sword,20,3,Lendário,107,0,7,0,0,9,0,0,4.5,3.0,0.0,35.5,309,5099
+Machado de Guerra,mainhand,axe,20,3,Comum,33,0,0,0,0,3,0,0,0.0,0.0,0.0,55.0,84,252
+Machado de Guerra,mainhand,axe,20,3,Incomum,38,0,0,0,0,4,0,0,0.0,0.0,0.0,55.0,100,375
+Machado de Guerra,mainhand,axe,20,3,Raro,67,0,0,0,0,5,0,0,1.5,0.0,0.0,55.0,169,1065
+Machado de Guerra,mainhand,axe,20,3,Épico,87,0,0,0,0,7,0,0,3.0,2.0,0.0,55.0,233,2272
+Machado de Guerra,mainhand,axe,20,3,Lendário,117,0,0,0,0,9,0,0,4.5,0.0,0.0,55.0,302,4983
+Martelo de Guerra,mainhand,club,20,3,Comum,32,0,3,0,0,3,0,0,0.0,0.0,0.0,58.0,89,267
+Martelo de Guerra,mainhand,club,20,3,Incomum,37,0,4,0,0,4,0,0,0.0,0.0,0.0,58.0,107,401
+Martelo de Guerra,mainhand,club,20,3,Raro,65,0,6,0,0,5,0,0,1.5,1.0,0.0,58.0,182,1147
+Martelo de Guerra,mainhand,club,20,3,Épico,85,0,8,0,0,7,0,0,3.0,0.0,0.0,58.0,239,2330
+Martelo de Guerra,mainhand,club,20,3,Lendário,114,0,10,0,0,9,0,0,4.5,3.0,0.0,58.0,330,5445
+Arco do Caçador,mainhand,bow,20,3,Comum,30,0,2,0,0,0,3,0,4.0,0.0,0.0,26.0,94,282
+Arco do Caçador,mainhand,bow,20,3,Incomum,35,0,3,0,0,0,4,0,4.6,0.0,0.0,26.0,114,428
+Arco do Caçador,mainhand,bow,20,3,Raro,61,0,4,0,0,0,5,0,8.3,0.0,0.0,26.0,186,1172
+Arco do Caçador,mainhand,bow,20,3,Épico,80,0,5,0,0,0,7,0,11.8,0.0,0.0,26.0,248,2418
+Arco do Caçador,mainhand,bow,20,3,Lendário,107,0,7,0,0,0,9,0,16.5,0.0,0.0,26.0,333,5495
+Cetro do Esquelético,mainhand,wand,20,3,Comum,0,36,2,0,30,0,0,3,0.0,0.0,0.0,24.0,105,315
+Cetro do Esquelético,mainhand,wand,20,3,Incomum,0,42,3,0,33,0,0,4,0.0,0.0,0.0,24.0,134,503
+Cetro do Esquelético,mainhand,wand,20,3,Raro,0,72,4,0,50,0,0,5,1.5,1.0,0.0,24.0,212,1336
+Cetro do Esquelético,mainhand,wand,20,3,Épico,0,94,5,0,63,0,0,7,3.0,0.0,0.0,24.0,280,2730
+Cetro do Esquelético,mainhand,wand,20,3,Lendário,0,126,7,0,84,0,0,9,4.5,3.0,0.0,24.0,379,6254
+Elmo Rúnico,head,none,20,3,Comum,2,0,13,20,0,2,0,0,0.0,0.0,0.0,32.0,47,141
+Elmo Rúnico,head,none,20,3,Incomum,3,0,16,25,0,3,0,0,0.0,0.0,0.0,32.0,62,233
+Elmo Rúnico,head,none,20,3,Raro,4,0,30,48,0,4,0,0,0.0,0.0,0.0,32.0,104,655
+Elmo Rúnico,head,none,20,3,Épico,5,0,40,69,0,5,0,0,0.0,0.0,0.0,32.0,137,1336
+Elmo Rúnico,head,none,20,3,Lendário,7,0,55,98,0,6,0,0,0.0,0.0,0.0,32.0,183,3020
+Peitoral de Platina,chest,none,20,3,Comum,0,0,18,30,0,0,0,0,0.0,0.0,0.0,110.0,43,129
+Peitoral de Platina,chest,none,20,3,Incomum,0,0,22,38,0,0,0,0,0.0,0.0,0.0,110.0,53,199
+Peitoral de Platina,chest,none,20,3,Raro,0,0,39,75,0,0,0,0,0.0,0.0,0.0,110.0,95,599
+Peitoral de Platina,chest,none,20,3,Épico,0,0,52,108,0,0,0,0,0.0,0.0,0.0,110.0,128,1248
+Peitoral de Platina,chest,none,20,3,Lendário,0,0,70,154,0,0,0,0,0.0,0.0,0.0,110.0,173,2855
+Grevas de Aço,legs,none,20,3,Comum,0,0,10,0,0,2,0,0,0.0,0.0,0.0,45.0,34,102
+Grevas de Aço,legs,none,20,3,Incomum,0,0,13,4,0,3,0,0,0.0,0.0,0.0,45.0,47,176
+Grevas de Aço,legs,none,20,3,Raro,0,0,24,20,0,4,0,0,0.0,0.0,0.0,45.0,79,498
+Grevas de Aço,legs,none,20,3,Épico,0,0,33,36,0,5,0,0,0.0,0.0,0.0,45.0,107,1043
+Grevas de Aço,legs,none,20,3,Lendário,0,0,45,56,0,6,0,0,0.0,0.0,0.0,45.0,142,2343
+Botas de Ferro,boots,none,20,3,Comum,0,0,6,10,0,2,0,0,0.0,0.0,0.0,22.0,26,78
+Botas de Ferro,boots,none,20,3,Incomum,0,0,8,13,0,3,0,0,0.0,0.0,0.0,22.0,37,139
+Botas de Ferro,boots,none,20,3,Raro,0,0,17,27,0,4,1,0,0.0,0.0,0.0,22.0,71,447
+Botas de Ferro,boots,none,20,3,Épico,0,0,24,39,0,5,2,0,0.0,0.0,0.0,22.0,100,975
+Botas de Ferro,boots,none,20,3,Lendário,0,0,33,56,0,6,3,0,0.0,0.0,0.0,22.0,134,2211
+Escudo de Batalha,offhand,shield,20,3,Comum,0,0,16,25,0,0,0,0,0.0,0.0,0.0,55.0,38,114
+Escudo de Batalha,offhand,shield,20,3,Incomum,0,0,19,32,0,0,0,0,0.0,0.0,0.0,55.0,46,173
+Escudo de Batalha,offhand,shield,20,3,Raro,0,0,35,62,0,0,0,0,0.0,0.0,0.0,55.0,85,536
+Escudo de Batalha,offhand,shield,20,3,Épico,0,0,47,89,0,0,0,0,0.0,0.0,0.0,55.0,115,1121
+Escudo de Batalha,offhand,shield,20,3,Lendário,0,0,64,126,0,0,0,0,0.0,0.0,0.0,55.0,157,2591
+Bolsa Rúnica,bag,none,20,3,Comum,0,2,2,0,30,0,0,3,0.0,0.0,10.0,8.0,33,99
+Bolsa Rúnica,bag,none,20,3,Incomum,0,3,3,5,37,0,0,4,0.0,0.0,13.0,8.0,45,169
+Bolsa Rúnica,bag,none,20,3,Raro,0,4,4,25,70,0,0,5,0.0,0.0,24.5,8.0,66,416
+Bolsa Rúnica,bag,none,20,3,Épico,0,5,5,45,99,0,0,7,0.0,0.0,35.5,8.0,91,887
+Bolsa Rúnica,bag,none,20,3,Lendário,0,7,7,70,140,0,0,9,0.0,0.0,51.0,8.0,124,2046
+Virotes Perfurantes,ammo,none,20,3,Comum,14,0,0,0,0,0,0,0,0.0,0.0,0.0,3.5,28,84
+Virotes Perfurantes,ammo,none,20,3,Incomum,17,0,0,0,0,0,0,0,0.0,0.0,0.0,3.5,34,128
+Virotes Perfurantes,ammo,none,20,3,Raro,31,0,0,0,0,0,0,0,1.0,0.0,0.0,3.5,65,410
+Virotes Perfurantes,ammo,none,20,3,Épico,42,0,0,0,0,0,0,0,2.0,0.0,0.0,3.5,90,878
+Virotes Perfurantes,ammo,none,20,3,Lendário,58,0,0,0,0,0,0,0,3.0,0.0,0.0,3.5,125,2063
+Colar de Rubi,necklace,none,20,3,Comum,4,0,2,20,0,2,0,0,0.0,0.0,0.0,1.2,27,81
+Colar de Rubi,necklace,none,20,3,Incomum,5,0,3,25,3,4,0,0,0.0,0.0,0.0,1.2,44,165
+Colar de Rubi,necklace,none,20,3,Raro,8,0,6,48,15,9,0,0,0.0,0.0,0.0,1.2,91,573
+Colar de Rubi,necklace,none,20,3,Épico,10,0,9,69,27,14,0,0,0.0,0.0,0.0,1.2,135,1316
+Colar de Rubi,necklace,none,20,3,Lendário,13,0,14,98,42,20,0,0,0.0,0.0,0.0,1.2,193,3185
+Anel de Ouro,ring,none,20,3,Comum,0,4,3,0,25,0,0,3,0.0,0.0,0.0,0.8,35,105
+Anel de Ouro,ring,none,20,3,Incomum,0,5,4,3,31,0,0,5,0.0,0.0,0.0,0.8,52,195
+Anel de Ouro,ring,none,20,3,Raro,0,8,8,15,57,0,0,10,0.0,0.0,0.0,0.8,101,636
+Anel de Ouro,ring,none,20,3,Épico,0,10,12,27,80,0,0,16,0.0,0.0,0.0,0.8,154,1502
+Anel de Ouro,ring,none,20,3,Lendário,0,13,17,42,112,0,0,23,0.0,0.0,0.0,0.8,218,3597
+Katana da Fúria,mainhand,sword,35,4,Comum,52,0,3,0,0,5,0,0,3.0,0.0,0.0,28.0,150,600
+Katana da Fúria,mainhand,sword,35,4,Incomum,60,0,4,0,0,6,0,0,3.5,0.0,0.0,28.0,175,875
+Katana da Fúria,mainhand,sword,35,4,Raro,102,0,6,0,0,9,0,0,6.6,1.0,0.0,28.0,295,2478
+Katana da Fúria,mainhand,sword,35,4,Épico,132,0,8,0,0,11,0,0,9.6,0.0,0.0,28.0,376,4888
+Katana da Fúria,mainhand,sword,35,4,Lendário,176,0,10,0,0,14,0,0,13.5,3.0,0.0,28.0,511,11242
+Machado do Urso Ranzinza,mainhand,axe,35,4,Comum,56,0,2,0,0,6,0,0,0.0,0.0,0.0,60.0,152,608
+Machado do Urso Ranzinza,mainhand,axe,35,4,Incomum,64,0,3,0,0,7,0,0,0.0,0.0,0.0,60.0,177,885
+Machado do Urso Ranzinza,mainhand,axe,35,4,Raro,109,0,4,0,0,10,0,0,1.5,0.0,0.0,60.0,291,2444
+Machado do Urso Ranzinza,mainhand,axe,35,4,Épico,141,0,5,0,0,13,0,0,3.0,2.0,0.0,60.0,388,5044
+Machado do Urso Ranzinza,mainhand,axe,35,4,Lendário,188,0,7,0,0,17,0,0,4.5,0.0,0.0,60.0,507,11154
+Marreta Biônica,mainhand,club,35,4,Comum,55,0,4,0,0,5,0,0,0.0,2.0,0.0,45.0,157,628
+Marreta Biônica,mainhand,club,35,4,Incomum,63,0,5,0,0,6,0,0,0.0,2.3,0.0,45.0,182,910
+Marreta Biônica,mainhand,club,35,4,Raro,107,0,8,0,0,9,0,0,1.5,4.4,0.0,45.0,308,2587
+Marreta Biônica,mainhand,club,35,4,Épico,139,0,10,0,0,11,0,0,3.0,4.4,0.0,45.0,393,5109
+Marreta Biônica,mainhand,club,35,4,Lendário,185,0,13,0,0,14,0,0,4.5,9.0,0.0,45.0,532,11704
+Arco dos Ventos,mainhand,bow,35,4,Comum,50,0,4,0,0,0,6,0,5.0,0.0,0.0,20.0,160,640
+Arco dos Ventos,mainhand,bow,35,4,Incomum,58,0,5,0,0,0,7,0,5.8,0.0,0.0,20.0,186,930
+Arco dos Ventos,mainhand,bow,35,4,Raro,98,0,8,0,0,0,10,0,10.0,0.0,0.0,20.0,304,2554
+Arco dos Ventos,mainhand,bow,35,4,Épico,127,0,10,0,0,0,13,0,14.0,0.0,0.0,20.0,396,5148
+Arco dos Ventos,mainhand,bow,35,4,Lendário,169,0,13,0,0,0,17,0,19.5,0.0,0.0,20.0,527,11594
+Varinha das Relíquias,mainhand,wand,35,4,Comum,0,58,5,0,50,0,0,6,0.0,0.0,0.0,16.0,184,736
+Varinha das Relíquias,mainhand,wand,35,4,Incomum,0,66,6,0,56,0,0,7,0.0,0.0,0.0,16.0,217,1085
+Varinha das Relíquias,mainhand,wand,35,4,Raro,0,113,10,0,83,0,0,10,1.5,1.0,0.0,16.0,357,2999
+Varinha das Relíquias,mainhand,wand,35,4,Épico,0,146,12,0,105,0,0,13,3.0,0.0,0.0,16.0,456,5928
+Varinha das Relíquias,mainhand,wand,35,4,Lendário,0,194,16,0,140,0,0,17,4.5,0.0,0.0,16.0,601,13222
+Coroa de Ouro,head,none,35,4,Comum,5,0,20,40,0,0,0,3,0.0,0.0,0.0,18.0,77,308
+Coroa de Ouro,head,none,35,4,Incomum,6,0,24,47,0,0,0,4,0.0,0.0,0.0,18.0,95,475
+Coroa de Ouro,head,none,35,4,Raro,10,0,42,81,0,0,0,5,0.0,0.0,0.0,18.0,153,1285
+Coroa de Ouro,head,none,35,4,Épico,12,0,56,111,0,0,0,7,0.0,0.0,0.0,18.0,203,2639
+Coroa de Ouro,head,none,35,4,Lendário,16,0,76,154,0,0,0,9,0.0,0.0,0.0,18.0,272,5984
+Robe Místico,chest,none,35,4,Comum,6,0,22,0,50,0,0,5,0.0,0.0,0.0,30.0,95,380
+Robe Místico,chest,none,35,4,Incomum,7,0,26,5,56,0,0,6,0.0,0.0,0.0,30.0,113,565
+Robe Místico,chest,none,35,4,Raro,12,0,46,25,83,0,0,9,0.0,0.0,0.0,30.0,191,1604
+Robe Místico,chest,none,35,4,Épico,15,0,61,45,105,0,0,11,0.0,0.0,0.0,30.0,246,3198
+Robe Místico,chest,none,35,4,Lendário,19,0,83,70,140,0,0,14,0.0,0.0,0.0,30.0,327,7194
+Saiote dos Magos,legs,none,35,4,Comum,3,0,14,0,30,0,0,4,0.0,0.0,0.0,14.0,64,256
+Saiote dos Magos,legs,none,35,4,Incomum,4,0,17,4,33,0,0,5,0.0,0.0,0.0,14.0,79,395
+Saiote dos Magos,legs,none,35,4,Raro,6,0,31,20,50,0,0,7,0.0,0.0,0.0,14.0,130,1092
+Saiote dos Magos,legs,none,35,4,Épico,8,0,42,36,63,0,0,9,0.0,0.0,0.0,14.0,173,2249
+Saiote dos Magos,legs,none,35,4,Lendário,10,0,58,56,84,0,0,12,0.0,0.0,0.0,14.0,235,5170
+Botas de Aço Rúnico,boots,none,35,4,Comum,0,0,10,20,0,0,5,0,0.0,0.0,0.0,22.0,55,220
+Botas de Aço Rúnico,boots,none,35,4,Incomum,0,0,13,24,0,0,6,0,0.0,0.0,0.0,22.0,68,340
+Botas de Aço Rúnico,boots,none,35,4,Raro,0,0,24,43,0,0,10,0,0.0,0.0,0.0,22.0,118,991
+Botas de Aço Rúnico,boots,none,35,4,Épico,0,0,33,60,0,0,13,0,0.0,0.0,0.0,22.0,158,2054
+Botas de Aço Rúnico,boots,none,35,4,Lendário,0,0,45,84,0,0,17,0,0.0,0.0,0.0,22.0,212,4664
+Orbe Protetor,offhand,shield,35,4,Comum,4,8,22,0,30,0,0,3,0.0,0.0,0.0,10.0,93,372
+Orbe Protetor,offhand,shield,35,4,Incomum,5,9,26,4,33,0,0,4,0.0,0.0,0.0,10.0,113,565
+Orbe Protetor,offhand,shield,35,4,Raro,8,15,46,20,50,0,0,5,0.0,0.0,0.0,10.0,185,1554
+Orbe Protetor,offhand,shield,35,4,Épico,10,19,61,36,63,0,0,7,0.0,0.0,0.0,10.0,245,3185
+Orbe Protetor,offhand,shield,35,4,Lendário,13,25,83,56,84,0,0,9,0.0,0.0,0.0,10.0,328,7216
+Mochila Dragônica,bag,none,35,4,Comum,2,0,3,50,0,4,0,0,0.0,0.0,15.0,15.0,46,184
+Mochila Dragônica,bag,none,35,4,Incomum,3,0,4,61,4,5,0,0,0.0,0.0,18.8,15.0,59,295
+Mochila Dragônica,bag,none,35,4,Raro,4,0,6,108,20,7,0,0,0.0,0.0,33.0,15.0,90,756
+Mochila Dragônica,bag,none,35,4,Épico,5,0,8,150,36,9,0,0,0.0,0.0,46.5,15.0,120,1560
+Mochila Dragônica,bag,none,35,4,Lendário,7,0,10,210,56,12,0,0,0.0,0.0,66.0,15.0,163,3586
+Flechas Incendiárias,ammo,none,35,4,Comum,22,0,0,0,0,0,0,0,0.0,0.0,0.0,2.0,44,176
+Flechas Incendiárias,ammo,none,35,4,Incomum,26,0,0,0,0,0,0,0,0.0,0.0,0.0,2.0,52,260
+Flechas Incendiárias,ammo,none,35,4,Raro,46,0,0,0,0,0,0,0,1.0,0.0,0.0,2.0,95,798
+Flechas Incendiárias,ammo,none,35,4,Épico,61,0,0,0,0,0,0,0,2.0,0.0,0.0,2.0,128,1664
+Flechas Incendiárias,ammo,none,35,4,Lendário,83,0,0,0,0,0,0,0,3.0,0.0,0.0,2.0,175,3850
+Amuleto Dragônico,necklace,none,35,4,Comum,6,4,4,40,0,4,4,0,0.0,0.0,0.0,2.0,82,328
+Amuleto Dragônico,necklace,none,35,4,Incomum,7,5,5,47,3,6,5,0,0.0,0.0,0.0,2.0,107,535
+Amuleto Dragônico,necklace,none,35,4,Raro,12,8,10,81,15,12,7,0,0.0,0.0,0.0,2.0,188,1579
+Amuleto Dragônico,necklace,none,35,4,Épico,15,10,14,111,27,18,9,0,0.0,0.0,0.0,2.0,259,3367
+Amuleto Dragônico,necklace,none,35,4,Lendário,19,13,20,154,42,26,12,0,0.0,0.0,0.0,2.0,359,7898
+Lâmina de Greiscu,mainhand,sword,50,5,Comum,80,0,5,0,0,10,0,0,0.0,5.0,0.0,42.0,251,1255
+Lâmina de Greiscu,mainhand,sword,50,5,Incomum,91,0,6,0,0,11,0,0,0.0,5.8,0.0,42.0,284,1775
+Lâmina de Greiscu,mainhand,sword,50,5,Raro,153,0,10,0,0,17,0,0,1.5,8.5,0.0,42.0,469,4925
+Lâmina de Greiscu,mainhand,sword,50,5,Épico,197,0,12,0,0,21,0,0,3.0,13.0,0.0,42.0,607,9864
+Lâmina de Greiscu,mainhand,sword,50,5,Lendário,262,0,16,0,0,28,0,0,4.5,15.0,0.0,42.0,801,22028
+Espada Mítica do Vingador,mainhand,sword,50,5,Comum,95,0,10,0,0,12,0,0,6.0,0.0,0.0,50.0,302,1510
+Espada Mítica do Vingador,mainhand,sword,50,5,Incomum,108,0,12,0,0,14,0,0,6.9,0.0,0.0,50.0,347,2169
+Espada Mítica do Vingador,mainhand,sword,50,5,Raro,181,0,19,0,0,20,0,0,11.7,1.0,0.0,50.0,563,5912
+Espada Mítica do Vingador,mainhand,sword,50,5,Épico,233,0,24,0,0,26,0,0,16.2,0.0,0.0,50.0,723,11749
+Espada Mítica do Vingador,mainhand,sword,50,5,Lendário,309,0,31,0,0,34,0,0,22.5,3.0,0.0,50.0,970,26675
+Machado de Guerra Mítico,mainhand,axe,50,5,Comum,88,0,0,0,0,10,0,0,0.0,0.0,0.0,65.0,236,1180
+Machado de Guerra Mítico,mainhand,axe,50,5,Incomum,100,0,0,0,0,11,0,0,0.0,0.0,0.0,65.0,266,1663
+Machado de Guerra Mítico,mainhand,axe,50,5,Raro,168,0,0,0,0,17,0,0,1.5,0.0,0.0,65.0,443,4652
+Machado de Guerra Mítico,mainhand,axe,50,5,Épico,216,0,0,0,0,21,0,0,3.0,2.0,0.0,65.0,575,9344
+Machado de Guerra Mítico,mainhand,axe,50,5,Lendário,287,0,0,0,0,28,0,0,4.5,0.0,0.0,65.0,756,20790
+Maça Celestial,mainhand,club,50,5,Comum,85,0,6,60,0,8,0,0,0.0,0.0,0.0,50.0,239,1195
+Maça Celestial,mainhand,club,50,5,Incomum,97,0,7,66,0,9,0,0,0.0,0.0,0.0,50.0,272,1700
+Maça Celestial,mainhand,club,50,5,Raro,163,0,12,99,0,14,0,0,1.5,1.0,0.0,50.0,457,4799
+Maça Celestial,mainhand,club,50,5,Épico,209,0,15,126,0,17,0,0,3.0,0.0,0.0,50.0,578,9393
+Maça Celestial,mainhand,club,50,5,Lendário,278,0,19,168,0,23,0,0,4.5,3.0,0.0,50.0,782,21505
+Arco Apocalíptico,mainhand,bow,50,5,Comum,82,0,5,0,0,0,10,0,8.0,0.0,0.0,24.0,259,1295
+Arco Apocalíptico,mainhand,bow,50,5,Incomum,93,0,6,0,0,0,11,0,9.2,0.0,0.0,24.0,293,1831
+Arco Apocalíptico,mainhand,bow,50,5,Raro,157,0,10,0,0,0,17,0,15.1,0.0,0.0,24.0,483,5072
+Arco Apocalíptico,mainhand,bow,50,5,Épico,202,0,12,0,0,0,21,0,20.6,0.0,0.0,24.0,618,10043
+Arco Apocalíptico,mainhand,bow,50,5,Lendário,269,0,16,0,0,0,28,0,28.5,0.0,0.0,24.0,827,22743
+Cajado da Eternidade,mainhand,wand,50,5,Comum,0,92,8,0,100,0,0,10,0.0,0.0,0.0,20.0,296,1480
+Cajado da Eternidade,mainhand,wand,50,5,Incomum,0,105,9,0,111,0,0,11,0.0,0.0,0.0,20.0,339,2119
+Cajado da Eternidade,mainhand,wand,50,5,Raro,0,176,15,0,165,0,0,17,1.5,1.0,0.0,20.0,560,5880
+Cajado da Eternidade,mainhand,wand,50,5,Épico,0,226,19,0,210,0,0,21,3.0,2.0,0.0,20.0,714,11603
+Cajado da Eternidade,mainhand,wand,50,5,Lendário,0,300,25,0,280,0,0,28,4.5,0.0,0.0,20.0,937,25768
+Elmo do Zodíaco,head,none,50,5,Comum,4,0,28,60,0,5,0,0,0.0,0.0,0.0,28.0,107,535
+Elmo do Zodíaco,head,none,50,5,Incomum,5,0,33,69,0,6,0,0,0.0,0.0,0.0,28.0,127,794
+Elmo do Zodíaco,head,none,50,5,Raro,8,0,57,114,0,9,0,0,0.0,0.0,0.0,28.0,210,2205
+Elmo do Zodíaco,head,none,50,5,Épico,10,0,75,153,0,11,0,0,0.0,0.0,0.0,28.0,270,4388
+Elmo do Zodíaco,head,none,50,5,Lendário,13,0,101,210,0,14,0,0,0.0,0.0,0.0,28.0,358,9845
+Armadura de Ouro,chest,none,50,5,Comum,8,0,35,80,0,6,0,0,0.0,0.0,0.0,130.0,139,695
+Armadura de Ouro,chest,none,50,5,Incomum,9,0,41,93,0,7,0,0,0.0,0.0,0.0,130.0,162,1013
+Armadura de Ouro,chest,none,50,5,Raro,15,0,70,157,0,10,0,0,0.0,0.0,0.0,130.0,264,2772
+Armadura de Ouro,chest,none,50,5,Épico,19,0,92,213,0,13,0,0,0.0,0.0,0.0,130.0,345,5606
+Armadura de Ouro,chest,none,50,5,Lendário,25,0,123,294,0,17,0,0,0.0,0.0,0.0,130.0,459,12623
+Grevas Celestiais,legs,none,50,5,Comum,4,0,24,50,0,5,0,0,0.0,0.0,0.0,35.0,97,485
+Grevas Celestiais,legs,none,50,5,Incomum,5,0,28,60,0,6,0,0,0.0,0.0,0.0,35.0,115,719
+Grevas Celestiais,legs,none,50,5,Raro,8,0,50,103,0,9,0,0,0.0,0.0,0.0,35.0,193,2027
+Grevas Celestiais,legs,none,50,5,Épico,10,0,66,141,0,11,0,0,0.0,0.0,0.0,35.0,249,4046
+Grevas Celestiais,legs,none,50,5,Lendário,13,0,89,196,0,14,0,0,0.0,0.0,0.0,35.0,330,9075
+Botas Celestiais,boots,none,50,5,Comum,0,0,15,40,0,0,8,0,0.0,0.0,0.0,18.0,86,430
+Botas Celestiais,boots,none,50,5,Incomum,0,0,18,46,0,0,9,0,0.0,0.0,0.0,18.0,99,619
+Botas Celestiais,boots,none,50,5,Raro,0,0,33,76,0,0,15,0,0.0,0.0,0.0,18.0,172,1806
+Botas Celestiais,boots,none,50,5,Épico,0,0,45,102,0,0,19,0,0.0,0.0,0.0,18.0,226,3673
+Botas Celestiais,boots,none,50,5,Lendário,0,0,61,140,0,0,26,0,0.0,0.0,0.0,18.0,308,8470
+Escudo do Zodíaco,offhand,shield,50,5,Comum,5,0,34,80,0,0,0,0,0.0,0.0,0.0,80.0,95,475
+Escudo do Zodíaco,offhand,shield,50,5,Incomum,6,0,40,92,0,0,0,0,0.0,0.0,0.0,80.0,112,700
+Escudo do Zodíaco,offhand,shield,50,5,Raro,10,0,68,152,0,0,0,0,0.0,0.0,0.0,80.0,189,1985
+Escudo do Zodíaco,offhand,shield,50,5,Épico,12,0,89,204,0,0,0,0,0.0,0.0,0.0,80.0,245,3981
+Escudo do Zodíaco,offhand,shield,50,5,Lendário,16,0,120,280,0,0,0,0,0.0,0.0,0.0,80.0,331,9103
+Mochila do Zodíaco,bag,none,50,5,Comum,5,5,5,80,60,5,5,5,0.0,0.0,25.0,10.0,146,730
+Mochila do Zodíaco,bag,none,50,5,Incomum,6,6,6,93,70,6,6,6,0.0,0.0,30.2,10.0,174,1088
+Mochila do Zodíaco,bag,none,50,5,Raro,10,10,10,157,119,9,9,9,0.0,0.0,50.0,10.0,273,2867
+Mochila do Zodíaco,bag,none,50,5,Épico,12,12,12,213,162,11,11,11,0.0,0.0,68.5,10.0,339,5509
+Mochila do Zodíaco,bag,none,50,5,Lendário,16,16,16,294,224,14,14,14,0.0,0.0,96.0,10.0,444,12210
+Flechas Divinas,ammo,none,50,5,Comum,38,0,0,0,0,0,0,0,0.0,0.0,0.0,2.0,76,380
+Flechas Divinas,ammo,none,50,5,Incomum,44,0,0,0,0,0,0,0,0.0,0.0,0.0,2.0,88,550
+Flechas Divinas,ammo,none,50,5,Raro,76,0,0,0,0,0,0,0,1.0,0.0,0.0,2.0,155,1628
+Flechas Divinas,ammo,none,50,5,Épico,99,0,0,0,0,0,0,0,2.0,0.0,0.0,2.0,204,3315
+Flechas Divinas,ammo,none,50,5,Lendário,132,0,0,0,0,0,0,0,3.0,0.0,0.0,2.0,273,7508
+Amuleto do Zodíaco,necklace,none,50,5,Comum,12,8,8,80,0,8,8,8,0.0,0.0,0.0,2.5,212,1060
+Amuleto do Zodíaco,necklace,none,50,5,Incomum,14,9,9,91,3,10,9,9,0.0,0.0,0.0,2.5,245,1531
+Amuleto do Zodíaco,necklace,none,50,5,Raro,23,15,17,147,15,19,14,14,0.0,0.0,0.0,2.5,415,4358
+Amuleto do Zodíaco,necklace,none,50,5,Épico,29,19,23,195,27,26,17,17,0.0,0.0,0.0,2.5,534,8678
+Amuleto do Zodíaco,necklace,none,50,5,Lendário,38,25,32,266,42,37,23,23,0.0,0.0,0.0,2.5,732,20130

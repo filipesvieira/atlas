@@ -67,6 +67,7 @@ export interface CombatMessage {
     learned_skills?: string[];
     active_skills?: string[];
     unlocked_regions?: string[];
+    auto_resume_expedition?: boolean;
   };
   inventory?: InventoryData;
   monster?: {
@@ -91,23 +92,26 @@ export interface CombatMessage {
   is_active: boolean;
 }
 
-export function useGameSocket(token: string, characterId: string) {
-  const [character, setCharacter] = useState<any>(null);
+export function useGameSocket(token: string, characterId: string, initialChar?: any) {
+  const [character, setCharacter] = useState<any>(initialChar || null);
   const [inventory, setInventory] = useState<InventoryData>({
     equipment: {},
     backpack: [],
-    cap: 1500,
+    cap: initialChar?.level ? 1000 + initialChar.level * 10 : 1500,
   });
   const [monster, setMonster] = useState<any>(null);
   const [totalAttack, setTotalAttack] = useState(15);
   const [totalDefense, setTotalDefense] = useState(5);
-  const [activeRegion, setActiveRegion] = useState('forest');
-  const [activeStance, setActiveStance] = useState('balanced');
-  const [currentStage, setCurrentStage] = useState(1);
+  const [activeRegion, setActiveRegion] = useState(initialChar?.active_region || 'forest');
+  const [activeStance, setActiveStance] = useState(initialChar?.active_stance || 'balanced');
+  const [currentStage, setCurrentStage] = useState(initialChar?.current_stage || 1);
   const [maxStages, setMaxStages] = useState(5);
-  const [isBossStage, setIsBossStage] = useState(false);
-  const [unlockedRegions, setUnlockedRegions] = useState<string[]>(['forest', 'shereque', 'chapolin']);
-  const [isExpeditionActive, setIsExpeditionActive] = useState(false);
+  const [isBossStage, setIsBossStage] = useState(initialChar?.is_boss_stage || false);
+  const [unlockedRegions, setUnlockedRegions] = useState<string[]>(
+    initialChar?.unlocked_regions || ['forest', 'shereque', 'chapolin']
+  );
+  const [isExpeditionActive, setIsExpeditionActive] = useState(initialChar?.is_expedition_active || false);
+  const [autoResumeExpedition, setAutoResumeExpeditionState] = useState(initialChar?.auto_resume_expedition || false);
   const [dps, setDps] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
@@ -122,102 +126,124 @@ export function useGameSocket(token: string, characterId: string) {
   useEffect(() => {
     if (!token || !characterId) return;
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname;
-    const wsUrl = `${protocol}//${host}:8080/ws?token=${encodeURIComponent(token)}&character_id=${encodeURIComponent(characterId)}`;
+    let isMounted = true;
+    let reconnectTimer: any = null;
 
-    const ws = new WebSocket(wsUrl);
-    socketRef.current = ws;
+    const connect = () => {
+      if (!isMounted) return;
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.hostname;
+      const wsUrl = `${protocol}//${host}:8080/ws?token=${encodeURIComponent(token)}&character_id=${encodeURIComponent(characterId)}`;
 
-    ws.onopen = () => {
-      setConnected(true);
-      setLogs((prev) => ['Conectado ao servidor Go via WebSocket.', ...prev]);
-    };
+      const ws = new WebSocket(wsUrl);
+      socketRef.current = ws;
 
-    ws.onmessage = (event) => {
-      try {
-        const msg: CombatMessage = JSON.parse(event.data);
-
-        if (msg.character) {
-          setCharacter(msg.character);
-          if (msg.character.unlocked_regions && msg.character.unlocked_regions.length > 0) {
-            setUnlockedRegions(msg.character.unlocked_regions);
-          }
+      ws.onopen = () => {
+        if (!isMounted) {
+          ws.close();
+          return;
         }
+        setConnected(true);
+        setLogs((prev) => ['Conectado ao servidor Go via WebSocket.', ...prev]);
+      };
 
-        if (msg.inventory) {
-          setInventory({
-            equipment: msg.inventory.equipment || {},
-            backpack: Array.isArray(msg.inventory.backpack) ? msg.inventory.backpack : [],
-            cap: msg.inventory.cap || 1500,
-          });
-        }
+      ws.onmessage = (event) => {
+        try {
+          const msg: CombatMessage = JSON.parse(event.data);
 
-        if (msg.total_attack !== undefined) {
-          setTotalAttack(msg.total_attack);
-        }
-        if (msg.total_defense !== undefined) {
-          setTotalDefense(msg.total_defense);
-        }
-
-        if (msg.active_region) {
-          setActiveRegion(msg.active_region);
-        }
-
-        if (msg.current_stage !== undefined && msg.current_stage > 0) {
-          setCurrentStage(msg.current_stage);
-        }
-        if (msg.max_stages !== undefined && msg.max_stages > 0) {
-          setMaxStages(msg.max_stages);
-        }
-        if (msg.is_boss_stage !== undefined) {
-          setIsBossStage(msg.is_boss_stage);
-        }
-
-        if (msg.dps !== undefined) {
-          setDps(msg.dps);
-        }
-
-        if (msg.active_stance) {
-          setActiveStance(msg.active_stance);
-        }
-
-        if (msg.monster !== undefined) {
-          setMonster(msg.monster);
-        }
-
-        setIsExpeditionActive(msg.is_active);
-
-        if (msg.log_text && msg.log_text.trim() !== '') {
-          const timeStr = msg.timestamp ? `[${msg.timestamp}] ` : '';
-          const fullLogMsg = `${timeStr}${msg.log_text}`;
-          setLogs((prev) => {
-            if (prev.length > 0 && prev[0].slice(11) === msg.log_text) {
-              return prev;
+          if (msg.character) {
+            setCharacter(msg.character);
+            if (msg.character.unlocked_regions) {
+              setUnlockedRegions(msg.character.unlocked_regions);
             }
-            return [fullLogMsg, ...prev.slice(0, 49)];
-          });
+            if (msg.character.auto_resume_expedition !== undefined) {
+              setAutoResumeExpeditionState(msg.character.auto_resume_expedition);
+            }
+          }
+
+          if (msg.inventory) {
+            setInventory({
+              equipment: msg.inventory.equipment || {},
+              backpack: Array.isArray(msg.inventory.backpack) ? msg.inventory.backpack : [],
+              cap: msg.inventory.cap || 1500,
+            });
+          }
+
+          if (msg.total_attack !== undefined) {
+            setTotalAttack(msg.total_attack);
+          }
+          if (msg.total_defense !== undefined) {
+            setTotalDefense(msg.total_defense);
+          }
+
+          if (msg.active_region) {
+            setActiveRegion(msg.active_region);
+          }
+
+          if (msg.current_stage !== undefined && msg.current_stage > 0) {
+            setCurrentStage(msg.current_stage);
+          }
+          if (msg.max_stages !== undefined && msg.max_stages > 0) {
+            setMaxStages(msg.max_stages);
+          }
+          if (msg.is_boss_stage !== undefined) {
+            setIsBossStage(msg.is_boss_stage);
+          }
+
+          if (msg.dps !== undefined) {
+            setDps(msg.dps);
+          }
+
+          if (msg.active_stance) {
+            setActiveStance(msg.active_stance);
+          }
+
+          if (msg.monster !== undefined) {
+            setMonster(msg.monster);
+          }
+
+          setIsExpeditionActive(msg.is_active);
+
+          if (msg.log_text && msg.log_text.trim() !== '') {
+            const timeStr = msg.timestamp ? `[${msg.timestamp}] ` : '';
+            const fullLogMsg = `${timeStr}${msg.log_text}`;
+            setLogs((prev) => {
+              if (prev.length > 0 && prev[0].slice(11) === msg.log_text) {
+                return prev;
+              }
+              return [fullLogMsg, ...prev.slice(0, 49)];
+            });
+          }
+
+          if (onCombatEventRef.current) {
+            onCombatEventRef.current(msg);
+          }
+        } catch (err) {
+          console.error('Erro processando mensagem WebSocket:', err);
         }
+      };
 
-        if (onCombatEventRef.current) {
-          onCombatEventRef.current(msg);
-        }
-      } catch (err) {
-        console.error('Erro processando mensagem WebSocket:', err);
-      }
+      ws.onerror = (err) => {
+        console.error('Erro no WebSocket:', err);
+      };
+
+      ws.onclose = () => {
+        if (!isMounted) return;
+        setConnected(false);
+        reconnectTimer = setTimeout(() => {
+          connect();
+        }, 1500);
+      };
     };
 
-    ws.onerror = (err) => {
-      console.error('Erro no WebSocket:', err);
-    };
-
-    ws.onclose = () => {
-      console.log('Conexão WebSocket fechada');
-      setConnected(false);
-    };
+    connect();
 
     return () => {
-      ws.close();
+      isMounted = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (socketRef.current) {
+        socketRef.current.close();
+      }
     };
   }, [token, characterId]);
 
@@ -281,6 +307,13 @@ export function useGameSocket(token: string, characterId: string) {
     }
   };
 
+  const setAutoResumeExpedition = (enabled: boolean) => {
+    setAutoResumeExpeditionState(enabled);
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ action: 'SET_AUTO_RESUME', enabled }));
+    }
+  };
+
   return {
     character,
     inventory,
@@ -294,10 +327,12 @@ export function useGameSocket(token: string, characterId: string) {
     isBossStage,
     unlockedRegions,
     isExpeditionActive,
+    autoResumeExpedition,
     dps,
     logs,
     connected,
     toggleExpedition,
+    setAutoResumeExpedition,
     equipItem,
     unequipItem,
     discardItem,

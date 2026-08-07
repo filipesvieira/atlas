@@ -28,10 +28,12 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
     isBossStage,
     unlockedRegions,
     isExpeditionActive,
+    autoResumeExpedition,
     dps,
     logs,
     connected,
     toggleExpedition,
+    setAutoResumeExpedition,
     equipItem,
     unequipItem,
     discardItem,
@@ -42,7 +44,7 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
     chooseStarterPack,
     bulkSell,
     setOnCombatEvent,
-  } = useGameSocket(token, initialChar.id);
+  } = useGameSocket(token, initialChar.id, initialChar);
 
   const char = liveChar || initialChar;
 
@@ -138,6 +140,23 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
             >
               {isExpeditionActive ? 'Pausar Expedição' : 'Iniciar Expedição'}
             </button>
+
+            {/* Toggle de Auto-Retorno Pós-Derrota no Acampamento */}
+            <div className="flex items-center justify-between bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 mt-2">
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold text-slate-200">Retornar automaticamente</span>
+                <span className="text-[10px] text-slate-400">Ao recuperar 100% de HP e Mana no acampamento</span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoResumeExpedition}
+                  onChange={(e) => setAutoResumeExpedition(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+              </label>
+            </div>
           </div>
 
           {/* Modal de Onboarding para Escolha do Kit Inicial */}

@@ -34,11 +34,11 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		RequiresUnlockFrom: "",
 		DropsPreview:       []string{"Espada do Aprendiz", "Arco Curvo", "Varinha do Aprendiz", "Capacete de Couro", "Pequena Bolsa", "Amuleto do Lobo"},
 		Monsters: []Monster{
-			{Name: "Goblin Salteador", Level: 1, Health: 60, MaxHealth: 60, Attack: 7, AttackType: AttackTypeMelee},
-			{Name: "Lobo Selvagem", Level: 3, Health: 90, MaxHealth: 90, Attack: 11, AttackType: AttackTypeMelee},
-			{Name: "Aranha de Espinhos", Level: 4, Health: 110, MaxHealth: 110, Attack: 13, AttackType: AttackTypeRanged},
+			{Key: "forest_goblin", VisualKey: "forest_goblin", Name: "Goblin Salteador", Level: 1, Health: 60, MaxHealth: 60, Attack: 7, AttackType: AttackTypeMelee},
+			{Key: "forest_wolf", VisualKey: "forest_wolf", Name: "Lobo Selvagem", Level: 3, Health: 90, MaxHealth: 90, Attack: 11, AttackType: AttackTypeMelee},
+			{Key: "forest_spider", VisualKey: "forest_spider", Name: "Aranha de Espinhos", Level: 4, Health: 110, MaxHealth: 110, Attack: 13, AttackType: AttackTypeRanged},
 		},
-		Boss: Monster{Name: "Urso Ranzinza dos Carinhosos 🐻", Level: 5, Health: 350, MaxHealth: 350, Attack: 22, AttackType: AttackTypeMelee},
+		Boss: Monster{Key: "forest_boss_bear", VisualKey: "forest_boss_bear", IsBoss: true, Name: "Urso Ranzinza dos Carinhosos 🐻", Level: 5, Health: 350, MaxHealth: 350, Attack: 22, AttackType: AttackTypeMelee},
 	},
 	"shereque": {
 		ID:                 "shereque",
@@ -53,10 +53,10 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		RequiresUnlockFrom: "",
 		DropsPreview:       []string{"Clava de Madeira", "Machadinha de Madeira", "Broquel de Madeira", "Túnica de Couro", "Sandálias Ágeis", "Tome: Golpe Giratório"},
 		Monsters: []Monster{
-			{Name: "Ogre Verde", Level: 2, Health: 80, MaxHealth: 80, Attack: 9, AttackType: AttackTypeMelee},
-			{Name: "Burro Falante", Level: 4, Health: 100, MaxHealth: 100, Attack: 12, AttackType: AttackTypeMelee},
+			{Key: "shereque_ogre", VisualKey: "shereque_ogre", Name: "Ogre Verde", Level: 2, Health: 80, MaxHealth: 80, Attack: 9, AttackType: AttackTypeMelee},
+			{Key: "shereque_donkey", VisualKey: "shereque_donkey", Name: "Burro Falante", Level: 4, Health: 100, MaxHealth: 100, Attack: 12, AttackType: AttackTypeMelee},
 		},
-		Boss: Monster{Name: "Fiona Arrazadora 🐸", Level: 5, Health: 380, MaxHealth: 380, Attack: 24, AttackType: AttackTypeMelee},
+		Boss: Monster{Key: "shereque_boss_fiona", VisualKey: "shereque_boss_fiona", IsBoss: true, Name: "Fiona Arrazadora 🐸", Level: 5, Health: 380, MaxHealth: 380, Attack: 24, AttackType: AttackTypeMelee},
 	},
 	"chapolin": {
 		ID:                 "chapolin",
@@ -69,12 +69,13 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🎩",
 		MaxStages:          5,
 		RequiresUnlockFrom: "",
-		DropsPreview:       []string{"Sabre de Bronze", "Coifa de Prata", "Anel de Cobre", "Flechas de Madeira", "Manual: Tiro Quádruplo"},
+		DropsPreview:       []string{"Espada do Aprendiz", "Machadinha de Madeira", "Broquel de Madeira", "Anel de Cobre", "Manual: Tiro Quádruplo"},
 		Monsters: []Monster{
-			{Name: "Pirata Alma Negra", Level: 3, Health: 95, MaxHealth: 95, Attack: 11, AttackType: AttackTypeMelee},
-			{Name: "Tripa Seca", Level: 4, Health: 105, MaxHealth: 105, Attack: 13, AttackType: AttackTypeMelee},
+			{Key: "chapolin_pirate", VisualKey: "chapolin_pirate", Name: "Pirata Alma Negra", Level: 3, Health: 95, MaxHealth: 95, Attack: 11, AttackType: AttackTypeMelee},
+			{Key: "chapolin_tripa", VisualKey: "chapolin_tripa", Name: "Tripa Seca", Level: 4, Health: 105, MaxHealth: 105, Attack: 13, AttackType: AttackTypeMelee},
+			{Key: "chapolin_bandit", VisualKey: "chapolin_bandit", Name: "Bandido dos Ermos", Level: 4, Health: 110, MaxHealth: 110, Attack: 14, AttackType: AttackTypeMelee},
 		},
-		Boss: Monster{Name: "Alma Negra de Greiscu 🏴‍☠️", Level: 5, Health: 400, MaxHealth: 400, Attack: 26, AttackType: AttackTypeMelee},
+		Boss: Monster{Key: "chapolin_boss_alma", VisualKey: "chapolin_boss_alma", IsBoss: true, Name: "Alma Negra de Greiscu 🏴‍☠️", Level: 5, Health: 400, MaxHealth: 400, Attack: 26, AttackType: AttackTypeMelee},
 	},
 
 	// ─── TIER 2 (LV. 5–12) ──────────────────────────────────────────────────
@@ -89,13 +90,15 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🏰",
 		MaxStages:          5,
 		RequiresUnlockFrom: "forest",
-		DropsPreview:       []string{"Machado Orc", "Espada de Aço", "Cota de Malha", "Escudo de Madeira", "Mochila de Aventureiro"},
+		DropsPreview:       []string{"Machado Orc", "Sabre de Bronze", "Cota de Malha", "Escudo de Madeira", "Mochila de Aventureiro", "Livro: Cura Divina"},
 		Monsters: []Monster{
-			{Name: "Orc Guerreiro", Level: 6, Health: 150, MaxHealth: 150, Attack: 16, AttackType: AttackTypeMelee},
-			{Name: "Esqueleto Guardião", Level: 8, Health: 190, MaxHealth: 190, Attack: 21, AttackType: AttackTypeRanged},
-			{Name: "Orc Berserker", Level: 11, Health: 240, MaxHealth: 240, Attack: 28, AttackType: AttackTypeMelee},
+			{Key: "orcruins_orc", VisualKey: "orcruins_orc", Name: "Orc Guerreiro", Level: 6, Health: 140, MaxHealth: 140, Attack: 16, AttackType: AttackTypeMelee},
+			{Key: "orcruins_orc_mage", VisualKey: "orcruins_orc_mage", Name: "Orc Mago", Level: 7, Health: 150, MaxHealth: 150, Attack: 18, AttackType: AttackTypeRanged},
+			{Key: "orcruins_skeleton", VisualKey: "orcruins_skeleton", Name: "Esqueleto Guardião", Level: 8, Health: 170, MaxHealth: 170, Attack: 20, AttackType: AttackTypeRanged},
+			{Key: "orcruins_orc_archer", VisualKey: "orcruins_orc_archer", Name: "Orc Arqueiro", Level: 9, Health: 185, MaxHealth: 185, Attack: 22, AttackType: AttackTypeRanged},
+			{Key: "orcruins_berserker", VisualKey: "orcruins_berserker", Name: "Orc Berserker", Level: 10, Health: 210, MaxHealth: 210, Attack: 26, AttackType: AttackTypeMelee},
 		},
-		Boss: Monster{Name: "Esquelético Pacato 💀", Level: 12, Health: 680, MaxHealth: 680, Attack: 45, AttackType: AttackTypeRanged},
+		Boss: Monster{Key: "orcruins_boss_skeleton", VisualKey: "orcruins_boss_skeleton", IsBoss: true, Name: "Esquelético Pacato 💀", Level: 12, Health: 600, MaxHealth: 600, Attack: 40, AttackType: AttackTypeRanged},
 	},
 	"esgotos": {
 		ID:                 "esgotos",
@@ -110,10 +113,10 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		RequiresUnlockFrom: "forest",
 		DropsPreview:       []string{"Arco Longo", "Maça de Batalha", "Calça de Couro", "Botas de Couro", "Colar de Prata", "Virotes Perfurantes"},
 		Monsters: []Monster{
-			{Name: "Ninja do Clã do Pé", Level: 7, Health: 165, MaxHealth: 165, Attack: 18, AttackType: AttackTypeRanged},
-			{Name: "Rato Mutante", Level: 9, Health: 200, MaxHealth: 200, Attack: 23, AttackType: AttackTypeMelee},
+			{Key: "esgotos_ninja", VisualKey: "esgotos_ninja", Name: "Ninja do Clã do Pé", Level: 7, Health: 150, MaxHealth: 150, Attack: 17, AttackType: AttackTypeRanged},
+			{Key: "esgotos_rat", VisualKey: "esgotos_rat", Name: "Rato Mutante", Level: 10, Health: 200, MaxHealth: 200, Attack: 23, AttackType: AttackTypeMelee},
 		},
-		Boss: Monster{Name: "Destruidor Ranzinza 🥷", Level: 12, Health: 720, MaxHealth: 720, Attack: 48, AttackType: AttackTypeMelee},
+		Boss: Monster{Key: "esgotos_boss_destroyer", VisualKey: "esgotos_boss_destroyer", IsBoss: true, Name: "Destruidor Ranzinza 🥷", Level: 12, Health: 650, MaxHealth: 650, Attack: 42, AttackType: AttackTypeMelee},
 	},
 
 	// ─── TIER 3 (LV. 12–20) ─────────────────────────────────────────────────
@@ -128,12 +131,12 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🧙‍♂️",
 		MaxStages:          5,
 		RequiresUnlockFrom: "orcruins",
-		DropsPreview:       []string{"Cajado Rúnico", "Varinha das Relíquias", "Robe Místico", "Elmo Rúnico", "Bolsa Rúnica", "Livro: Bola de Fogo"},
+		DropsPreview:       []string{"Cetro do Esquelético", "Elmo Rúnico", "Peitoral de Platina", "Bolsa Rúnica", "Livro: Bola de Fogo"},
 		Monsters: []Monster{
-			{Name: "Dementador das Sombras", Level: 13, Health: 310, MaxHealth: 310, Attack: 34, AttackType: AttackTypeRanged},
-			{Name: "Trasgo das Cavernas", Level: 16, Health: 420, MaxHealth: 420, Attack: 42, AttackType: AttackTypeMelee},
+			{Key: "rogartes_dementor", VisualKey: "rogartes_dementor", Name: "Dementador das Sombras", Level: 13, Health: 260, MaxHealth: 260, Attack: 29, AttackType: AttackTypeRanged},
+			{Key: "rogartes_troll", VisualKey: "rogartes_troll", Name: "Trasgo das Cavernas", Level: 17, Health: 350, MaxHealth: 350, Attack: 36, AttackType: AttackTypeMelee},
 		},
-		Boss: Monster{Name: "Voldemorte sem Nariz 🪄", Level: 20, Health: 1250, MaxHealth: 1250, Attack: 75, AttackType: AttackTypeRanged},
+		Boss: Monster{Key: "rogartes_boss_darkmage", VisualKey: "rogartes_boss_darkmage", IsBoss: true, Name: "Voldemorte sem Nariz 🪄", Level: 20, Health: 1000, MaxHealth: 1000, Attack: 65, AttackType: AttackTypeRanged},
 	},
 
 	// ─── TIER 4 (LV. 20–35) ─────────────────────────────────────────────────
@@ -148,13 +151,14 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🛡️",
 		MaxStages:          5,
 		RequiresUnlockFrom: "rogartes",
-		DropsPreview:       []string{"Katana da Fúria", "Marreta Biônica", "Arco dos Ventos", "Escudo do Zodíaco", "Armadura de Ouro", "Mochila Dragônica"},
+		DropsPreview:       []string{"Katana da Fúria", "Marreta Biônica", "Arco dos Ventos", "Orbe Protetor", "Robe Místico", "Mochila Dragônica"},
 		Monsters: []Monster{
-			{Name: "Lorde Espectro", Level: 21, Health: 480, MaxHealth: 480, Attack: 48, AttackType: AttackTypeRanged},
-			{Name: "Golem de Gelo", Level: 26, Health: 620, MaxHealth: 620, Attack: 58, AttackType: AttackTypeMelee},
-			{Name: "Quimera do Frost", Level: 32, Health: 850, MaxHealth: 850, Attack: 75, AttackType: AttackTypeRanged},
+			{Key: "frozen_specter", VisualKey: "frozen_specter", Name: "Lorde Espectro", Level: 22, Health: 380, MaxHealth: 380, Attack: 40, AttackType: AttackTypeRanged},
+			{Key: "frozen_zombie", VisualKey: "frozen_zombie", Name: "Zumbi Congelado", Level: 25, Health: 440, MaxHealth: 440, Attack: 45, AttackType: AttackTypeMelee},
+			{Key: "frozen_golem", VisualKey: "frozen_golem", Name: "Golem de Gelo", Level: 28, Health: 530, MaxHealth: 530, Attack: 52, AttackType: AttackTypeMelee},
+			{Key: "frozen_chimera", VisualKey: "frozen_chimera", Name: "Quimera do Frost", Level: 33, Health: 680, MaxHealth: 680, Attack: 62, AttackType: AttackTypeRanged},
 		},
-		Boss: Monster{Name: "Mestre do Santuário 🌟", Level: 35, Health: 2200, MaxHealth: 2200, Attack: 110, AttackType: AttackTypeRanged},
+		Boss: Monster{Key: "frozen_boss_master", VisualKey: "frozen_boss_master", IsBoss: true, Name: "Mestre do Santuário 🌟", Level: 35, Health: 1800, MaxHealth: 1800, Attack: 90, AttackType: AttackTypeRanged},
 	},
 
 	// ─── TIER 5 (LV. 35–99) ─────────────────────────────────────────────────
@@ -165,56 +169,44 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Order:              8,
 		MinLevel:           35,
 		MaxLevel:           99,
-		Description:        "Abismo vulcânico lendário onde feras guardar relíquias míticas.",
+		Description:        "Abismo vulcânico lendário onde feras guardam relíquias míticas.",
 		Icon:               "🌋",
 		MaxStages:          5,
 		RequiresUnlockFrom: "frozen",
 		DropsPreview:       []string{"Espada Mítica do Vingador", "Lâmina de Greiscu", "Arco Apocalíptico", "Cajado da Eternidade", "Mochila do Zodíaco", "Flechas Divinas"},
 		IsSecret:           true,
 		Monsters: []Monster{
-			{Name: "Dragão Cinderino", Level: 38, Health: 1100, MaxHealth: 1100, Attack: 95, AttackType: AttackTypeRanged},
-			{Name: "Demônio Ancestral", Level: 45, Health: 1600, MaxHealth: 1600, Attack: 130, AttackType: AttackTypeRanged},
-			{Name: "Lorde das Chamas", Level: 55, Health: 2400, MaxHealth: 2400, Attack: 170, AttackType: AttackTypeRanged},
+			{Key: "abyss_dragon", VisualKey: "abyss_dragon", Name: "Dragão Cinderino", Level: 40, Health: 900, MaxHealth: 900, Attack: 80, AttackType: AttackTypeRanged},
+			{Key: "abyss_demon", VisualKey: "abyss_demon", Name: "Demônio Ancestral", Level: 50, Health: 1250, MaxHealth: 1250, Attack: 105, AttackType: AttackTypeRanged},
+			{Key: "abyss_vampire", VisualKey: "abyss_vampire", Name: "Vampiro Ancestral", Level: 60, Health: 1550, MaxHealth: 1550, Attack: 125, AttackType: AttackTypeRanged},
+			{Key: "abyss_necromancer", VisualKey: "abyss_necromancer", Name: "Necromante Sombrio", Level: 65, Health: 1750, MaxHealth: 1750, Attack: 140, AttackType: AttackTypeRanged},
+			{Key: "abyss_scorpion", VisualKey: "abyss_scorpion", Name: "Escorpião Infernal", Level: 70, Health: 1950, MaxHealth: 1950, Attack: 155, AttackType: AttackTypeMelee},
+			{Key: "abyss_flame_lord", VisualKey: "abyss_flame_lord", Name: "Lorde das Chamas", Level: 78, Health: 2400, MaxHealth: 2400, Attack: 175, AttackType: AttackTypeRanged},
 		},
-		Boss: Monster{Name: "Vingador de Chifres 🐲", Level: 60, Health: 4500, MaxHealth: 4500, Attack: 210, AttackType: AttackTypeRanged},
+		Boss: Monster{Key: "abyss_boss_avenger", VisualKey: "abyss_boss_avenger", IsBoss: true, Name: "Vingador de Chifres 🐲", Level: 85, Health: 4500, MaxHealth: 4500, Attack: 210, AttackType: AttackTypeRanged},
 	},
 }
 
-func GetRandomMonsterForRegion(regionID string, playerLevel int, r *rand.Rand) Monster {
+// GetRandomMonsterForRegion retorna uma cópia de monstro com nível fixo do seu template.
+func GetRandomMonsterForRegion(regionID string, r *rand.Rand) Monster {
+	if r == nil {
+		r = rand.New(rand.NewSource(1))
+	}
 	reg, exists := ExpeditionRegions[regionID]
 	if !exists {
 		reg = ExpeditionRegions["forest"]
 	}
 	mTemplate := reg.Monsters[r.Intn(len(reg.Monsters))]
 
-	mobLevel := playerLevel
-	if reg.MaxLevel > 0 && mobLevel > reg.MaxLevel {
-		mobLevel = reg.MaxLevel
-	}
-	if mobLevel < reg.MinLevel {
-		mobLevel = reg.MinLevel
-	}
-	if reg.MinLevel < reg.MaxLevel {
-		fuzz := r.Intn(3) - 1
-		mobLevel += fuzz
-		if mobLevel > reg.MaxLevel {
-			mobLevel = reg.MaxLevel
-		}
-		if mobLevel < reg.MinLevel {
-			mobLevel = reg.MinLevel
-		}
-	}
-
-	healthFuzz := mTemplate.Health + (mobLevel * 8) + r.Intn(10)
-	attackFuzz := mTemplate.Attack + (mobLevel * 2) + r.Intn(4)
-
 	return Monster{
+		Key:        mTemplate.Key,
+		VisualKey:  mTemplate.VisualKey,
+		IsBoss:     mTemplate.IsBoss,
 		Name:       mTemplate.Name,
-		Level:      mobLevel,
-		Health:     healthFuzz,
-		MaxHealth:  healthFuzz,
-		Attack:     attackFuzz,
+		Level:      mTemplate.Level,
+		Health:     mTemplate.Health,
+		MaxHealth:  mTemplate.MaxHealth,
+		Attack:     mTemplate.Attack,
 		AttackType: mTemplate.AttackType,
 	}
 }
-

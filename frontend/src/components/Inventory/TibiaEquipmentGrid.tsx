@@ -298,4 +298,3 @@ export function TibiaEquipmentGrid({
     </div>
   );
 }
-

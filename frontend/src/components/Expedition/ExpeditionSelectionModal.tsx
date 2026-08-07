@@ -193,6 +193,7 @@ export function ExpeditionSelectionModal({
 
   if (!isOpen) return null;
 
+  const safeUnlockedRegions = unlockedRegions || ['forest', 'shereque', 'chapolin'];
   const filteredRegions = WORLD_REGIONS.filter((r) => r.tier === selectedTier);
 
   return (
@@ -242,7 +243,7 @@ export function ExpeditionSelectionModal({
         <div className="p-4 overflow-y-auto space-y-3.5 flex-1">
           {filteredRegions.map((region) => {
             const isLevelMet = characterLevel >= region.minLevel;
-            const isUnlockedByBoss = unlockedRegions.includes(region.id) || !region.requiresUnlockFrom;
+            const isUnlockedByBoss = safeUnlockedRegions.includes(region.id) || !region.requiresUnlockFrom;
             const isAvailable = isLevelMet || isUnlockedByBoss;
             const isSelected = currentRegion === region.id;
 

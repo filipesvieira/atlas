@@ -28,6 +28,9 @@ const (
 
 type Monster struct {
 	ID         string     `json:"id"`
+	Key        string     `json:"key"`
+	VisualKey  string     `json:"visual_key"`
+	IsBoss     bool       `json:"is_boss"`
 	Name       string     `json:"name"`
 	Level      int        `json:"level"`
 	Health     int        `json:"health"`
@@ -91,8 +94,13 @@ type CharacterData struct {
 	UnlockedRegions    []string      `json:"unlocked_regions"`
 	IsExpeditionActive bool          `json:"is_expedition_active"`
 	ActiveRegion       string        `json:"active_region"`
+	ActiveStance       string        `json:"active_stance"`
+	CurrentStage       int           `json:"current_stage"`
+	IsBossStage        bool          `json:"is_boss_stage"`
+	StateRevision      int64         `json:"state_revision"`
 	LastLogin          time.Time     `json:"last_login"`
 	LastLogout         time.Time     `json:"last_logout"`
+	AutoResumeExpedition bool        `json:"auto_resume_expedition"`
 }
 
 type CombatMessage struct {
@@ -130,10 +138,13 @@ type GameSession struct {
 	CurrentMonsters     []Monster
 	SendChannel         chan CombatMessage
 	StopChan            chan struct{}
+	TickerDone          chan struct{}
 	SaveInvFunc         func(charID string, inv *InventoryData) error
 	SaveCharFunc        func(char *CharacterData) error
 	GetLootFunc         func(playerLevel int) *Item
 	GetMonsterFunc      func(region string, playerLevel int) Monster
+	AutoResumePending   bool
+	RecoveringFromDefeat bool
 }
 
 func GetRequiredXPForLevel(level int) int64 {
@@ -163,23 +174,44 @@ func NewGameSession(char *CharacterData, inv *InventoryData, saveInv func(string
 		activeReg = "forest"
 	}
 
+	activeStance := char.ActiveStance
+	if activeStance != "offensive" && activeStance != "defensive" && activeStance != "balanced" {
+		activeStance = "balanced"
+	}
+	currentStage := char.CurrentStage
+	if currentStage < 1 || currentStage > 5 {
+		currentStage = 1
+	}
+
 	return &GameSession{
 		Character:          char,
 		Inventory:          inv,
 		IsExpeditionActive: char.IsExpeditionActive,
 		ActiveRegion:       activeReg,
-		ActiveStance:       "balanced",
-		CurrentStage:       1,
+		ActiveStance:       activeStance,
+		CurrentStage:       currentStage,
 		MaxStages:          5,
-		IsBossStage:        false,
+		IsBossStage:        char.IsBossStage,
 		CurrentMonsters:    []Monster{},
 		SendChannel:        make(chan CombatMessage, 100),
 		StopChan:           make(chan struct{}),
+		TickerDone:         make(chan struct{}),
 		SaveInvFunc:        saveInv,
 		SaveCharFunc:       saveChar,
 		GetLootFunc:        getLoot,
 		GetMonsterFunc:     getMonster,
 	}
+}
+
+func (s *GameSession) syncPersistentExpeditionState() {
+	if s == nil || s.Character == nil {
+		return
+	}
+	s.Character.IsExpeditionActive = s.IsExpeditionActive
+	s.Character.ActiveRegion = s.ActiveRegion
+	s.Character.ActiveStance = s.ActiveStance
+	s.Character.CurrentStage = s.CurrentStage
+	s.Character.IsBossStage = s.IsBossStage
 }
 
 func GetMasteryLevel(tries int) int {
@@ -232,31 +264,34 @@ func (s *GameSession) CalculateStats() (int, int) {
 
 	totalAtk := 0
 
-	// Ataque Base derivado do atributo primário e da arma
+	// Ataque usa os campos separados. `Attack` é apenas fallback para itens legados;
+	// somá-lo aos campos novos duplicava o dano de todo item recém-gerado.
 	if eq.MainHand != nil {
 		wType := GetItemWeaponType(eq.MainHand)
+		physical := eq.MainHand.PhysicalAttack
+		magic := eq.MainHand.MagicAttack
+		if physical == 0 && magic == 0 {
+			physical = eq.MainHand.Attack
+		}
 		switch wType {
 		case WeaponTypeBow:
 			ammoAtk := 0
 			if eq.Ammo != nil {
-				ammoAtk = eq.Ammo.PhysicalAttack + eq.Ammo.Attack
+				ammoAtk = eq.Ammo.PhysicalAttack
+				if ammoAtk == 0 && eq.Ammo.MagicAttack == 0 {
+					ammoAtk = eq.Ammo.Attack
+				}
 			}
-			baseDmg := float64(eq.MainHand.PhysicalAttack + eq.MainHand.Attack + ammoAtk)
-			if baseDmg == 0 {
-				baseDmg = 1
-			}
+			baseDmg := math.Max(1, float64(physical+ammoAtk))
 			totalAtk = int(baseDmg * (1.0 + (float64(effectiveDEX) / 100.0)))
 		case WeaponTypeWand:
-			baseDmg := float64(eq.MainHand.MagicAttack + eq.MainHand.Attack)
-			if baseDmg == 0 {
-				baseDmg = 1
+			if magic == 0 {
+				magic = eq.MainHand.Attack
 			}
+			baseDmg := math.Max(1, float64(magic))
 			totalAtk = int(baseDmg * (1.0 + (float64(effectiveINT) / 100.0)))
 		default:
-			baseDmg := float64(eq.MainHand.PhysicalAttack + eq.MainHand.Attack)
-			if baseDmg == 0 {
-				baseDmg = 1
-			}
+			baseDmg := math.Max(1, float64(physical))
 			totalAtk = int(baseDmg * (1.0 + (float64(effectiveSTR) / 100.0)))
 		}
 	} else {
@@ -316,7 +351,9 @@ func (s *GameSession) CalculateStats() (int, int) {
 
 func (s *GameSession) StartTicker() {
 	ticker := time.NewTicker(750 * time.Millisecond)
+	done := s.TickerDone
 	defer ticker.Stop()
+	defer close(done)
 
 	for {
 		select {
@@ -342,24 +379,52 @@ func (s *GameSession) StartTicker() {
 				}
 				totalAtk, totalDef := s.CalculateStats()
 
-				restLog := ""
-				if !s.HasBroadcastRestLog {
-					restLog = "Em descanso no acampamento."
-					s.HasBroadcastRestLog = true
-				}
+				if s.RecoveringFromDefeat && s.AutoResumePending && s.Character.AutoResumeExpedition && s.Character.Health >= s.Character.MaxHealth && s.Character.Mana >= s.Character.MaxMana {
+					s.IsExpeditionActive = true
+					s.Character.IsExpeditionActive = true
+					s.RecoveringFromDefeat = false
+					s.AutoResumePending = false
+					s.syncPersistentExpeditionState()
+					if s.SaveCharFunc != nil {
+						_ = s.SaveCharFunc(s.Character)
+					}
+					regName := s.ActiveRegion
+					if reg, exists := ExpeditionRegions[s.ActiveRegion]; exists {
+						regName = reg.Name
+					}
+					s.broadcastMessage(CombatMessage{
+						Type:         "EXPEDITION_STATUS",
+						Timestamp:    time.Now().Format("15:04:05"),
+						Character:    s.Character,
+						Inventory:    s.Inventory,
+						ActiveRegion: s.ActiveRegion,
+						ActiveStance: s.ActiveStance,
+						CurrentStage: s.CurrentStage,
+						MaxStages:    s.MaxStages,
+						IsBossStage:  s.IsBossStage,
+						LogText:      fmt.Sprintf("❤️ Vida e mana totalmente recuperadas. Retornando automaticamente para %s...", regName),
+						IsActive:     true,
+					})
+				} else {
+					restLog := ""
+					if !s.HasBroadcastRestLog {
+						restLog = "Em descanso no acampamento."
+						s.HasBroadcastRestLog = true
+					}
 
-				s.broadcastMessage(CombatMessage{
-					Type:         "TICK_UPDATE",
-					Timestamp:    time.Now().Format("15:04:05"),
-					Character:    s.Character,
-					Inventory:    s.Inventory,
-					TotalAttack:  totalAtk,
-					TotalDefense: totalDef,
-					ActiveRegion: s.ActiveRegion,
-					ActiveStance: s.ActiveStance,
-					LogText:      restLog,
-					IsActive:     false,
-				})
+					s.broadcastMessage(CombatMessage{
+						Type:         "TICK_UPDATE",
+						Timestamp:    time.Now().Format("15:04:05"),
+						Character:    s.Character,
+						Inventory:    s.Inventory,
+						TotalAttack:  totalAtk,
+						TotalDefense: totalDef,
+						ActiveRegion: s.ActiveRegion,
+						ActiveStance: s.ActiveStance,
+						LogText:      restLog,
+						IsActive:     false,
+					})
+				}
 			}
 			s.Mu.Unlock()
 		}
@@ -368,11 +433,18 @@ func (s *GameSession) StartTicker() {
 
 func (s *GameSession) StopTicker() {
 	s.Mu.Lock()
-	defer s.Mu.Unlock()
 	select {
 	case <-s.StopChan:
 	default:
 		close(s.StopChan)
+	}
+	done := s.TickerDone
+	s.Mu.Unlock()
+
+	// Aguarda o loop encerrar para que nenhum tick posterior possa alterar o
+	// snapshot que será marcado como fronteira da próxima janela offline.
+	if done != nil {
+		<-done
 	}
 }
 
@@ -382,6 +454,7 @@ func (s *GameSession) EnsureTickerRunning() {
 	select {
 	case <-s.StopChan:
 		s.StopChan = make(chan struct{})
+		s.TickerDone = make(chan struct{})
 		go s.StartTicker()
 	default:
 		// Ticker está ativo e rodando
@@ -405,16 +478,11 @@ func (s *GameSession) processTick() {
 
 	if len(s.CurrentMonsters) == 0 {
 		if s.CurrentStage >= 5 {
-			// FASE FINAL 5: SPAWN DO BOSS
+			// FASE FINAL 5: SPAWN DO BOSS (Fila Indiana: Guarda-costas na frente, Boss entra POR ÚLTIMO)
 			s.IsBossStage = true
-			bossMob := regInfo.Boss
-			bossMob.ID = fmt.Sprintf("boss_%d", time.Now().UnixNano())
-			bossMob.GridX = GridWidth - 1
-			bossMob.GridY = GridHeight / 2
-			bossMob.State = "CHASE"
-			s.CurrentMonsters = []Monster{bossMob}
-			
-			// Guarda-costas
+			s.CurrentMonsters = make([]Monster, 0, 3)
+
+			// 1. Guarda-costas entram primeiro na frente da fila (GridX menor)
 			for i := 0; i < 2; i++ {
 				var m Monster
 				if s.GetMonsterFunc != nil {
@@ -423,11 +491,19 @@ func (s *GameSession) processTick() {
 					m = Monster{Name: "Guarda-Costas", Level: 1, Health: 60, MaxHealth: 60, Attack: 7, AttackType: AttackTypeMelee}
 				}
 				m.ID = fmt.Sprintf("mob_%d_%d", time.Now().UnixNano(), i)
-				m.GridX = GridWidth - 1
-				m.GridY = 2 + (i * 2)
+				m.GridX = (GridWidth - 3) + i // ex: GridX = 12, 13
+				m.GridY = HeroGridY            // Fila indiana central (GridY = 4)
 				m.State = "CHASE"
 				s.CurrentMonsters = append(s.CurrentMonsters, m)
 			}
+
+			// 2. Boss entra POR ÚLTIMO no final da fila (GridX maior, retaguarda da marcha)
+			bossMob := regInfo.Boss
+			bossMob.ID = fmt.Sprintf("boss_%d", time.Now().UnixNano())
+			bossMob.GridX = GridWidth - 1 // Entra pela extrema direita (GridX = 14)
+			bossMob.GridY = HeroGridY     // Fila indiana central (GridY = 4)
+			bossMob.State = "CHASE"
+			s.CurrentMonsters = append(s.CurrentMonsters, bossMob)
 
 			s.broadcastMessage(CombatMessage{
 				Type:         "COMBAT_EVENT",
@@ -447,12 +523,13 @@ func (s *GameSession) processTick() {
 			})
 			return
 		} else {
-			// ESTÁGIOS 1 A 4: SPAWN DE MONSTROS NORMAIS
+			// ESTÁGIOS 1 A 4: SPAWN DE MONSTROS NORMAIS EM FILA INDIANA
 			s.IsBossStage = false
 			count := s.CurrentStage
 			if count < 1 {
 				count = 1
 			}
+			s.CurrentMonsters = make([]Monster, 0, count)
 			for i := 0; i < count; i++ {
 				var m Monster
 				if s.GetMonsterFunc != nil {
@@ -461,11 +538,11 @@ func (s *GameSession) processTick() {
 					m = Monster{Name: "Goblin Salteador", Level: 1, Health: 60, MaxHealth: 60, Attack: 7, AttackType: AttackTypeMelee}
 				}
 				m.ID = fmt.Sprintf("mob_%d_%d", time.Now().UnixNano(), i)
-				m.GridX = GridWidth - 1
-				m.GridY = 2 + (i * 2)
-				if m.GridY >= GridHeight {
-					m.GridY = GridHeight - 1
+				m.GridX = (GridWidth - count) + i // Espaçados horizontalmente em fila indiana
+				if m.GridX < HeroGridX+1 {
+					m.GridX = HeroGridX + 1
 				}
+				m.GridY = HeroGridY // Fila indiana central (GridY = 4)
 				m.State = "CHASE"
 				s.CurrentMonsters = append(s.CurrentMonsters, m)
 			}
@@ -534,7 +611,6 @@ func (s *GameSession) processTick() {
 			mob.State = "ATTACK"
 		}
 	}
-
 
 	// Regeneração contínua de HP e Mana durante a expedição
 	eq := s.Inventory.Equipment
@@ -748,14 +824,30 @@ func (s *GameSession) processTick() {
 
 	// 3.5 Lifesteal Application
 	lifestealPct := 0.0
-	if eq.MainHand != nil { lifestealPct += eq.MainHand.Lifesteal }
-	if eq.OffHand != nil { lifestealPct += eq.OffHand.Lifesteal }
-	if eq.Head != nil { lifestealPct += eq.Head.Lifesteal }
-	if eq.Chest != nil { lifestealPct += eq.Chest.Lifesteal }
-	if eq.Legs != nil { lifestealPct += eq.Legs.Lifesteal }
-	if eq.Boots != nil { lifestealPct += eq.Boots.Lifesteal }
-	if eq.Necklace != nil { lifestealPct += eq.Necklace.Lifesteal }
-	if eq.Ring != nil { lifestealPct += eq.Ring.Lifesteal }
+	if eq.MainHand != nil {
+		lifestealPct += eq.MainHand.Lifesteal
+	}
+	if eq.OffHand != nil {
+		lifestealPct += eq.OffHand.Lifesteal
+	}
+	if eq.Head != nil {
+		lifestealPct += eq.Head.Lifesteal
+	}
+	if eq.Chest != nil {
+		lifestealPct += eq.Chest.Lifesteal
+	}
+	if eq.Legs != nil {
+		lifestealPct += eq.Legs.Lifesteal
+	}
+	if eq.Boots != nil {
+		lifestealPct += eq.Boots.Lifesteal
+	}
+	if eq.Necklace != nil {
+		lifestealPct += eq.Necklace.Lifesteal
+	}
+	if eq.Ring != nil {
+		lifestealPct += eq.Ring.Lifesteal
+	}
 
 	if lifestealPct > 0 && playerAtk > 0 {
 		heal := int(float64(playerAtk) * (lifestealPct / 100.0))
@@ -771,10 +863,16 @@ func (s *GameSession) processTick() {
 	// 4. Morte do Aventureiro
 	if s.Character.Health <= 0 {
 		s.Character.Health = int(float64(s.Character.MaxHealth) * 0.4)
+		s.RecoveringFromDefeat = true
+		s.AutoResumePending = s.Character.AutoResumeExpedition
 		s.IsExpeditionActive = false
 		s.CurrentStage = 1
 		s.IsBossStage = false
 		s.CurrentMonsters = []Monster{}
+		s.syncPersistentExpeditionState()
+		if s.SaveCharFunc != nil {
+			_ = s.SaveCharFunc(s.Character)
+		}
 		s.broadcastMessage(CombatMessage{
 			Type:         "COMBAT_EVENT",
 			Timestamp:    time.Now().Format("15:04:05"),
@@ -810,7 +908,7 @@ func (s *GameSession) processTick() {
 			}
 			xpGained := int64(rawXP * xpMult)
 			baseGold := float64(15 + r.Intn(25))
-			
+
 			goldBonusPct := 0.0
 			for _, it := range equippedListForTick {
 				if it != nil {
@@ -826,12 +924,16 @@ func (s *GameSession) processTick() {
 
 			// Roll de Loot Target (Tabela de Drop do Monstro)
 			dropChance := 0.35
-			if s.IsBossStage {
+			if mob.IsBoss {
 				dropChance = 1.00 // Boss sempre dropa loot de boss!
 			}
 
 			if r.Float64() < dropChance {
-				item := GenerateLootForMonster(mob.Name, mob.Level)
+				itemKey := mob.Key
+				if itemKey == "" {
+					itemKey = mob.Name
+				}
+				item := GenerateLootForMonsterWithRand(itemKey, mob.Level, r)
 				if item != nil {
 					currentWeight := s.GetTotalWeight()
 					maxWeight := s.GetTotalCapacity()
@@ -896,19 +998,22 @@ func (s *GameSession) processTick() {
 
 	s.CurrentMonsters = aliveMonsters
 
-	// Level Up Check
-	xpRequired := GetRequiredXPForLevel(s.Character.Level)
-	if s.Character.Experience >= xpRequired {
+	// Level Up Check: processa múltiplos níveis no mesmo tick/claim.
+	levelsGained := 0
+	for s.Character.Experience >= GetRequiredXPForLevel(s.Character.Level) {
 		s.Character.Level++
 		s.Character.UnspentPoints += 3
-		s.Character.MaxHealth = 100 + (s.Character.VIT * 25) + (s.Character.Level * 10)
-		s.Character.MaxMana = 30 + (s.Character.INT * 15) + (s.Character.Level * 5)
+		levelsGained++
+	}
+	if levelsGained > 0 {
+		s.CalculateStats()
 		s.Character.Health = s.Character.MaxHealth
 		s.Character.Mana = s.Character.MaxMana
 		EnsureUnlockedRegionsForLevel(s.Character)
-		logMsg += fmt.Sprintf(" 🌟 LEVEL UP! Você subiu para o Nível %d! (+3 Pontos de Atributo)", s.Character.Level)
+		logMsg += fmt.Sprintf(" 🌟 LEVEL UP! Você avançou %d nível(is) e chegou ao Nível %d!", levelsGained, s.Character.Level)
 	}
 
+	s.syncPersistentExpeditionState()
 	if s.SaveCharFunc != nil {
 		_ = s.SaveCharFunc(s.Character)
 	}
@@ -1065,7 +1170,7 @@ func (s *GameSession) EquipItem(itemID string, slot string) {
 				eq.OffHand = nil
 			}
 		}
-		
+
 		// Se trocou para arma melee ou cajado, desequipa munição automaticamente
 		if targetItem.Hands == 1 || (GetItemWeaponType(&targetItem) != WeaponTypeBow) {
 			if eq.Ammo != nil {
@@ -1291,6 +1396,7 @@ func (s *GameSession) BulkSell(itemIDs []string) {
 	if s.SaveInvFunc != nil {
 		_ = s.SaveInvFunc(s.Character.ID, s.Inventory)
 	}
+	s.syncPersistentExpeditionState()
 	if s.SaveCharFunc != nil {
 		_ = s.SaveCharFunc(s.Character)
 	}
@@ -1354,7 +1460,7 @@ func (s *GameSession) GetMaxSlotCapacity() int {
 func (s *GameSession) GetTotalWeight() float64 {
 	weight := 0.0
 	eq := s.Inventory.Equipment
-	
+
 	items := []*Item{
 		eq.Head, eq.Chest, eq.Legs, eq.Boots,
 		eq.MainHand, eq.OffHand, eq.Necklace, eq.Ring, eq.Ammo, eq.Bag,
@@ -1404,13 +1510,14 @@ func (s *GameSession) SetRegion(regionID string) {
 	defer s.Mu.Unlock()
 	if _, exists := ExpeditionRegions[regionID]; exists {
 		s.ActiveRegion = regionID
-		s.Character.ActiveRegion = regionID
-		if s.SaveCharFunc != nil {
-			_ = s.SaveCharFunc(s.Character)
-		}
 		s.CurrentMonsters = []Monster{} // Reseta horda ao mudar de região
 		s.CurrentStage = 1
 		s.IsBossStage = false
+		s.Character.StateRevision++
+		s.syncPersistentExpeditionState()
+		if s.SaveCharFunc != nil {
+			_ = s.SaveCharFunc(s.Character)
+		}
 		totalAtk, totalDef := s.CalculateStats()
 		s.broadcastMessage(CombatMessage{
 			Type:         "REGION_UPDATE",
@@ -1435,6 +1542,11 @@ func (s *GameSession) SetStance(stance string) {
 	defer s.Mu.Unlock()
 	if stance == "offensive" || stance == "defensive" || stance == "balanced" {
 		s.ActiveStance = stance
+		s.Character.StateRevision++
+		s.syncPersistentExpeditionState()
+		if s.SaveCharFunc != nil {
+			_ = s.SaveCharFunc(s.Character)
+		}
 		totalAtk, totalDef := s.CalculateStats()
 		s.broadcastMessage(CombatMessage{
 			Type:         "STANCE_UPDATE",
@@ -1451,7 +1563,46 @@ func (s *GameSession) SetStance(stance string) {
 	}
 }
 
+func cloneItem(item *Item) *Item {
+	if item == nil {
+		return nil
+	}
+	copyItem := *item
+	return &copyItem
+}
+
+func cloneCharacterData(character *CharacterData) *CharacterData {
+	if character == nil {
+		return nil
+	}
+	copyCharacter := *character
+	copyCharacter.LearnedSkills = append([]string(nil), character.LearnedSkills...)
+	copyCharacter.ActiveSkills = append([]string(nil), character.ActiveSkills...)
+	copyCharacter.UnlockedRegions = append([]string(nil), character.UnlockedRegions...)
+	return &copyCharacter
+}
+
+func cloneInventoryData(inventory *InventoryData) *InventoryData {
+	if inventory == nil {
+		return nil
+	}
+	copyInventory := *inventory
+	copyInventory.Backpack = append([]Item(nil), inventory.Backpack...)
+	copyInventory.Equipment = EquipmentSlots{
+		Head: cloneItem(inventory.Equipment.Head), Necklace: cloneItem(inventory.Equipment.Necklace),
+		Chest: cloneItem(inventory.Equipment.Chest), MainHand: cloneItem(inventory.Equipment.MainHand),
+		OffHand: cloneItem(inventory.Equipment.OffHand), Legs: cloneItem(inventory.Equipment.Legs),
+		Boots: cloneItem(inventory.Equipment.Boots), Ring: cloneItem(inventory.Equipment.Ring),
+		Ammo: cloneItem(inventory.Equipment.Ammo), Bag: cloneItem(inventory.Equipment.Bag),
+	}
+	return &copyInventory
+}
+
 func (s *GameSession) broadcastMessage(msg CombatMessage) {
+	s.syncPersistentExpeditionState()
+	msg.Character = cloneCharacterData(msg.Character)
+	msg.Inventory = cloneInventoryData(msg.Inventory)
+	msg.Monsters = append([]Monster(nil), msg.Monsters...)
 	if msg.CurrentStage <= 0 {
 		if s.CurrentStage <= 0 {
 			s.CurrentStage = 1
@@ -1475,10 +1626,13 @@ func (s *GameSession) broadcastMessage(msg CombatMessage) {
 func (s *GameSession) ToggleExpedition() bool {
 	s.Mu.Lock()
 	s.IsExpeditionActive = !s.IsExpeditionActive
-	s.Character.IsExpeditionActive = s.IsExpeditionActive
+	s.Character.StateRevision++
+	s.RecoveringFromDefeat = false
+	s.AutoResumePending = false
 	if !s.IsExpeditionActive {
 		s.CurrentMonsters = []Monster{}
 	}
+	s.syncPersistentExpeditionState()
 	if s.SaveCharFunc != nil {
 		_ = s.SaveCharFunc(s.Character)
 	}
@@ -1512,6 +1666,20 @@ func (s *GameSession) ToggleExpedition() bool {
 	return s.IsExpeditionActive
 }
 
+func (s *GameSession) SetAutoResumeExpedition(enabled bool) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	s.Character.AutoResumeExpedition = enabled
+	if !enabled {
+		s.AutoResumePending = false
+	} else if s.RecoveringFromDefeat {
+		s.AutoResumePending = true
+	}
+	if s.SaveCharFunc != nil {
+		_ = s.SaveCharFunc(s.Character)
+	}
+}
+
 func (s *GameSession) ToggleSkill(skillKey string) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
@@ -1525,11 +1693,11 @@ func (s *GameSession) ToggleSkill(skillKey string) {
 				_ = s.SaveCharFunc(s.Character)
 			}
 			s.broadcastMessage(CombatMessage{
-				Type:         "SKILL_TOGGLED",
-				Timestamp:    time.Now().Format("15:04:05"),
-				Character:    s.Character,
-				LogText:      fmt.Sprintf("Habilidade desativada: %s", skillKey),
-				IsActive:     s.IsExpeditionActive,
+				Type:      "SKILL_TOGGLED",
+				Timestamp: time.Now().Format("15:04:05"),
+				Character: s.Character,
+				LogText:   fmt.Sprintf("Habilidade desativada: %s", skillKey),
+				IsActive:  s.IsExpeditionActive,
 			})
 			return
 		}
@@ -1538,9 +1706,9 @@ func (s *GameSession) ToggleSkill(skillKey string) {
 	// Se não estiver ativa, adiciona (limite de 2)
 	if len(s.Character.ActiveSkills) >= 2 {
 		s.broadcastMessage(CombatMessage{
-			Type:         "SKILL_ERROR",
-			Timestamp:    time.Now().Format("15:04:05"),
-			LogText:      "Você já possui 2 habilidades ativas! Desative uma antes.",
+			Type:      "SKILL_ERROR",
+			Timestamp: time.Now().Format("15:04:05"),
+			LogText:   "Você já possui 2 habilidades ativas! Desative uma antes.",
 		})
 		return
 	}
@@ -1560,11 +1728,11 @@ func (s *GameSession) ToggleSkill(skillKey string) {
 			_ = s.SaveCharFunc(s.Character)
 		}
 		s.broadcastMessage(CombatMessage{
-			Type:         "SKILL_TOGGLED",
-			Timestamp:    time.Now().Format("15:04:05"),
-			Character:    s.Character,
-			LogText:      fmt.Sprintf("Habilidade equipada: %s", skillKey),
-			IsActive:     s.IsExpeditionActive,
+			Type:      "SKILL_TOGGLED",
+			Timestamp: time.Now().Format("15:04:05"),
+			Character: s.Character,
+			LogText:   fmt.Sprintf("Habilidade equipada: %s", skillKey),
+			IsActive:  s.IsExpeditionActive,
 		})
 	}
 }
@@ -1624,114 +1792,41 @@ func (s *GameSession) ChooseStarterPack(pack string) {
 
 	s.Inventory.Equipment = EquipmentSlots{}
 	s.Inventory.Backpack = []Item{}
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	equip := func(name, slot, effect string) *Item {
+		item := GenerateItemFromTemplate(name, "Comum", rng)
+		if item == nil {
+			return nil
+		}
+		item.ID = fmt.Sprintf("starter_%s_%d", strings.ReplaceAll(strings.ToLower(slot), " ", "_"), time.Now().UnixNano())
+		item.SpecialEffect = effect
+		return item
+	}
 
 	switch strings.ToLower(pack) {
 	case "distance", "arqueiro", "arqueira":
-		bow := Item{
-			ID:            fmt.Sprintf("starter_bow_%d", time.Now().UnixNano()),
-			Name:          "Arco de Aprendiz",
-			Attack:        14,
-			PhysicalAttack: 14,
-			MagicAttack:    0,
-			Hands:          2,
-			ValueGold:      10,
-			Defense:       0,
-			Rarity:        "Comum",
-			Weight:        25.0,
-			WeaponType:    WeaponTypeBow,
-			SlotType:      "mainhand",
-			SpecialEffect: "Arma Distância Inicial",
-		}
-		arrows := Item{
-			ID:            fmt.Sprintf("starter_arrows_%d", time.Now().UnixNano()),
-			Name:          "Flechas de Caça",
-			Attack:        4,
-			PhysicalAttack: 4,
-			MagicAttack:    0,
-			Hands:          1,
-			ValueGold:      5,
-			Defense:       0,
-			Rarity:        "Comum",
-			Weight:        5.0,
-			WeaponType:    WeaponTypeNone,
-			SlotType:      "ammo",
-			SpecialEffect: "Munição Inicial",
-		}
-		s.Inventory.Equipment.MainHand = &bow
-		s.Inventory.Equipment.Ammo = &arrows
+		s.Inventory.Equipment.MainHand = equip("Arco Curvo", "bow", "Arma de distância inicial")
+		s.Inventory.Equipment.Ammo = equip("Flechas de Madeira", "ammo", "Munição inicial")
 		s.Character.Vocation = "Arqueiro"
 
 	case "magic", "mago", "maga":
-		wand := Item{
-			ID:            fmt.Sprintf("starter_wand_%d", time.Now().UnixNano()),
-			Name:          "Cajado Rúnico",
-			Attack:        16,
-			PhysicalAttack: 0,
-			MagicAttack:    16,
-			Hands:          2,
-			ValueGold:      15,
-			Defense:       0,
-			Rarity:        "Comum",
-			Weight:        18.5,
-			WeaponType:    WeaponTypeWand,
-			SlotType:      "mainhand",
-			SpecialEffect: "Cajado Mágico Inicial",
+		s.Inventory.Equipment.MainHand = equip("Varinha do Aprendiz", "wand", "Arma mágica inicial")
+		book := GenerateItemFromTemplate("Livro: Bola de Fogo", "Raro", rng)
+		if book != nil {
+			book.SpecialEffect = "Ensina a magia Bola de Fogo"
+			s.Inventory.Backpack = append(s.Inventory.Backpack, *book)
 		}
-		book := Item{
-			ID:            fmt.Sprintf("skill_book_fireball_%d", time.Now().UnixNano()),
-			Name:          "Livro: Bola de Fogo",
-			Attack:        0,
-			PhysicalAttack: 0,
-			MagicAttack:    0,
-			Hands:          1,
-			ValueGold:      20,
-			Defense:       0,
-			Rarity:        "Incomum",
-			Weight:        10.0,
-			WeaponType:    WeaponTypeNone,
-			SlotType:      "skill_book",
-			SpecialEffect: "Ensina a magia Bola de Fogo",
-		}
-		s.Inventory.Equipment.MainHand = &wand
-		s.Inventory.Backpack = append(s.Inventory.Backpack, book)
 		s.Character.Vocation = "Mago"
 
-	default: // "melee", "guerreiro"
-		sword := Item{
-			ID:            fmt.Sprintf("starter_sword_%d", time.Now().UnixNano()),
-			Name:          "Espada do Aprendiz",
-			Attack:        12,
-			PhysicalAttack: 12,
-			MagicAttack:    0,
-			Hands:          1,
-			ValueGold:      10,
-			Defense:       4,
-			Rarity:        "Comum",
-			Weight:        32.0,
-			WeaponType:    WeaponTypeSword,
-			SlotType:      "mainhand",
-			SpecialEffect: "Arma Inicial Melee",
-		}
-		shield := Item{
-			ID:            fmt.Sprintf("starter_shield_%d", time.Now().UnixNano()),
-			Name:          "Escudo de Madeira",
-			Attack:        0,
-			PhysicalAttack: 0,
-			MagicAttack:    0,
-			Hands:          1,
-			ValueGold:      10,
-			Defense:       8,
-			Rarity:        "Comum",
-			Weight:        28.0,
-			WeaponType:    WeaponTypeShield,
-			SlotType:      "offhand",
-			SpecialEffect: "Escudo Inicial",
-		}
-		s.Inventory.Equipment.MainHand = &sword
-		s.Inventory.Equipment.OffHand = &shield
+	default: // melee / guerreiro
+		s.Inventory.Equipment.MainHand = equip("Espada do Aprendiz", "sword", "Arma melee inicial")
+		s.Inventory.Equipment.OffHand = equip("Broquel de Madeira", "shield", "Escudo inicial")
 		s.Character.Vocation = "Guerreiro"
 	}
 
+	s.Character.StateRevision++
+	s.syncPersistentExpeditionState()
 	if s.SaveInvFunc != nil {
 		_ = s.SaveInvFunc(s.Character.ID, s.Inventory)
 	}
@@ -1740,9 +1835,8 @@ func (s *GameSession) ChooseStarterPack(pack string) {
 	}
 
 	totalAtk, totalDef := s.CalculateStats()
-
 	s.broadcastMessage(CombatMessage{
-		Type:         "CHARACTER_UPDATE",
+		Type:         "STARTER_PACK_SELECTED",
 		Timestamp:    time.Now().Format("15:04:05"),
 		Character:    s.Character,
 		Inventory:    s.Inventory,
@@ -1750,7 +1844,7 @@ func (s *GameSession) ChooseStarterPack(pack string) {
 		TotalDefense: totalDef,
 		ActiveRegion: s.ActiveRegion,
 		ActiveStance: s.ActiveStance,
-		LogText:      fmt.Sprintf("✨ Kit Inicial configurado! Vocação: %s.", s.Character.Vocation),
+		LogText:      fmt.Sprintf("Pacote inicial [%s] selecionado com equipamentos canônicos.", pack),
 		IsActive:     s.IsExpeditionActive,
 	})
 }

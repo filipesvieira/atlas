@@ -25,6 +25,9 @@ interface Projectile {
 
 interface RenderMonster {
   id: string;
+  key?: string;
+  visualKey?: string;
+  isBoss?: boolean;
   name: string;
   level: number;
   health: number;
@@ -203,6 +206,10 @@ export class GameViewport {
     const ctx = this.ctx;
     if (!ctx) return;
 
+    // 0. Limpar totalmente o canvas e desativar antialiasing para nitidez cravada (sem borrado/smearing)
+    ctx.clearRect(0, 0, this.width, this.height);
+    ctx.imageSmoothingEnabled = false;
+
     // 1. Desenhar Cenário do Bioma Ativo
     let bgBuffer: HTMLCanvasElement;
     
@@ -240,7 +247,7 @@ export class GameViewport {
       }
     }
     
-    ctx.drawImage(bgBuffer, 0, 0);
+    ctx.drawImage(bgBuffer, 0, 0, this.width, this.height);
 
     // Desenhar partículas
     this.particles.forEach((p) => {
@@ -261,9 +268,30 @@ export class GameViewport {
     // 3. Desenhar Monstros
     this.monsters.forEach((m) => {
       const mobBob = Math.sin(this.heroWalkFrame * 0.8) * 2;
-      const mSprite = PixelArtRenderer.getMonsterTexture(m.name);
+      const isBoss = m.isBoss || false;
+      const spriteSize = isBoss ? 64 : 48;
+      const visualKey = m.visualKey || m.key || m.name;
+      const mSprite = PixelArtRenderer.getMonsterTexture(visualKey, spriteSize);
 
       ctx.save();
+
+      if (isBoss) {
+        // Sombra ampliada para Boss
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.beginPath();
+        ctx.ellipse(m.currentX, m.currentY + 22, 28, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Aura elemental pulsante ao redor do Boss
+        const auraRadius = 24 + Math.sin(Date.now() / 200) * 4;
+        const auraGrad = ctx.createRadialGradient(m.currentX, m.currentY + 10, 5, m.currentX, m.currentY + 10, auraRadius);
+        auraGrad.addColorStop(0, 'rgba(234, 88, 12, 0.6)');
+        auraGrad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+        ctx.fillStyle = auraGrad;
+        ctx.beginPath();
+        ctx.arc(m.currentX, m.currentY + 10, auraRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       // Se o monstro estiver em fuga (FLEE), espelhar horizontalmente
       if (m.state === 'FLEE') {
@@ -282,7 +310,8 @@ export class GameViewport {
 
       // Placa de Nome do Monstro (Com Clamping para nunca cortar nas bordas)
       const clampedX = Math.max(60, Math.min(440, m.currentX));
-      this.drawMonsterPlate(ctx, clampedX, m.currentY - 32 + mobBob, m);
+      const plateOffsetY = isBoss ? 40 : 32;
+      this.drawMonsterPlate(ctx, clampedX, m.currentY - plateOffsetY + mobBob, m);
     });
 
     // 4. Desenhar Projéteis (Magia / Flecha)
@@ -301,9 +330,10 @@ export class GameViewport {
     this.floatingTexts.forEach((ft) => {
       ctx.save();
       ctx.globalAlpha = Math.max(0, ft.alpha);
-      ctx.font = 'bold 13px monospace';
-      ctx.fillStyle = '#000000'; // Sombra
-      ctx.fillText(ft.text, ft.x + 1, ft.y + 1);
+      ctx.font = 'bold 12px monospace';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
+      ctx.strokeText(ft.text, ft.x, ft.y);
       ctx.fillStyle = ft.color;
       ctx.fillText(ft.text, ft.x, ft.y);
       ctx.restore();
@@ -319,7 +349,7 @@ export class GameViewport {
 
     const text = `${this.heroName} (Lv.${this.heroLevel})`;
     const textWidth = ctx.measureText(text).width;
-    const plateW = Math.max(48, textWidth + 8);
+    const plateW = Math.min(180, Math.max(48, textWidth + 8));
     const plateX = x - plateW / 2;
 
     // Fundo da Placa
@@ -331,7 +361,7 @@ export class GameViewport {
     ctx.fillText(text, x, y - 2);
 
     // Barra de HP
-    const barW = 40;
+    const barW = Math.min(60, plateW - 8);
     const barH = 3;
     const barX = x - barW / 2;
 
@@ -363,20 +393,30 @@ export class GameViewport {
     ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
 
-    const text = `${m.name} (Lv.${m.level})`;
+    const isBoss = m.isBoss;
+    const prefix = isBoss ? '👑 ' : '';
+    const text = `${prefix}${m.name} (Lv.${m.level})`;
     const textWidth = ctx.measureText(text).width;
 
-    // Fundo da Placa
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(x - Math.max(24, textWidth / 2 + 4), y - 12, Math.max(48, textWidth + 8), 20);
+    // Fundo da Placa (Dourado/Rubro para Boss, Preto transparente para normal)
+    ctx.fillStyle = isBoss ? 'rgba(69, 10, 10, 0.9)' : 'rgba(0, 0, 0, 0.75)';
+    const boxW = Math.min(180, Math.max(isBoss ? 64 : 48, textWidth + 10));
+    const boxX = x - boxW / 2;
+    ctx.fillRect(boxX, y - 12, boxW, 20);
 
-    // Nome em Vermelho
-    ctx.fillStyle = '#f87171';
+    if (isBoss) {
+      ctx.strokeStyle = '#fbbf24'; // Borda dourada para Boss
+      ctx.lineWidth = 1;
+      ctx.strokeRect(boxX, y - 12, boxW, 20);
+    }
+
+    // Nome em Amarelo Dourado para Boss, Vermelho para mob normal
+    ctx.fillStyle = isBoss ? '#fde047' : '#f87171';
     ctx.fillText(text, x, y - 2);
 
-    // Barra de HP
-    const barW = 40;
-    const barH = 4;
+    // Barra de HP (Mais larga para Boss)
+    const barW = Math.min(120, Math.max(36, boxW - 8));
+    const barH = isBoss ? 5 : 4;
     const barX = x - barW / 2;
     const barY = y + 2;
 
@@ -410,6 +450,10 @@ export class GameViewport {
       if (msg.character.vocation || msg.character.origin) {
         this.vocation = (msg.character.vocation || msg.character.origin).toLowerCase();
       }
+
+      if (msg.character.active_region || msg.character.activeRegion) {
+        this.regionId = msg.character.active_region || msg.character.activeRegion;
+      }
     }
 
     if (msg.is_active !== undefined) {
@@ -417,8 +461,8 @@ export class GameViewport {
     }
 
     // 2. Atualizar Bioma da Região
-    if (msg.active_region) {
-      this.regionId = msg.active_region;
+    if (msg.active_region || msg.region_id || msg.region || msg.regionId || msg.activeRegion) {
+      this.regionId = msg.active_region || msg.region_id || msg.region || msg.regionId || msg.activeRegion;
     }
 
     // 3. Sincronizar Monstros Ativos
@@ -429,8 +473,23 @@ export class GameViewport {
       const mobId = mob.id || `mob_${idx}`;
       activeIds.add(mobId);
 
-      const gridX = mob.grid_x ?? (14 - idx * 2);
-      const gridY = mob.grid_y ?? (2 + idx * 2);
+      const vKey = (mob.visual_key || mob.key || mob.name || '').toLowerCase();
+      if (vKey.startsWith('frozen') || vKey.includes('quimera') || vKey.includes('golem') || vKey.includes('espectro') || vKey.includes('zumbi') || vKey.includes('santuario')) {
+        this.regionId = 'frozen';
+      } else if (vKey.startsWith('rogartes') || vKey.includes('dementor') || vKey.includes('trasgo') || vKey.includes('voldemorte')) {
+        this.regionId = 'rogartes';
+      } else if (vKey.startsWith('esgotos') || vKey.includes('ninja') || vKey.includes('rato') || vKey.includes('destroyer')) {
+        this.regionId = 'esgotos';
+      } else if (vKey.startsWith('orcruins') || vKey.includes('orc') || vKey.includes('esqueleto')) {
+        this.regionId = 'orcruins';
+      } else if (vKey.startsWith('chapolin') || vKey.includes('tripa') || vKey.includes('alma_negra') || vKey.includes('bandido')) {
+        this.regionId = 'chapolin';
+      } else if (vKey.startsWith('shereque') || vKey.includes('burro')) {
+        this.regionId = 'shereque';
+      }
+
+      const gridX = mob.grid_x ?? (14 - (activeMonsters.length - 1 - idx) * 2);
+      const gridY = mob.grid_y ?? 4;
 
       // Converter coordenadas de grid (32px por tile) para pixels
       const targetPixelX = gridX * 32 + 16;
@@ -440,6 +499,9 @@ export class GameViewport {
       if (!m) {
         m = {
           id: mobId,
+          key: mob.key,
+          visualKey: mob.visual_key,
+          isBoss: mob.is_boss,
           name: mob.name || 'Monstro',
           level: mob.level || 1,
           health: mob.health ?? 100,
@@ -458,6 +520,9 @@ export class GameViewport {
         if (mob.health < m.health) {
           m.hitFlashTimer = 8;
         }
+        m.key = mob.key || m.key;
+        m.visualKey = mob.visual_key || m.visualKey;
+        m.isBoss = mob.is_boss ?? m.isBoss;
         m.health = mob.health ?? m.health;
         m.maxHealth = mob.max_health ?? m.maxHealth;
         m.state = mob.state || m.state;

@@ -24,8 +24,25 @@ CREATE TABLE IF NOT EXISTS characters (
     mana INT DEFAULT 50,
     max_mana INT DEFAULT 50,
     gold_bank BIGINT DEFAULT 0,
+    origin VARCHAR(30) DEFAULT 'wanderer',
+    str INT DEFAULT 5,
+    dex INT DEFAULT 5,
+    int_stat INT DEFAULT 5,
+    vit INT DEFAULT 5,
+    unspent_points INT DEFAULT 0,
+    masteries JSONB DEFAULT '{}'::jsonb,
+    learned_skills JSONB DEFAULT '[]'::jsonb,
+    active_skills JSONB DEFAULT '[]'::jsonb,
+    unlocked_regions JSONB DEFAULT '["forest", "shereque", "chapolin"]'::jsonb,
+    is_expedition_active BOOLEAN DEFAULT false,
+    active_region VARCHAR(50) DEFAULT 'forest',
+    active_stance VARCHAR(20) DEFAULT 'balanced',
+    current_stage INT DEFAULT 1,
+    is_boss_stage BOOLEAN DEFAULT false,
+    state_revision BIGINT DEFAULT 0,
     last_login TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    last_logout TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    last_logout TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    offline_claimed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Inventário e Equipamentos (JSONB para suportar atributos procedurais flexíveis)
@@ -44,5 +61,19 @@ CREATE TABLE IF NOT EXISTS expedition_logs (
     xp_gained BIGINT NOT NULL,
     gold_gained BIGINT NOT NULL,
     items_found JSONB DEFAULT '[]'::jsonb,
+    report_key VARCHAR(64),
+    period_start TIMESTAMP WITH TIME ZONE,
+    period_end TIMESTAMP WITH TIME ZONE,
+    region_id VARCHAR(50),
+    region_name VARCHAR(120),
+    level_before INT,
+    level_after INT,
+    kills INT DEFAULT 0,
+    efficiency DOUBLE PRECISION DEFAULT 0,
+    state_revision BIGINT DEFAULT 0,
+    report_payload JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS expedition_logs_report_key_uidx
+    ON expedition_logs(report_key) WHERE report_key IS NOT NULL;

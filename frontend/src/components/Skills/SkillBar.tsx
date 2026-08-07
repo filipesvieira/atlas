@@ -15,6 +15,10 @@ interface SkillBarProps {
 }
 
 export function SkillBar({ masteries = {}, learnedSkills = [], activeSkills = [], onToggleSkill }: SkillBarProps) {
+  const safeLearnedSkills = learnedSkills || [];
+  const safeActiveSkills = activeSkills || [];
+  const safeMasteries = masteries || {};
+
   const getLevel = (tries: number | undefined) => {
     if (!tries) return 10;
     return 10 + Math.floor(Math.pow(tries, 0.35) * 3);
@@ -73,24 +77,24 @@ export function SkillBar({ masteries = {}, learnedSkills = [], activeSkills = []
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-          <MasteryRow label="⚔️ Espada" tries={masteries.sword_mastery} color="text-amber-400" />
-          <MasteryRow label="🪓 Machado" tries={masteries.axe_mastery} color="text-amber-400" />
-          <MasteryRow label="🛡️ Escudo" tries={masteries.shield_mastery} color="text-sky-400" />
-          <MasteryRow label="🏹 Distância" tries={masteries.distance_mastery} color="text-emerald-400" />
-          <MasteryRow label="⛏️ Clava" tries={masteries.club_mastery} color="text-amber-400" />
-          <MasteryRow label="🔮 Magia" tries={masteries.magic_mastery} color="text-fuchsia-400" />
+          <MasteryRow label="⚔️ Espada" tries={safeMasteries.sword_mastery} color="text-amber-400" />
+          <MasteryRow label="🪓 Machado" tries={safeMasteries.axe_mastery} color="text-amber-400" />
+          <MasteryRow label="🛡️ Escudo" tries={safeMasteries.shield_mastery} color="text-sky-400" />
+          <MasteryRow label="🏹 Distância" tries={safeMasteries.distance_mastery} color="text-emerald-400" />
+          <MasteryRow label="⛏️ Clava" tries={safeMasteries.club_mastery} color="text-amber-400" />
+          <MasteryRow label="🔮 Magia" tries={safeMasteries.magic_mastery} color="text-fuchsia-400" />
         </div>
       </div>
 
       {/* Habilidades Aprendidas via Skill Books */}
       <div className="space-y-1.5">
         <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-          Habilidades Aprendidas ({learnedSkills.length})
+          Habilidades Aprendidas ({safeLearnedSkills.length})
         </div>
 
-        {learnedSkills.length > 0 ? (
+        {safeLearnedSkills.length > 0 ? (
           <div className="grid grid-cols-2 gap-2">
-            {learnedSkills.map((skillKey) => {
+            {safeLearnedSkills.map((skillKey) => {
               const skill = skillsMap[skillKey] || {
                 name: skillKey,
                 icon: '📜',
@@ -98,7 +102,7 @@ export function SkillBar({ masteries = {}, learnedSkills = [], activeSkills = []
                 desc: 'Habilidade Mística',
               };
 
-              const isActive = activeSkills.includes(skillKey);
+              const isActive = safeActiveSkills.includes(skillKey);
 
               return (
                 <div
