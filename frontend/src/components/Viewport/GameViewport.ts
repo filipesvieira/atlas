@@ -245,6 +245,13 @@ export class GameViewport {
 
     // 3. Desenhar Monstros
     this.monsters.forEach((m) => {
+      // Culling: Se o monstro estiver completamente fora do canvas à direita, não processa nem desenha
+      if (m.currentX > this.width + 30) {
+        return;
+      }
+
+      // Fade-In suave conforme o monstro entra na arena
+      const entranceAlpha = Math.max(0, Math.min(1, (this.width - m.currentX + 32) / 48));
       const mobBob = Math.sin(this.heroWalkFrame * 0.8) * 2;
       const isBoss = m.isBoss || false;
       const spriteSize = isBoss ? 64 : 48;
@@ -252,14 +259,15 @@ export class GameViewport {
       const mSprite = PixelArtRenderer.getMonsterTexture(visualKey, spriteSize);
 
       ctx.save();
+      ctx.globalAlpha = entranceAlpha;
+
+      // Sombra realista no solo
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(m.currentX, m.currentY + (isBoss ? 24 : 16), isBoss ? 24 : 16, isBoss ? 7 : 5, 0, 0, Math.PI * 2);
+      ctx.fill();
 
       if (isBoss) {
-        // Sombra ampliada para Boss
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.beginPath();
-        ctx.ellipse(m.currentX, m.currentY + 22, 28, 8, 0, 0, Math.PI * 2);
-        ctx.fill();
-
         // Aura elemental pulsante ao redor do Boss
         const auraRadius = 24 + Math.sin(Date.now() / 200) * 4;
         const auraGrad = ctx.createRadialGradient(m.currentX, m.currentY + 10, 5, m.currentX, m.currentY + 10, auraRadius);
@@ -279,17 +287,19 @@ export class GameViewport {
       } else {
         // Efeito de flash/piscar quando leva dano
         if (m.hitFlashTimer > 0) {
-          ctx.globalAlpha = 0.7;
+          ctx.globalAlpha = entranceAlpha * 0.65;
         }
         ctx.drawImage(mSprite, m.currentX - spriteSize / 2, m.currentY - spriteSize / 2 + mobBob);
       }
 
       ctx.restore();
 
-      // Placa de Nome do Monstro (Com Clamping para nunca cortar nas bordas)
-      const clampedX = Math.max(60, Math.min(440, m.currentX));
-      const plateOffsetY = isBoss ? 40 : 32;
-      this.drawMonsterPlate(ctx, clampedX, m.currentY - plateOffsetY + mobBob, m);
+      // Placa de Nome e Barra de Vida: Ancorada na cabeça do monstro com fade-in suave
+      // Só desenha quando o monstro já estiver entrando no campo de visão (sem clamping que empilha na borda)
+      if (m.currentX <= this.width + 10) {
+        const plateOffsetY = isBoss ? 42 : 30;
+        this.drawMonsterPlate(ctx, m.currentX, m.currentY - plateOffsetY + mobBob, m, entranceAlpha);
+      }
     });
 
     // 4. Desenhar Projéteis (Magia / Flecha)
@@ -330,9 +340,14 @@ export class GameViewport {
     const plateW = Math.min(180, Math.max(48, textWidth + 8));
     const plateX = x - plateW / 2;
 
-    // Fundo da Placa
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    // Fundo da Placa elegante translúcido
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
     ctx.fillRect(plateX, y - 12, plateW, 26);
+
+    // Borda sutil
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.6)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(plateX, y - 12, plateW, 26);
 
     // Nome em Dourado
     ctx.fillStyle = '#fbbf24';
@@ -343,7 +358,7 @@ export class GameViewport {
     const barH = 3;
     const barX = x - barW / 2;
 
-    ctx.fillStyle = '#1e293b';
+    ctx.fillStyle = '#0f172a';
     ctx.fillRect(barX, y + 2, barW, barH);
 
     const hpPct = this.heroMaxHealth > 0 ? Math.max(0, this.heroHealth / this.heroMaxHealth) : 0;
@@ -354,7 +369,7 @@ export class GameViewport {
     ctx.fillRect(barX, y + 2, hpFillW, barH);
 
     // Barra de Mana
-    ctx.fillStyle = '#1e293b';
+    ctx.fillStyle = '#0f172a';
     ctx.fillRect(barX, y + 7, barW, barH);
 
     const manaPct = this.heroMaxMana > 0 ? Math.max(0, this.heroMana / this.heroMaxMana) : 0;
@@ -366,8 +381,9 @@ export class GameViewport {
     ctx.restore();
   }
 
-  private drawMonsterPlate(ctx: CanvasRenderingContext2D, x: number, y: number, m: RenderMonster) {
+  private drawMonsterPlate(ctx: CanvasRenderingContext2D, x: number, y: number, m: RenderMonster, alpha: number = 1) {
     ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
     ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
 
@@ -376,29 +392,33 @@ export class GameViewport {
     const text = `${prefix}${m.name} (Lv.${m.level})`;
     const textWidth = ctx.measureText(text).width;
 
-    // Fundo da Placa (Dourado/Rubro para Boss, Preto transparente para normal)
-    ctx.fillStyle = isBoss ? 'rgba(69, 10, 10, 0.9)' : 'rgba(0, 0, 0, 0.75)';
-    const boxW = Math.min(180, Math.max(isBoss ? 64 : 48, textWidth + 10));
+    // Fundo da Placa (Dourado/Rubro para Boss, Dark Slate moderno para monstro comum)
+    ctx.fillStyle = isBoss ? 'rgba(69, 10, 10, 0.90)' : 'rgba(15, 23, 42, 0.85)';
+    const boxW = Math.min(200, Math.max(isBoss ? 64 : 44, textWidth + 8));
     const boxX = x - boxW / 2;
-    ctx.fillRect(boxX, y - 12, boxW, 20);
+    ctx.fillRect(boxX, y - 11, boxW, isBoss ? 21 : 18);
 
     if (isBoss) {
-      ctx.strokeStyle = '#fbbf24'; // Borda dourada para Boss
+      ctx.strokeStyle = '#fbbf24'; // Borda dourada majestosa para Boss
       ctx.lineWidth = 1;
-      ctx.strokeRect(boxX, y - 12, boxW, 20);
+      ctx.strokeRect(boxX, y - 11, boxW, 21);
+    } else {
+      ctx.strokeStyle = 'rgba(51, 65, 85, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(boxX, y - 11, boxW, 18);
     }
 
-    // Nome em Amarelo Dourado para Boss, Vermelho para mob normal
-    ctx.fillStyle = isBoss ? '#fde047' : '#f87171';
+    // Nome em Amarelo Dourado para Boss, Vermelho Coral suave para normal
+    ctx.fillStyle = isBoss ? '#fde047' : '#fca5a5';
     ctx.fillText(text, x, y - 2);
 
     // Barra de HP (Mais larga para Boss)
-    const barW = Math.min(120, Math.max(36, boxW - 8));
-    const barH = isBoss ? 5 : 4;
+    const barW = Math.min(140, Math.max(34, boxW - 8));
+    const barH = isBoss ? 5 : 3;
     const barX = x - barW / 2;
     const barY = y + 2;
 
-    ctx.fillStyle = '#1e293b'; // Fundo escuro da barra
+    ctx.fillStyle = '#0f172a'; // Fundo escuro
     ctx.fillRect(barX, barY, barW, barH);
 
     const pct = m.maxHealth > 0 ? Math.max(0, m.health / m.maxHealth) : 0;

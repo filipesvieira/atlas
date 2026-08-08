@@ -117,17 +117,8 @@ func offlineStats(input OfflineSimulationInput) (attack, defense, maxHealth int,
 	return attack, defense, maxHealth, attackSpeed
 }
 
-func offlineKillXP(playerLevel, monsterLevel int) int64 {
-	rawXP := float64(60 + monsterLevel*30)
-	levelDiff := playerLevel - monsterLevel
-	multiplier := 1.0
-	if levelDiff > 3 {
-		multiplier = 1.0 - (0.15 * float64(levelDiff-3))
-		if multiplier < 0.10 {
-			multiplier = 0.10
-		}
-	}
-	return int64(math.Round(rawXP * multiplier))
+func offlineKillXP(playerLevel, monsterLevel, maxHealth int, isBoss bool) int64 {
+	return CalculateKillXP(playerLevel, monsterLevel, maxHealth, isBoss)
 }
 
 func offlineCombatEfficiency(playerDefense, maxHealth int, dps, lifesteal float64, vitality int, stance string, monster Monster) float64 {
@@ -312,10 +303,17 @@ func CalculateOfflineProgress(input OfflineSimulationInput) OfflineResult {
 			efficiencySum += waveEfficiencies[i]
 			efficiencySamples++
 			result.Kills++
-			xpGained := offlineKillXP(simulatedLevel, monster.Level)
+			mHealth := monster.MaxHealth
+			if mHealth <= 0 {
+				mHealth = monster.Health
+			}
+			xpGained := offlineKillXP(simulatedLevel, monster.Level, mHealth, monster.IsBoss)
 			result.XPGained += xpGained
 			simulatedExperience += xpGained
 			baseGold := float64(15 + rng.Intn(25))
+			if monster.IsBoss {
+				baseGold = float64(80 + rng.Intn(120))
+			}
 			result.GoldGained += int64(math.Round(baseGold * (1.0 + goldBonus/100.0)))
 
 			dropChance := 0.35

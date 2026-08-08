@@ -45,7 +45,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 			{Key: "forest_wolf", VisualKey: "forest_wolf", Name: "Lobo Selvagem", Level: 3, Health: 90, MaxHealth: 90, Attack: 11, AttackType: AttackTypeMelee},
 			{Key: "forest_spider", VisualKey: "forest_spider", Name: "Aranha de Espinhos", Level: 4, Health: 110, MaxHealth: 110, Attack: 13, AttackType: AttackTypeRanged},
 		},
-		Boss: Monster{Key: "forest_boss_bear", VisualKey: "forest_boss_bear", IsBoss: true, Name: "Urso Ranzinza dos Carinhosos 🐻", Level: 5, Health: 350, MaxHealth: 350, Attack: 22, AttackType: AttackTypeMelee},
+		Boss: Monster{Key: "forest_boss_bear", VisualKey: "forest_boss_bear", IsBoss: true, Name: "Urso Ranzinza dos Carinhosos 🐻", Level: 5, Health: 520, MaxHealth: 520, Attack: 28, AttackType: AttackTypeMelee},
 	},
 	"shereque": {
 		ID:                 "shereque",
@@ -64,7 +64,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 			{Key: "shereque_ogre", VisualKey: "shereque_ogre", Name: "Ogre Verde", Level: 2, Health: 80, MaxHealth: 80, Attack: 9, AttackType: AttackTypeMelee},
 			{Key: "shereque_donkey", VisualKey: "shereque_donkey", Name: "Burro Falante", Level: 4, Health: 100, MaxHealth: 100, Attack: 12, AttackType: AttackTypeMelee},
 		},
-		Boss: Monster{Key: "shereque_boss_fiona", VisualKey: "shereque_boss_fiona", IsBoss: true, Name: "Fiona Arrazadora 🐸", Level: 5, Health: 380, MaxHealth: 380, Attack: 24, AttackType: AttackTypeMelee},
+		Boss: Monster{Key: "shereque_boss_fiona", VisualKey: "shereque_boss_fiona", IsBoss: true, Name: "Fiona Arrazadora 🐸", Level: 5, Health: 560, MaxHealth: 560, Attack: 30, AttackType: AttackTypeMelee},
 	},
 	"chapolin": {
 		ID:                 "chapolin",
@@ -84,7 +84,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 			{Key: "chapolin_tripa", VisualKey: "chapolin_tripa", Name: "Tripa Seca", Level: 4, Health: 105, MaxHealth: 105, Attack: 13, AttackType: AttackTypeMelee},
 			{Key: "chapolin_bandit", VisualKey: "chapolin_bandit", Name: "Bandido dos Ermos", Level: 4, Health: 110, MaxHealth: 110, Attack: 14, AttackType: AttackTypeMelee},
 		},
-		Boss: Monster{Key: "chapolin_boss_alma", VisualKey: "chapolin_boss_alma", IsBoss: true, Name: "Alma Negra de Greiscu 🏴‍☠️", Level: 5, Health: 400, MaxHealth: 400, Attack: 26, AttackType: AttackTypeMelee},
+		Boss: Monster{Key: "chapolin_boss_alma", VisualKey: "chapolin_boss_alma", IsBoss: true, Name: "Alma Negra de Greiscu 🏴‍☠️", Level: 5, Health: 600, MaxHealth: 600, Attack: 32, AttackType: AttackTypeMelee},
 	},
 
 	// ─── TIER 2 (LV. 5–19) ──────────────────────────────────────────────────
@@ -108,7 +108,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 			{Key: "orcruins_orc_archer", VisualKey: "orcruins_orc_archer", Name: "Orc Arqueiro", Level: 9, Health: 185, MaxHealth: 185, Attack: 22, AttackType: AttackTypeRanged},
 			{Key: "orcruins_berserker", VisualKey: "orcruins_berserker", Name: "Orc Berserker", Level: 10, Health: 210, MaxHealth: 210, Attack: 26, AttackType: AttackTypeMelee},
 		},
-		Boss: Monster{Key: "orcruins_boss_skeleton", VisualKey: "orcruins_boss_skeleton", IsBoss: true, Name: "Esquelético Pacato 💀", Level: 12, Health: 600, MaxHealth: 600, Attack: 40, AttackType: AttackTypeRanged},
+		Boss: Monster{Key: "orcruins_boss_skeleton", VisualKey: "orcruins_boss_skeleton", IsBoss: true, Name: "Esquelético Pacato 💀", Level: 12, Health: 1100, MaxHealth: 1100, Attack: 52, AttackType: AttackTypeRanged},
 	},
 	"esgotos": {
 		ID:                 "esgotos",
@@ -127,7 +127,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 			{Key: "esgotos_ninja", VisualKey: "esgotos_ninja", Name: "Ninja do Clã do Pé", Level: 7, Health: 150, MaxHealth: 150, Attack: 17, AttackType: AttackTypeRanged},
 			{Key: "esgotos_rat", VisualKey: "esgotos_rat", Name: "Rato Mutante", Level: 10, Health: 200, MaxHealth: 200, Attack: 23, AttackType: AttackTypeMelee},
 		},
-		Boss: Monster{Key: "esgotos_boss_destroyer", VisualKey: "esgotos_boss_destroyer", IsBoss: true, Name: "Destruidor Ranzinza 🥷", Level: 12, Health: 650, MaxHealth: 650, Attack: 42, AttackType: AttackTypeMelee},
+		Boss: Monster{Key: "esgotos_boss_destroyer", VisualKey: "esgotos_boss_destroyer", IsBoss: true, Name: "Destruidor Ranzinza 🥷", Level: 12, Health: 1200, MaxHealth: 1200, Attack: 55, AttackType: AttackTypeMelee},
 	},
 	"planalto": {
 		ID:                 "planalto",
@@ -147,7 +147,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 			{Key: "planalto_patriota", VisualKey: "planalto_patriota", Name: "Patriota do Caminhão 🇧🇷", Level: 10, Health: 195, MaxHealth: 195, Attack: 22, AttackType: AttackTypeRanged},
 			{Key: "planalto_pulica", VisualKey: "planalto_pulica", Name: "Puliça de Choque 👮", Level: 12, Health: 235, MaxHealth: 235, Attack: 26, AttackType: AttackTypeMelee},
 		},
-		Boss: Monster{Key: "planalto_boss_xandaum", VisualKey: "planalto_boss_xandaum", IsBoss: true, Name: "Xandaum, o Soberano da Toga ⚖️", Level: 16, Health: 800, MaxHealth: 800, Attack: 48, AttackType: AttackTypeRanged},
+		Boss: Monster{Key: "planalto_boss_xandaum", VisualKey: "planalto_boss_xandaum", IsBoss: true, Name: "Xandaum, o Soberano da Toga ⚖️", Level: 16, Health: 1850, MaxHealth: 1850, Attack: 72, AttackType: AttackTypeRanged},
 	},
 
 	// ─── TIER 3 (LV. 12–20) ─────────────────────────────────────────────────
@@ -168,7 +168,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 			{Key: "rogartes_dementor", VisualKey: "rogartes_dementor", Name: "Dementador das Sombras", Level: 13, Health: 260, MaxHealth: 260, Attack: 29, AttackType: AttackTypeRanged},
 			{Key: "rogartes_troll", VisualKey: "rogartes_troll", Name: "Trasgo das Cavernas", Level: 17, Health: 350, MaxHealth: 350, Attack: 36, AttackType: AttackTypeMelee},
 		},
-		Boss: Monster{Key: "rogartes_boss_darkmage", VisualKey: "rogartes_boss_darkmage", IsBoss: true, Name: "Voldemorte sem Nariz 🪄", Level: 20, Health: 1000, MaxHealth: 1000, Attack: 65, AttackType: AttackTypeRanged},
+		Boss: Monster{Key: "rogartes_boss_darkmage", VisualKey: "rogartes_boss_darkmage", IsBoss: true, Name: "Voldemorte sem Nariz 🪄", Level: 20, Health: 2600, MaxHealth: 2600, Attack: 98, AttackType: AttackTypeRanged},
 	},
 
 	// ─── TIER 4 (LV. 20–35) ─────────────────────────────────────────────────
@@ -191,7 +191,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 			{Key: "frozen_golem", VisualKey: "frozen_golem", Name: "Golem de Gelo", Level: 28, Health: 530, MaxHealth: 530, Attack: 52, AttackType: AttackTypeMelee},
 			{Key: "frozen_chimera", VisualKey: "frozen_chimera", Name: "Quimera do Frost", Level: 33, Health: 680, MaxHealth: 680, Attack: 62, AttackType: AttackTypeRanged},
 		},
-		Boss: Monster{Key: "frozen_boss_master", VisualKey: "frozen_boss_master", IsBoss: true, Name: "Mestre do Santuário 🌟", Level: 35, Health: 1800, MaxHealth: 1800, Attack: 90, AttackType: AttackTypeRanged},
+		Boss: Monster{Key: "frozen_boss_master", VisualKey: "frozen_boss_master", IsBoss: true, Name: "Mestre do Santuário 🌟", Level: 35, Health: 4800, MaxHealth: 4800, Attack: 155, AttackType: AttackTypeRanged},
 	},
 
 	// ─── TIER 5 (LV. 35–99) ─────────────────────────────────────────────────
@@ -217,7 +217,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 			{Key: "abyss_scorpion", VisualKey: "abyss_scorpion", Name: "Escorpião Infernal", Level: 70, Health: 1950, MaxHealth: 1950, Attack: 155, AttackType: AttackTypeMelee},
 			{Key: "abyss_flame_lord", VisualKey: "abyss_flame_lord", Name: "Lorde das Chamas", Level: 78, Health: 2400, MaxHealth: 2400, Attack: 175, AttackType: AttackTypeRanged},
 		},
-		Boss: Monster{Key: "abyss_boss_avenger", VisualKey: "abyss_boss_avenger", IsBoss: true, Name: "Vingador de Chifres 🐲", Level: 85, Health: 4500, MaxHealth: 4500, Attack: 210, AttackType: AttackTypeRanged},
+		Boss: Monster{Key: "abyss_boss_avenger", VisualKey: "abyss_boss_avenger", IsBoss: true, Name: "Vingador de Chifres 🐲", Level: 85, Health: 12500, MaxHealth: 12500, Attack: 340, AttackType: AttackTypeRanged},
 	},
 }
 

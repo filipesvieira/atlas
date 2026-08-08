@@ -130,17 +130,23 @@ Chada região possui **5 Fases (Stages)**:
 
 ### O Mapa do Mundo (8 Regiões Geek & Biomas Visuais)
 
-| Tier | Região ID | Nome da Região | Boss Final | Visual / Bioma Renderizado (`PixelArtRenderer`) |
-|---|---|---|---|---|
-| **Tier 1** | `forest` | 🌲 **Floresta dos Aprendizes** | **Urso Ranzinza 🐻** | Crepúsculo ensolarado, árvores verdes, solo de terra. |
-| **Tier 1** | `shereque` | 🍞 **Vila do Shereque** | **Fiona Arrazadora 🐸** | Pântano tenebroso, lama esmeralda, cogumelos gigantes. |
-| **Tier 1** | `chapolin` | 🎩 **Vila do Chapolin** | **Alma Negra 🏴‍☠️** | Praia tropical ao pôr do sol, mar azul, coqueiros. |
-| **Tier 2** | `orcruins` | 🏰 **Castelo de Greiscu** | **Esquelético Pacato 💀** | Noite noturna, lua púrpura, ruínas de castelo e lajotas. |
-| **Tier 2** | `esgotos` | 🥷 **Esgotos Tartaruga** | **Destruidor Ranzinza 🥷** | Subterrâneo de tijolos escuros, tubos e líquido verde neon. |
-| **Tier 2** | `planalto` | 🏛️ **Planalto dos Três Poderes** | **Xandaum, o Guardião ⚖️** | Esplanada monumental, mármore branco e céu limpo. |
-| **Tier 3** | `rogartes` | 🧙‍♂️ **Escola de Rogartes** | **Voldemorte sem Nariz 🪄** | Salão noturno místico, estrelas piscando, círculo rúnico. |
-| **Tier 4** | `frozen` | 🛡️ **Santuário de Atenas** | **Mestre do Santuário 🌟** | Picos congelados, geleira azul e Aurora Borealis no céu. |
-| **Tier 5** | `abyss` | 🌋 **Caverna do Dragão Perdido** | **Vingador de Chifres 🐲** | Caverna vulcânica, rios de lava fervente, obsidiana. |
+| Tier | ID | Região | Boss & Nível | HP do Boss | Ataque do Boss | Atmosfera Cênica |
+|---|---|---|---|---|---|---|
+| **Tier 1** | `forest` | 🌲 **Floresta dos Aprendizes** | **Urso Ranzinza 🐻** (Nv. 5) | **520 HP** | **28 Atk** | Trilha de terra, floresta densa, montanhas. |
+| **Tier 1** | `shereque` | 🍞 **Vila do Shereque** | **Fiona Arrazadora 🐸** (Nv. 5) | **560 HP** | **30 Atk** | Pântano verde, fogueira, chão de lama. |
+| **Tier 1** | `chapolin` | 🎩 **Vila do Chapolin** | **Alma Negra 🏴‍☠️** (Nv. 5) | **600 HP** | **32 Atk** | Praia tropical ao pôr do sol, mar azul, coqueiros. |
+| **Tier 2** | `orcruins` | 🏰 **Castelo de Greiscu** | **Esquelético Pacato 💀** (Nv. 12) | **1.100 HP** | **52 Atk** | Noite noturna, lua púrpura, ruínas de castelo. |
+| **Tier 2** | `esgotos` | 🥷 **Esgotos Tartaruga** | **Destruidor Ranzinza 🥷** (Nv. 12) | **1.200 HP** | **55 Atk** | Subterrâneo de tijolos escuros, líquido verde neon. |
+| **Tier 2** | `planalto` | 🏛️ **Planalto dos Três Poderes** | **Xandaum, o Soberano ⚖️** (Nv. 16) | **1.850 HP** | **72 Atk** | Esplanada monumental, Congresso, espelho d'água. |
+| **Tier 3** | `rogartes` | 🧙‍♂️ **Escola de Rogartes** | **Voldemorte sem Nariz 🪄** (Nv. 20) | **2.600 HP** | **98 Atk** | Salão noturno místico, estrelas piscando. |
+| **Tier 4** | `frozen` | 🛡️ **Santuário de Atenas** | **Mestre do Santuário 🌟** (Nv. 35) | **4.800 HP** | **155 Atk** | Picos congelados, geleira azul, Aurora Borealis. |
+| **Tier 5** | `abyss` | 🌋 **Caverna do Dragão** | **Vingador de Chifres 🐲** (Nv. 85) | **12.500 HP** | **340 Atk** | Caverna vulcânica, rios de lava, obsidiana. |
+
+### Cálculo Dinâmico de XP
+O XP recebido por monstro/boss é calculado via:
+$$\text{XP}_{final} = (\text{BaseXP} \times \text{NívelMonstro}) \times \text{FatorGlobal}$$
+- **Multiplicadores**: Bosses concedem 3.5x XP base.
+- **Scaling**: O nível do personagem atua como redutor se exceder o nível do monstro em +10.
 
 ---
 

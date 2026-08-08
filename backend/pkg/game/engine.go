@@ -155,6 +155,41 @@ func GetRequiredXPForLevel(level int) int64 {
 	return int64(math.Floor(250.0 * math.Pow(float64(level), 1.95)))
 }
 
+// CalculateKillXP calcula a experiência ganha ao abater um monstro seguindo
+// os pilares clássicos de MMORPG: base proporcional ao nível e HP do monstro,
+// multiplicador de 2.5x para Bosses, bônus de desafio heroico (underdog) e
+// penalidade suave para monstros triviais de baixo nível.
+func CalculateKillXP(playerLevel, monsterLevel, maxHealth int, isBoss bool) int64 {
+	if monsterLevel < 1 {
+		monsterLevel = 1
+	}
+	if maxHealth < 10 {
+		maxHealth = 10
+	}
+	baseXP := float64(monsterLevel*45) + float64(maxHealth)/6.0
+	if isBoss {
+		baseXP *= 2.5
+	}
+	levelDiff := monsterLevel - playerLevel
+	multiplier := 1.0
+	if levelDiff > 0 {
+		// Bônus de Desafio: +10% por nível de diferença acima (teto de +80% / 1.8x)
+		bonus := float64(levelDiff) * 0.10
+		if bonus > 0.80 {
+			bonus = 0.80
+		}
+		multiplier += bonus
+	} else if levelDiff < -2 {
+		// Penalidade Suave: -15% por nível de diferença além de 2 (piso de 5%)
+		penalty := float64(-levelDiff-2) * 0.15
+		multiplier = 1.0 - penalty
+		if multiplier < 0.05 {
+			multiplier = 0.05
+		}
+	}
+	return int64(math.Max(1.0, math.Round(baseXP*multiplier)))
+}
+
 func NewGameSession(char *CharacterData, inv *InventoryData, saveInv func(string, *InventoryData) error, saveChar func(*CharacterData) error, getLoot func(int) *Item, getMonster func(string, int) Monster) *GameSession {
 	if inv == nil {
 		inv = &InventoryData{
@@ -924,18 +959,12 @@ func (s *GameSession) processTick() {
 		if mob.Health > 0 {
 			aliveMonsters = append(aliveMonsters, mob)
 		} else {
-			// Recompensa XP & Ouro
-			rawXP := float64(60 + mob.Level*30)
-			levelDiff := s.Character.Level - mob.Level
-			xpMult := 1.0
-			if levelDiff > 3 {
-				xpMult = 1.0 - (0.15 * float64(levelDiff-3))
-				if xpMult < 0.10 {
-					xpMult = 0.10
-				}
-			}
-			xpGained := int64(rawXP * xpMult)
+			// Recompensa XP & Ouro usando a fórmula dinâmica de MMORPG
+			xpGained := CalculateKillXP(s.Character.Level, mob.Level, mob.MaxHealth, mob.IsBoss)
 			baseGold := float64(15 + r.Intn(25))
+			if mob.IsBoss {
+				baseGold = float64(80 + r.Intn(120)) // Boss concede ouro massivo
+			}
 
 			goldBonusPct := 0.0
 			for _, it := range equippedListForTick {

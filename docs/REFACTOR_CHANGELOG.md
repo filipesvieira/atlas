@@ -23,7 +23,19 @@
 
 ## [Unreleased] - 2026-08-08
 
-### Adicionado (Expedição Tier 2: Planalto Central de Brasília)
+### Ajuste de Visibilidade & UX/UI (Fade-In & Culling de Monstros na Arena)
+- **Eliminação do Empilhamento na Borda da Tela**: Removido o clamping artificial (`Math.min(440, ...)`) que forçava monstros fora do campo de visão a renderizarem suas barras de vida na borda direita.
+- **Culling & Fade-In Suave**: Monstros marchando fora da arena (`x > 500px`) permanecem ocultos e ganham opacidade gradual e fluida à medida que entram na tela.
+- **Ancoragem Direta na Cabeça**: Placas de identificação e barras de HP agora acompanham diretamente a posição X de cada monstro (`x = m.currentX`).
+- **Design Moderno e Compacto**: Placas translúcidas elegantes com bordas discretas, destaque em ouro/carmesim com coroa 👑 para Bosses e barras de vida limpas.
+- **Fórmula Canônica de XP (`CalculateKillXP`)**: Unificada no backend Go para tempo real e offline determinístico:
+  - $\text{XP Base} = (\text{Nível do Monstro} \times 45) + (\text{MaxHealth} / 6)$, com multiplicador de **2.5x para Bosses**.
+  - **Bônus de Desafio (Underdog)**: Até $+80\%$ de XP extra para heróis que derrotam monstros mais fortes ($\Delta L > 0$).
+  - **Penalidade Suave de Caça Trivial**: Redução progressiva até o piso de $5\%$ para incentivar a progressão natural de Tiers.
+- **Rebalanceamento dos 9 Bosses (Fase 5 de todas as regiões)**:
+  - Vida elevada em **2.5x a 3.0x** (*Urso* para 520 HP, *Esquelético* para 1.100 HP, *Xandaum* para 1.850 HP, *Voldemorte* para 2.600 HP, *Mestre do Santuário* para 4.800 HP e *Vingador de Chifres* para 12.500 HP).
+  - Ataque e dano ajustados para exigir sustain e equipamentos do patamar da região.
+  - Recompensa de ouro de Bosses aumentada (80 a 200 de ouro).
 - **Nova Expedição**: `Planalto dos Três Poderes` (`planalto`, Níveis 8 a 19, Tier 2) no `expeditions.go`.
 - **Novo Bioma Cênico**: `renderPlanaltoBiome` com Congresso Nacional (torres gêmeas, cúpula do Senado, cúpula da Câmara, rampa monumental, espelho d'água e gramado da esplanada).
 - **Novos Monstros & Boss**:
