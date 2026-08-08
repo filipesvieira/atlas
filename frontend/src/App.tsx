@@ -3,6 +3,7 @@ import { AuthScreen } from './components/Auth/AuthScreen';
 import { CharacterScreen } from './components/Auth/CharacterScreen';
 import { DashboardGrid } from './components/Dashboard/DashboardGrid';
 import { OfflineSummaryModal } from './components/Modal/OfflineSummaryModal';
+import { API_BASE_URL } from './config';
 
 export function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('atlas_token'));
@@ -32,7 +33,7 @@ export function App() {
     setSelectionError(null);
     setOfflineData(null);
     try {
-      const res = await fetch(`http://localhost:8080/api/v1/expedition/claim?character_id=${char.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/expedition/claim?character_id=${char.id}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });

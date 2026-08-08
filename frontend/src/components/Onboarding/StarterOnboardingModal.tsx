@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useGameCatalog } from '../../hooks/useGameCatalog';
 
 interface StarterOnboardingModalProps {
   isOpen: boolean;
@@ -8,54 +9,17 @@ interface StarterOnboardingModalProps {
 }
 
 export function StarterOnboardingModal({ isOpen, isForced = false, onClose, onSelectPack }: StarterOnboardingModalProps) {
-  const [selectedPack, setSelectedPack] = useState<'melee' | 'distance' | 'magic'>('melee');
+  const [selectedPack, setSelectedPack] = useState('melee');
+  const { catalog, error, loading } = useGameCatalog();
+  const packs = catalog?.starterPacks || [];
+
+  useEffect(() => {
+    if (packs.length > 0 && !packs.some((pack) => pack.id === selectedPack)) {
+      setSelectedPack(packs[0].id);
+    }
+  }, [packs, selectedPack]);
 
   if (!isOpen) return null;
-
-  const packs = [
-    {
-      id: 'melee',
-      title: '⚔️ Guerreiro (Melee)',
-      subtitle: 'Combate Corpo a Corpo & Defesa Sólida',
-      weapon: 'Espada do Aprendiz + Escudo de Madeira',
-      stats: 'Foco em Força (FOR) & Vitalidade (VIT)',
-      details: [
-        '🛡️ Permite equipar um Escudo no slot OffHand para alta mitigação de dano.',
-        '⚔️ Cada ponto de FOR concede +1.5 de Dano Físico Melee.',
-        '💪 Robusto para aguentar hordas em regiões de nível elevado.',
-      ],
-      color: 'border-amber-500 bg-amber-950/20 text-amber-300',
-      activeBorder: 'border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]',
-    },
-    {
-      id: 'distance',
-      title: '🏹 Arqueiro (Distância)',
-      subtitle: 'Ataques de Precisão & Danos Críticos',
-      weapon: 'Arco de Aprendiz + Flechas no Slot Ammo',
-      stats: 'Foco em Destreza (DES) & Vitalidade (VIT)',
-      details: [
-        '🎯 Armas de distância usam o slot Ammo para munição (Flechas/Virotes).',
-        '⚠️ Armas de distância ocupam 2 Mãos e desequipam o Escudo automaticamente.',
-        '⚡ Cada ponto em DES concede +1.5 Dano de Distância e +0.25% de Chance Crítica.',
-      ],
-      color: 'border-emerald-500 bg-emerald-950/20 text-emerald-300',
-      activeBorder: 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]',
-    },
-    {
-      id: 'magic',
-      title: '🔮 Mago (Mágico)',
-      subtitle: 'Feitiços Arcanos & Cajados Elementais',
-      weapon: 'Cajado Rúnico + Livro: Bola de Fogo',
-      stats: 'Foco em Inteligência (INT) & Vitalidade (VIT)',
-      details: [
-        '✨ O Cajado Rúnico ataca com Dano Mágico escalado pela sua INT (+2.0/pt).',
-        '📜 Cada ataque com Cajado e feitiço de deck upam a Maestria de Magia (Magic Level).',
-        '🔥 Acompanha o Livro de Bola de Fogo para aprender feitiços em área.',
-      ],
-      color: 'border-sky-500 bg-sky-950/20 text-sky-300',
-      activeBorder: 'border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.3)]',
-    },
-  ];
 
   const handleConfirm = () => {
     onSelectPack(selectedPack);
@@ -78,16 +42,19 @@ export function StarterOnboardingModal({ isOpen, isForced = false, onClose, onSe
           </p>
         </div>
 
-        {/* Seleção dos 3 Arquétipos */}
+        {loading && <div className="text-center text-xs text-slate-400">Carregando kits do catálogo do jogo…</div>}
+        {error && <div className="text-center text-xs text-rose-400">{error}</div>}
+
+        {/* Seleção de Arquétipos vinda do catálogo */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {packs.map((pack) => {
             const isSelected = selectedPack === pack.id;
             return (
               <div
                 key={pack.id}
-                onClick={() => setSelectedPack(pack.id as any)}
+                onClick={() => setSelectedPack(pack.id)}
                 className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between space-y-3 bg-slate-950/80 ${
-                  isSelected ? `${pack.activeBorder} bg-slate-900/90` : 'border-slate-800 hover:border-slate-700 opacity-80 hover:opacity-100'
+                  isSelected ? 'border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)] bg-slate-900/90' : 'border-slate-800 hover:border-slate-700 opacity-80 hover:opacity-100'
                 }`}
               >
                 <div className="space-y-1">
@@ -96,8 +63,8 @@ export function StarterOnboardingModal({ isOpen, isForced = false, onClose, onSe
                 </div>
 
                 <div className="space-y-1.5 text-[10px] font-mono border-t border-b border-slate-800 py-2">
-                  <div className="text-amber-300 font-semibold">🎁 Kit: {pack.weapon}</div>
-                  <div className="text-slate-400">📊 {pack.stats}</div>
+                  <div className="text-amber-300 font-semibold">🎁 Kit: {pack.kit_label}</div>
+                  <div className="text-slate-400">📊 {pack.stat_focus}</div>
                 </div>
 
                 <ul className="space-y-1 text-[9px] text-slate-400 font-mono leading-relaxed">
@@ -126,7 +93,8 @@ export function StarterOnboardingModal({ isOpen, isForced = false, onClose, onSe
             )}
             <button
               onClick={handleConfirm}
-              className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl transition shadow-lg"
+              disabled={packs.length === 0}
+              className="px-5 py-2 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-950 text-xs font-bold rounded-xl transition shadow-lg"
             >
               Confirmar Escolha ✨
             </button>

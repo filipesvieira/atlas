@@ -758,4 +758,3 @@ IMPLANTE:
 
 Não apenas altere comentários/documentação: valide o comportamento executável. Ao finalizar, entregue resumo por arquivo alterado, testes adicionados e resultado dos comandos de validação.
 ```
-

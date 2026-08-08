@@ -115,6 +115,7 @@ type CombatMessage struct {
 	TotalAttack  int            `json:"total_attack"`
 	TotalDefense int            `json:"total_defense"`
 	ActiveRegion string         `json:"active_region,omitempty"`
+	ActiveBiome  string         `json:"active_biome,omitempty"`
 	ActiveStance string         `json:"active_stance,omitempty"`
 	CurrentStage int            `json:"current_stage"`
 	MaxStages    int            `json:"max_stages"`
@@ -171,7 +172,16 @@ func NewGameSession(char *CharacterData, inv *InventoryData, saveInv func(string
 
 	activeReg := char.ActiveRegion
 	if activeReg == "" {
-		activeReg = "forest"
+		activeReg = DefaultExpeditionRegionID
+	}
+	activeRegionDefinition, exists := GetExpeditionRegion(activeReg)
+	if !exists {
+		activeReg = DefaultExpeditionRegionID
+		activeRegionDefinition, _ = GetExpeditionRegion(activeReg)
+	}
+	maxStages := activeRegionDefinition.MaxStages
+	if maxStages <= 0 {
+		maxStages = DefaultExpeditionMaxStages
 	}
 
 	activeStance := char.ActiveStance
@@ -179,7 +189,7 @@ func NewGameSession(char *CharacterData, inv *InventoryData, saveInv func(string
 		activeStance = "balanced"
 	}
 	currentStage := char.CurrentStage
-	if currentStage < 1 || currentStage > 5 {
+	if currentStage < 1 || currentStage > maxStages {
 		currentStage = 1
 	}
 
@@ -190,7 +200,7 @@ func NewGameSession(char *CharacterData, inv *InventoryData, saveInv func(string
 		ActiveRegion:       activeReg,
 		ActiveStance:       activeStance,
 		CurrentStage:       currentStage,
-		MaxStages:          5,
+		MaxStages:          maxStages,
 		IsBossStage:        char.IsBossStage,
 		CurrentMonsters:    []Monster{},
 		SendChannel:        make(chan CombatMessage, 100),
@@ -389,7 +399,7 @@ func (s *GameSession) StartTicker() {
 						_ = s.SaveCharFunc(s.Character)
 					}
 					regName := s.ActiveRegion
-					if reg, exists := ExpeditionRegions[s.ActiveRegion]; exists {
+					if reg, exists := GetExpeditionRegion(s.ActiveRegion); exists {
 						regName = reg.Name
 					}
 					s.broadcastMessage(CombatMessage{
@@ -466,18 +476,18 @@ func (s *GameSession) processTick() {
 	totalAtk, totalDef := s.CalculateStats()
 
 	// FASE 2: Controle de Estágios e Spawn (Estágios 1 a 4 = Monstros Normais, Estágio 5 = BOSS)
-	regInfo, regExists := ExpeditionRegions[s.ActiveRegion]
+	regInfo, regExists := GetExpeditionRegion(s.ActiveRegion)
 	if !regExists {
-		regInfo = ExpeditionRegions["forest"]
+		regInfo, _ = GetExpeditionRegion(DefaultExpeditionRegionID)
 	}
 
 	if s.CurrentStage <= 0 {
 		s.CurrentStage = 1
 	}
-	s.MaxStages = 5
+	s.MaxStages = regInfo.MaxStages
 
 	if len(s.CurrentMonsters) == 0 {
-		if s.CurrentStage >= 5 {
+		if s.CurrentStage >= s.MaxStages {
 			// FASE FINAL 5: SPAWN DO BOSS (Fila Indiana: Guarda-costas na frente, Boss entra POR ÚLTIMO)
 			s.IsBossStage = true
 			s.CurrentMonsters = make([]Monster, 0, 3)
@@ -661,12 +671,12 @@ func (s *GameSession) processTick() {
 				skillCastLog = fmt.Sprintf(" [HABILIDADE: Golpe Giratório] Custo: 18 Mana | Dano em Área: %d!", bonusDmg)
 				// Concede 1 Try na maestria da arma corporal equipada
 				if eq.MainHand != nil {
-					nameLower := strings.ToLower(eq.MainHand.Name)
-					if strings.Contains(nameLower, "machado") {
+					switch GetItemWeaponType(eq.MainHand) {
+					case WeaponTypeAxe:
 						s.Character.Masteries.AxeMastery += 1
-					} else if strings.Contains(nameLower, "clava") || strings.Contains(nameLower, "maça") || strings.Contains(nameLower, "martelo") {
+					case WeaponTypeClub:
 						s.Character.Masteries.ClubMastery += 1
-					} else {
+					default:
 						s.Character.Masteries.SwordMastery += 1
 					}
 				} else {
@@ -970,7 +980,7 @@ func (s *GameSession) processTick() {
 			logMsg += fmt.Sprintf(" 🏆 EXPEDIÇÃO CONCLUÍDA! O CHEFÃO DE %s FOI DERROTADO!", regInfo.Name)
 
 			// Desbloquear a próxima expedição
-			for _, reg := range ExpeditionRegions {
+			for _, reg := range ListExpeditionRegions() {
 				if reg.RequiresUnlockFrom == s.ActiveRegion {
 					alreadyUnlocked := false
 					for _, unl := range s.Character.UnlockedRegions {
@@ -1054,21 +1064,11 @@ func (s *GameSession) EquipItem(itemID string, slot string) {
 		return
 	}
 
-	// Se o item for um SkillBook (ou de slot 'skill_book' ou nome de Livro), consome e ensina a habilidade!
-	nameLower := strings.ToLower(targetItem.Name)
-	isSkillBook := slot == "skill_book" || targetItem.SlotType == "skill_book" || strings.Contains(nameLower, "livro") || strings.Contains(nameLower, "tome") || strings.Contains(nameLower, "manual") || strings.Contains(nameLower, "grimório")
+	// Skill books usam metadados canônicos; o nome do item é apenas apresentação.
+	isSkillBook := slot == string(SlotSkillBook) || GetItemSlotType(&targetItem) == string(SlotSkillBook)
 
 	if isSkillBook {
-		skillKey := ""
-		if strings.Contains(nameLower, "fogo") || strings.Contains(nameLower, "fireball") {
-			skillKey = "fireball"
-		} else if strings.Contains(nameLower, "giratório") || strings.Contains(nameLower, "whirlwind") {
-			skillKey = "whirlwind"
-		} else if strings.Contains(nameLower, "quádruplo") || strings.Contains(nameLower, "multishot") {
-			skillKey = "multishot"
-		} else if strings.Contains(nameLower, "cura") || strings.Contains(nameLower, "divine_heal") {
-			skillKey = "divine_heal"
-		}
+		skillKey := GetItemSkillKey(&targetItem)
 
 		if skillKey != "" {
 			hasSkill := false
@@ -1137,8 +1137,7 @@ func (s *GameSession) EquipItem(itemID string, slot string) {
 		if eq.MainHand == nil {
 			log.Printf("Tentativa de equipar munição sem arma principal")
 		} else {
-			mainLower := strings.ToLower(eq.MainHand.Name)
-			if !strings.Contains(mainLower, "arco") && !strings.Contains(mainLower, "besta") {
+			if GetItemWeaponType(eq.MainHand) != WeaponTypeBow {
 				// Impede equipar munição se estiver com arma melee ou cajado
 				totalAtk, totalDef := s.CalculateStats()
 				s.broadcastMessage(CombatMessage{
@@ -1488,15 +1487,17 @@ func EnsureUnlockedRegionsForLevel(char *CharacterData) {
 		existing[id] = true
 	}
 	// Sempre desbloqueia regiões cujo MinLevel <= char.Level
-	for id, reg := range ExpeditionRegions {
+	for _, reg := range ListExpeditionRegions() {
 		if char.Level >= reg.MinLevel {
-			existing[id] = true
+			existing[reg.ID] = true
 		}
 	}
-	// Regiões de Tier 1 abertas por padrão
-	existing["forest"] = true
-	existing["shereque"] = true
-	existing["chapolin"] = true
+	// Conteúdo introdutório é definido pelo catálogo, não pelo engine.
+	for _, reg := range ListExpeditionRegions() {
+		if reg.Tier == 1 && reg.RequiresUnlockFrom == "" {
+			existing[reg.ID] = true
+		}
+	}
 
 	unlocked := make([]string, 0, len(existing))
 	for id := range existing {
@@ -1508,10 +1509,11 @@ func EnsureUnlockedRegionsForLevel(char *CharacterData) {
 func (s *GameSession) SetRegion(regionID string) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	if _, exists := ExpeditionRegions[regionID]; exists {
+	if region, exists := GetExpeditionRegion(regionID); exists {
 		s.ActiveRegion = regionID
 		s.CurrentMonsters = []Monster{} // Reseta horda ao mudar de região
 		s.CurrentStage = 1
+		s.MaxStages = region.MaxStages
 		s.IsBossStage = false
 		s.Character.StateRevision++
 		s.syncPersistentExpeditionState()
@@ -1531,7 +1533,7 @@ func (s *GameSession) SetRegion(regionID string) {
 			CurrentStage: s.CurrentStage,
 			MaxStages:    s.MaxStages,
 			IsBossStage:  s.IsBossStage,
-			LogText:      fmt.Sprintf("🗺️ Região de expedição alterada para [%s]!", ExpeditionRegions[regionID].Name),
+			LogText:      fmt.Sprintf("🗺️ Região de expedição alterada para [%s]!", region.Name),
 			IsActive:     s.IsExpeditionActive,
 		})
 	}
@@ -1600,6 +1602,11 @@ func cloneInventoryData(inventory *InventoryData) *InventoryData {
 
 func (s *GameSession) broadcastMessage(msg CombatMessage) {
 	s.syncPersistentExpeditionState()
+	if msg.ActiveBiome == "" {
+		if region, exists := GetExpeditionRegion(s.ActiveRegion); exists {
+			msg.ActiveBiome = region.BiomeKey
+		}
+	}
 	msg.Character = cloneCharacterData(msg.Character)
 	msg.Inventory = cloneInventoryData(msg.Inventory)
 	msg.Monsters = append([]Monster(nil), msg.Monsters...)
@@ -1610,7 +1617,11 @@ func (s *GameSession) broadcastMessage(msg CombatMessage) {
 		msg.CurrentStage = s.CurrentStage
 	}
 	if msg.MaxStages <= 0 {
-		s.MaxStages = 5
+		if region, exists := GetExpeditionRegion(s.ActiveRegion); exists && region.MaxStages > 0 {
+			s.MaxStages = region.MaxStages
+		} else if s.MaxStages <= 0 {
+			s.MaxStages = DefaultExpeditionMaxStages
+		}
 		msg.MaxStages = s.MaxStages
 	}
 	if !msg.IsBossStage && s.IsBossStage {
@@ -1794,36 +1805,30 @@ func (s *GameSession) ChooseStarterPack(pack string) {
 	s.Inventory.Backpack = []Item{}
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	equip := func(name, slot, effect string) *Item {
-		item := GenerateItemFromTemplate(name, "Comum", rng)
+	equip := func(def *StarterItemDefinition, slot string) *Item {
+		if def == nil {
+			return nil
+		}
+		item := GenerateItemFromTemplate(def.TemplateName, def.Rarity, rng)
 		if item == nil {
 			return nil
 		}
 		item.ID = fmt.Sprintf("starter_%s_%d", strings.ReplaceAll(strings.ToLower(slot), " ", "_"), time.Now().UnixNano())
-		item.SpecialEffect = effect
+		item.SpecialEffect = def.SpecialEffect
 		return item
 	}
 
-	switch strings.ToLower(pack) {
-	case "distance", "arqueiro", "arqueira":
-		s.Inventory.Equipment.MainHand = equip("Arco Curvo", "bow", "Arma de distância inicial")
-		s.Inventory.Equipment.Ammo = equip("Flechas de Madeira", "ammo", "Munição inicial")
-		s.Character.Vocation = "Arqueiro"
-
-	case "magic", "mago", "maga":
-		s.Inventory.Equipment.MainHand = equip("Varinha do Aprendiz", "wand", "Arma mágica inicial")
-		book := GenerateItemFromTemplate("Livro: Bola de Fogo", "Raro", rng)
-		if book != nil {
-			book.SpecialEffect = "Ensina a magia Bola de Fogo"
-			s.Inventory.Backpack = append(s.Inventory.Backpack, *book)
+	packDefinition := ResolveStarterPack(pack)
+	s.Inventory.Equipment.MainHand = equip(packDefinition.MainHand, "main_hand")
+	s.Inventory.Equipment.OffHand = equip(packDefinition.OffHand, "off_hand")
+	s.Inventory.Equipment.Ammo = equip(packDefinition.Ammo, "ammo")
+	for index := range packDefinition.Backpack {
+		item := equip(&packDefinition.Backpack[index], fmt.Sprintf("backpack_%d", index))
+		if item != nil {
+			s.Inventory.Backpack = append(s.Inventory.Backpack, *item)
 		}
-		s.Character.Vocation = "Mago"
-
-	default: // melee / guerreiro
-		s.Inventory.Equipment.MainHand = equip("Espada do Aprendiz", "sword", "Arma melee inicial")
-		s.Inventory.Equipment.OffHand = equip("Broquel de Madeira", "shield", "Escudo inicial")
-		s.Character.Vocation = "Guerreiro"
 	}
+	s.Character.Vocation = packDefinition.Vocation
 
 	s.Character.StateRevision++
 	s.syncPersistentExpeditionState()

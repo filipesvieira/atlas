@@ -1,4 +1,7 @@
 import { PixelArtRenderer } from '../../game/PixelArtRenderer';
+import { biomeRegistry } from '../../game/registries/BiomeRegistry';
+import { heroRegistry } from '../../game/registries/HeroRegistry';
+import { monsterRegistry } from '../../game/registries/MonsterRegistry';
 
 interface FloatingText {
   id: string;
@@ -210,42 +213,11 @@ export class GameViewport {
     ctx.clearRect(0, 0, this.width, this.height);
     ctx.imageSmoothingEnabled = false;
 
-    // 1. Desenhar Cenário do Bioma Ativo
-    let bgBuffer: HTMLCanvasElement;
-    
-    if (!this.isActive) {
-      bgBuffer = PixelArtRenderer.getCampBackground(this.width, this.height);
-      this.targetHeroX = 200; // Move herói para perto da fogueira
-    } else {
-      this.targetHeroX = 100;
-      switch (this.regionId) {
-        case 'shereque':
-          bgBuffer = PixelArtRenderer.getSherequeBackground(this.width, this.height);
-          break;
-        case 'chapolin':
-          bgBuffer = PixelArtRenderer.getChapolinBackground(this.width, this.height);
-          break;
-        case 'orcruins':
-          bgBuffer = PixelArtRenderer.getOrcRuinsBackground(this.width, this.height);
-          break;
-        case 'esgotos':
-          bgBuffer = PixelArtRenderer.getEsgotosBackground(this.width, this.height);
-          break;
-        case 'rogartes':
-          bgBuffer = PixelArtRenderer.getRogartesBackground(this.width, this.height);
-          break;
-        case 'frozen':
-          bgBuffer = PixelArtRenderer.getFrozenBackground(this.width, this.height);
-          break;
-        case 'abyss':
-          bgBuffer = PixelArtRenderer.getAbyssBackground(this.width, this.height);
-          break;
-        case 'forest':
-        default:
-          bgBuffer = PixelArtRenderer.getForestBackground(this.width, this.height);
-          break;
-      }
-    }
+    // 1. Desenhar cenário sem conhecer regiões concretas. O registry resolve
+    // region/biome -> renderer e mantém o loop principal fechado para extensão.
+    const biomeKey = this.isActive ? this.regionId : 'camp';
+    const bgBuffer = biomeRegistry.render(biomeKey, this.width, this.height);
+    this.targetHeroX = this.isActive ? 100 : 200;
     
     ctx.drawImage(bgBuffer, 0, 0, this.width, this.height);
 
@@ -257,8 +229,8 @@ export class GameViewport {
 
     // 2. Desenhar Herói do Jogador (Com Animação de Caminhada / Bobbing)
     const heroBob = Math.sin(this.heroWalkFrame) * 3;
-    const heroSprite = PixelArtRenderer.getHeroTexture(this.vocation);
     const spriteSize = 48;
+    const heroSprite = heroRegistry.render(this.vocation, spriteSize);
 
     ctx.drawImage(heroSprite, this.heroX - spriteSize / 2, this.heroY - spriteSize / 2 + heroBob);
 
@@ -461,8 +433,8 @@ export class GameViewport {
     }
 
     // 2. Atualizar Bioma da Região
-    if (msg.active_region || msg.region_id || msg.region || msg.regionId || msg.activeRegion) {
-      this.regionId = msg.active_region || msg.region_id || msg.region || msg.regionId || msg.activeRegion;
+    if (msg.active_biome || msg.active_region || msg.region_id || msg.region || msg.regionId || msg.activeRegion) {
+      this.regionId = msg.active_biome || msg.active_region || msg.region_id || msg.region || msg.regionId || msg.activeRegion;
     }
 
     // 3. Sincronizar Monstros Ativos
@@ -474,19 +446,7 @@ export class GameViewport {
       activeIds.add(mobId);
 
       const vKey = (mob.visual_key || mob.key || mob.name || '').toLowerCase();
-      if (vKey.startsWith('frozen') || vKey.includes('quimera') || vKey.includes('golem') || vKey.includes('espectro') || vKey.includes('zumbi') || vKey.includes('santuario')) {
-        this.regionId = 'frozen';
-      } else if (vKey.startsWith('rogartes') || vKey.includes('dementor') || vKey.includes('trasgo') || vKey.includes('voldemorte')) {
-        this.regionId = 'rogartes';
-      } else if (vKey.startsWith('esgotos') || vKey.includes('ninja') || vKey.includes('rato') || vKey.includes('destroyer')) {
-        this.regionId = 'esgotos';
-      } else if (vKey.startsWith('orcruins') || vKey.includes('orc') || vKey.includes('esqueleto')) {
-        this.regionId = 'orcruins';
-      } else if (vKey.startsWith('chapolin') || vKey.includes('tripa') || vKey.includes('alma_negra') || vKey.includes('bandido')) {
-        this.regionId = 'chapolin';
-      } else if (vKey.startsWith('shereque') || vKey.includes('burro')) {
-        this.regionId = 'shereque';
-      }
+      this.regionId = monsterRegistry.getBiomeKey(vKey) || this.regionId;
 
       const gridX = mob.grid_x ?? (14 - (activeMonsters.length - 1 - idx) * 2);
       const gridY = mob.grid_y ?? 4;
@@ -550,7 +510,7 @@ export class GameViewport {
       // Disparo de magia/fogo de monstros à distância contra o herói
       this.monsters.forEach((m) => {
         if (m.attackType === 'ranged') {
-          const isFire = m.name.toLowerCase().includes('dragão') || m.name.toLowerCase().includes('chamas') || m.name.toLowerCase().includes('cinderino');
+          const projectile = monsterRegistry.getProjectile(m.visualKey || m.key || '');
           this.projectiles.push({
             id: `enemy_proj_${Date.now()}_${Math.random()}`,
             startX: m.currentX - 15,
@@ -560,8 +520,8 @@ export class GameViewport {
             currentX: m.currentX - 15,
             currentY: m.currentY - 5,
             progress: 0,
-            color: isFire ? '#f97316' : '#a855f7',
-            type: 'fireball',
+            color: projectile.color,
+            type: projectile.type,
           });
         }
       });
@@ -574,10 +534,9 @@ export class GameViewport {
 
   /** Animação fluida de ataque baseada na vocação */
   private triggerAttackAnimation() {
-    const isMage = this.vocation.includes('mago') || this.vocation.includes('apprentice') || this.vocation.includes('acolyte');
-    const isArcher = this.vocation.includes('arqueiro') || this.vocation.includes('hunter') || this.vocation.includes('paladin');
+    const attackStyle = heroRegistry.getAttackStyle(this.vocation);
 
-    if (isMage) {
+    if (attackStyle === 'magic') {
       // Disparar Orbe Mágico Azul
       this.projectiles.push({
         id: `proj_${Date.now()}`,
@@ -591,7 +550,7 @@ export class GameViewport {
         color: '#38bdf8',
         type: 'fireball',
       });
-    } else if (isArcher) {
+    } else if (attackStyle === 'arrow') {
       // Disparar Flecha Amarela
       this.projectiles.push({
         id: `proj_${Date.now()}`,

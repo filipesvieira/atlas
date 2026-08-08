@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/atlas/backend/internal/db"
+	"github.com/atlas/backend/pkg/game"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -71,6 +72,7 @@ func main() {
 	}))
 
 	r.Get("/api/v1/health", HandleHealth)
+	r.Get("/api/v1/game/catalog", HandleGameCatalog)
 	r.Post("/api/v1/auth/register", HandleRegister)
 	r.Post("/api/v1/auth/login", HandleLogin)
 
@@ -91,6 +93,10 @@ func main() {
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatalf("Erro no servidor: %v", err)
 	}
+}
+
+func HandleGameCatalog(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, game.BuildGameCatalog())
 }
 
 func HandleHealth(w http.ResponseWriter, r *http.Request) {

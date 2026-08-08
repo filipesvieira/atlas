@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ExpeditionSelectionModal, WORLD_REGIONS } from './ExpeditionSelectionModal';
+import { useGameCatalog } from '../../hooks/useGameCatalog';
+import { ExpeditionSelectionModal } from './ExpeditionSelectionModal';
 
 interface ExpeditionRegionSelectorProps {
   currentRegion?: string;
@@ -14,15 +15,16 @@ interface ExpeditionRegionSelectorProps {
 export function ExpeditionRegionSelector({
   currentRegion = 'forest',
   characterLevel,
-  unlockedRegions = ['forest', 'shereque', 'chapolin'],
+  unlockedRegions = [],
   currentStage = 1,
   maxStages = 5,
   isBossStage = false,
   onSelectRegion,
 }: ExpeditionRegionSelectorProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { catalog, error: catalogError } = useGameCatalog();
 
-  const activeRegionData = WORLD_REGIONS.find((r) => r.id === currentRegion) || WORLD_REGIONS[0];
+  const activeRegionData = catalog?.regions.find((r) => r.id === currentRegion) || catalog?.regions[0];
   const displayStage = currentStage > 0 ? currentStage : 1;
   const displayMax = maxStages > 0 ? maxStages : 5;
 
@@ -41,16 +43,18 @@ export function ExpeditionRegionSelector({
         {/* Card Resumo da Região Ativa */}
         <div className="p-2.5 rounded-lg bg-slate-950 border border-amber-500/40 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <span className="text-xl">{activeRegionData.icon}</span>
+            <span className="text-xl">{activeRegionData?.icon || '🗺️'}</span>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-slate-100">{activeRegionData.name}</span>
-                <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-emerald-400 font-mono">
-                  Lv. {activeRegionData.minLevel}-{activeRegionData.maxLevel}
-                </span>
+                <span className="text-xs font-bold text-slate-100">{activeRegionData?.name || currentRegion}</span>
+                {activeRegionData && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-emerald-400 font-mono">
+                    Lv. {activeRegionData.minLevel}-{activeRegionData.maxLevel}
+                  </span>
+                )}
               </div>
               <span className="text-[10px] text-amber-400/90 font-mono block mt-0.5">
-                👑 Boss: {activeRegionData.bossName}
+                {catalogError ? '⚠️ Catálogo indisponível' : `👑 Boss: ${activeRegionData?.bossName || 'carregando…'}`}
               </span>
             </div>
           </div>
@@ -64,11 +68,11 @@ export function ExpeditionRegionSelector({
           <div className="flex justify-between text-[10px] font-mono text-slate-400">
             <span>Progresso da Expedição</span>
             <span className={isBossStage ? 'text-amber-400 font-bold animate-pulse' : 'text-purple-400 font-bold'}>
-              {isBossStage ? '🔥 FASE 5/5: CHEFÃO FINAL!' : `Fase ${displayStage} de ${displayMax}`}
+              {isBossStage ? `🔥 FASE ${displayStage}/${displayMax}: CHEFÃO FINAL!` : `Fase ${displayStage} de ${displayMax}`}
             </span>
           </div>
           <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800 flex">
-            {[1, 2, 3, 4, 5].map((stg) => (
+            {Array.from({ length: displayMax }, (_, index) => index + 1).map((stg) => (
               <div
                 key={stg}
                 className={`flex-1 border-r border-slate-900 transition-all duration-300 ${
@@ -101,6 +105,7 @@ export function ExpeditionRegionSelector({
         onClose={() => setIsModalOpen(false)}
         currentRegion={currentRegion}
         characterLevel={characterLevel}
+        regions={catalog?.regions || []}
         unlockedRegions={unlockedRegions}
         onSelectRegion={onSelectRegion}
       />

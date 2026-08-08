@@ -42,6 +42,7 @@ type Item struct {
 	Lifesteal      float64 `json:"lifesteal,omitempty"`
 	ManaRegen      int     `json:"mana_regen,omitempty"`
 	WeaponType     string  `json:"weapon_type,omitempty"`
+	SkillKey       string  `json:"skill_key,omitempty"`
 	SpecialEffect  string  `json:"special_effect"`
 	SlotType       string  `json:"slot_type"`
 	Tier           int     `json:"tier"`
@@ -69,6 +70,7 @@ type LootTemplate struct {
 	Name          string
 	Slot          ItemSlot
 	WeaponType    string
+	SkillKey      string
 	RequiredLevel int
 	Tier          int
 	BaseAtk       int
@@ -168,10 +170,10 @@ var lootTemplates = []LootTemplate{
 	{Name: "Amuleto do Zodíaco", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 12, BaseMagic: 8, BaseDef: 8, BaseWeight: 2.5, Hands: 0, BaseSTR: 8, BaseDEX: 8, BaseINT: 8, BaseHP: 80},
 
 	// Skill Books
-	{Name: "Tome: Golpe Giratório", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 25.0, Hands: 0},
-	{Name: "Manual: Tiro Quádruplo", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 18.0, Hands: 0},
-	{Name: "Livro: Bola de Fogo", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, RequiredLevel: 12, Tier: 3, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 22.0, Hands: 0},
-	{Name: "Livro: Cura Divina", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 20.0, Hands: 0},
+	{Name: "Tome: Golpe Giratório", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, SkillKey: "whirlwind", RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 25.0, Hands: 0},
+	{Name: "Manual: Tiro Quádruplo", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, SkillKey: "multishot", RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 18.0, Hands: 0},
+	{Name: "Livro: Bola de Fogo", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, SkillKey: "fireball", RequiredLevel: 12, Tier: 3, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 22.0, Hands: 0},
+	{Name: "Livro: Cura Divina", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, SkillKey: "divine_heal", RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 20.0, Hands: 0},
 }
 
 // rarityProfile concentra o orçamento de poder de cada raridade. O tier define a
@@ -212,21 +214,6 @@ func normalizeRarity(rarity string) string {
 	return "Comum"
 }
 
-func tierFromRequiredLevel(requiredLevel int) int {
-	switch {
-	case requiredLevel >= 50:
-		return 5
-	case requiredLevel >= 35:
-		return 4
-	case requiredLevel >= 20:
-		return 3
-	case requiredLevel >= 8:
-		return 2
-	default:
-		return 1
-	}
-}
-
 func scaleStat(base int, multiplier float64) int {
 	if base <= 0 {
 		return 0
@@ -242,25 +229,11 @@ func scaleFloat(base, multiplier float64) float64 {
 }
 
 func findLootTemplate(name string) *LootTemplate {
-	for i := range lootTemplates {
-		if lootTemplates[i].Name == name {
-			return &lootTemplates[i]
-		}
+	template, exists := ItemRegistry.Get(name)
+	if !exists {
+		return nil
 	}
-	return nil
-}
-
-func skillKeyForTemplate(name string) string {
-	switch {
-	case strings.Contains(name, "Giratório"):
-		return "whirlwind"
-	case strings.Contains(name, "Quádr"):
-		return "multishot"
-	case strings.Contains(name, "Cura"):
-		return "divine_heal"
-	default:
-		return "fireball"
-	}
+	return &template
 }
 
 func rollRarityWithBounds(minRarity, maxRarity string, r *rand.Rand) string {
@@ -390,7 +363,7 @@ func applyRarityBudget(template *LootTemplate, rarity string, r *rand.Rand) *Ite
 		CritChance:     critC,
 		WeaponType:     template.WeaponType,
 		SlotType:       string(template.Slot),
-		Tier:           tierFromRequiredLevel(template.RequiredLevel),
+		Tier:           template.Tier,
 		BalanceVersion: CurrentItemBalanceVersion,
 	}
 	item.ItemPower = CalculateItemPower(item)
@@ -430,9 +403,10 @@ func GenerateItemFromTemplate(name, rarity string, r *rand.Rand) *Item {
 			Rarity:         "Raro",
 			Weight:         template.BaseWeight,
 			RequiredLevel:  template.RequiredLevel,
-			SpecialEffect:  fmt.Sprintf("Slot: skill_book | Skill: %s", skillKeyForTemplate(template.Name)),
+			SpecialEffect:  fmt.Sprintf("Slot: skill_book | Skill: %s", template.SkillKey),
+			SkillKey:       template.SkillKey,
 			SlotType:       string(SlotSkillBook),
-			Tier:           tierFromRequiredLevel(template.RequiredLevel),
+			Tier:           template.Tier,
 			ValueGold:      50,
 			ItemPower:      0,
 			BalanceVersion: CurrentItemBalanceVersion,
@@ -499,66 +473,8 @@ var MonsterLootProfileMap = map[string]MonsterLootProfile{
 }
 
 func getLootProfileForMonster(monsterKeyOrName string) MonsterLootProfile {
-	keyLower := strings.ToLower(monsterKeyOrName)
-
-	// Busca exata por Key
-	if profile, exists := MonsterLootProfileMap[keyLower]; exists {
-		return profile
-	}
-
-	// Busca por substring no nome/key
-	for k, profile := range MonsterLootProfileMap {
-		if strings.Contains(keyLower, k) {
-			return profile
-		}
-	}
-
-	// Fallback por tipo/espécie no nome do monstro
-	switch {
-	case strings.Contains(keyLower, "urso ranzinza"):
-		return MonsterLootProfileMap["forest_boss_bear"]
-	case strings.Contains(keyLower, "fiona"):
-		return MonsterLootProfileMap["shereque_boss_fiona"]
-	case strings.Contains(keyLower, "alma negra"):
-		return MonsterLootProfileMap["chapolin_boss_alma"]
-	case strings.Contains(keyLower, "esquelético pacato"):
-		return MonsterLootProfileMap["orcruins_boss_skeleton"]
-	case strings.Contains(keyLower, "destruidor"):
-		return MonsterLootProfileMap["esgotos_boss_destroyer"]
-	case strings.Contains(keyLower, "voldemorte"):
-		return MonsterLootProfileMap["rogartes_boss_darkmage"]
-	case strings.Contains(keyLower, "mestre do santuário"):
-		return MonsterLootProfileMap["frozen_boss_master"]
-	case strings.Contains(keyLower, "vingador"):
-		return MonsterLootProfileMap["abyss_boss_avenger"]
-	case strings.Contains(keyLower, "goblin"):
-		return MonsterLootProfileMap["forest_goblin"]
-	case strings.Contains(keyLower, "lobo"):
-		return MonsterLootProfileMap["forest_wolf"]
-	case strings.Contains(keyLower, "aranha"):
-		return MonsterLootProfileMap["forest_spider"]
-	case strings.Contains(keyLower, "ogre"):
-		return MonsterLootProfileMap["shereque_ogre"]
-	case strings.Contains(keyLower, "burro"):
-		return MonsterLootProfileMap["shereque_donkey"]
-	case strings.Contains(keyLower, "pirata"):
-		return MonsterLootProfileMap["chapolin_pirate"]
-	case strings.Contains(keyLower, "tripa"):
-		return MonsterLootProfileMap["chapolin_tripa"]
-	case strings.Contains(keyLower, "ninja"):
-		return MonsterLootProfileMap["esgotos_ninja"]
-	case strings.Contains(keyLower, "rato"):
-		return MonsterLootProfileMap["esgotos_rat"]
-	case strings.Contains(keyLower, "orc"):
-		return MonsterLootProfileMap["orcruins_orc"]
-	case strings.Contains(keyLower, "esqueleto"):
-		return MonsterLootProfileMap["orcruins_skeleton"]
-	case strings.Contains(keyLower, "dementador"), strings.Contains(keyLower, "trasgo"):
-		return MonsterLootProfileMap["rogartes_dementor"]
-	case strings.Contains(keyLower, "espectro"), strings.Contains(keyLower, "golem"), strings.Contains(keyLower, "quimera"):
-		return MonsterLootProfileMap["frozen_specter"]
-	case strings.Contains(keyLower, "dragão"), strings.Contains(keyLower, "demônio"), strings.Contains(keyLower, "vampiro"), strings.Contains(keyLower, "chamas"):
-		return MonsterLootProfileMap["abyss_dragon"]
+	if entry, exists := MonsterRegistry.Get(monsterKeyOrName); exists && len(entry.Loot.Items) > 0 {
+		return entry.Loot
 	}
 
 	return MonsterLootProfile{
@@ -640,7 +556,7 @@ func GenerateLootForMonster(monsterName string, mobLevel int) *Item {
 }
 
 func GenerateProceduralLoot() Item {
-	lootPtr := GenerateLootForMonster("Goblin Salteador", 1)
+	lootPtr := GenerateLootForMonster("forest_goblin", 1)
 	if lootPtr == nil {
 		return Item{}
 	}
@@ -654,30 +570,44 @@ func GetItemWeaponType(item *Item) string {
 	if item.WeaponType != "" {
 		return item.WeaponType
 	}
-	nameLower := strings.ToLower(item.Name + " " + item.SpecialEffect)
-
-	if strings.Contains(nameLower, "arco") || strings.Contains(nameLower, "besta") || strings.Contains(nameLower, "bow") {
-		return WeaponTypeBow
+	if template := findLootTemplate(item.Name); template != nil && template.WeaponType != "" {
+		return template.WeaponType
 	}
-	if strings.Contains(nameLower, "cajado") || strings.Contains(nameLower, "varinha") || strings.Contains(nameLower, "wand") || strings.Contains(nameLower, "staff") {
-		return WeaponTypeWand
-	}
-	if strings.Contains(nameLower, "machado") || strings.Contains(nameLower, "axe") {
-		return WeaponTypeAxe
-	}
-	if strings.Contains(nameLower, "clava") || strings.Contains(nameLower, "maça") || strings.Contains(nameLower, "martelo") || strings.Contains(nameLower, "club") {
-		return WeaponTypeClub
-	}
-	if strings.Contains(nameLower, "escudo") || strings.Contains(nameLower, "broquel") || strings.Contains(nameLower, "shield") || strings.Contains(nameLower, "pavise") {
-		return WeaponTypeShield
-	}
+	// Compatibilidade para itens legados desconhecidos: historicamente o fallback
+	// era tratado como espada pelo motor.
 	return WeaponTypeSword
+}
+
+// GetItemSkillKey usa metadado canônico e consulta o template como fallback
+// de compatibilidade para itens persistidos antes da introdução de skill_key.
+func GetItemSkillKey(item *Item) string {
+	if item == nil {
+		return ""
+	}
+	if item.SkillKey != "" {
+		return item.SkillKey
+	}
+	if template := findLootTemplate(item.Name); template != nil {
+		return template.SkillKey
+	}
+	return ""
+}
+
+func GetItemSlotType(item *Item) string {
+	if item == nil {
+		return ""
+	}
+	if item.SlotType != "" {
+		return item.SlotType
+	}
+	if template := findLootTemplate(item.Name); template != nil {
+		return string(template.Slot)
+	}
+	return ""
 }
 
 // ListLootTemplates retorna uma cópia do catálogo canônico para auditoria,
 // telemetria administrativa e geração de documentação de balanceamento.
 func ListLootTemplates() []LootTemplate {
-	catalog := make([]LootTemplate, len(lootTemplates))
-	copy(catalog, lootTemplates)
-	return catalog
+	return ItemRegistry.List()
 }

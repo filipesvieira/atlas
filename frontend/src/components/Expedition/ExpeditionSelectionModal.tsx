@@ -1,182 +1,12 @@
 import { useState } from 'react';
-
-export interface RegionData {
-  id: string;
-  name: string;
-  tier: number;
-  minLevel: number;
-  maxLevel: number;
-  description: string;
-  icon: string;
-  bossName: string;
-  requiresUnlockFrom?: string;
-  dropsPreview: { name: string; icon: string }[];
-}
-
-export const WORLD_REGIONS: RegionData[] = [
-  // ─── TIER 1 (LV. 1–5) ───────────────────────────────────────────────────
-  {
-    id: 'forest',
-    name: 'Floresta dos Aprendizes',
-    tier: 1,
-    minLevel: 1,
-    maxLevel: 5,
-    description: 'Florestas calmas perfeitas para treinar os primeiros passos.',
-    icon: '🌲',
-    bossName: 'Urso Ranzinza dos Carinhosos 🐻',
-    dropsPreview: [
-      { name: 'Espada do Aprendiz', icon: '🗡️' },
-      { name: 'Arco Curvo', icon: '🏹' },
-      { name: 'Varinha do Aprendiz', icon: '🔮' },
-      { name: 'Capacete de Couro', icon: '🪖' },
-      { name: 'Pequena Bolsa', icon: '🎒' },
-      { name: 'Amuleto do Lobo', icon: '🐺' },
-    ],
-  },
-  {
-    id: 'shereque',
-    name: 'Vila do Shereque',
-    tier: 1,
-    minLevel: 1,
-    maxLevel: 5,
-    description: 'Pântano verde onde ogros e burros falantes guardam armas rústicas.',
-    icon: '🍞',
-    bossName: 'Fiona Arrazadora 🐸',
-    dropsPreview: [
-      { name: 'Clava de Madeira', icon: '🏏' },
-      { name: 'Machadinha de Madeira', icon: '🪓' },
-      { name: 'Broquel de Madeira', icon: '🛡️' },
-      { name: 'Túnica de Couro', icon: '👕' },
-      { name: 'Sandálias Ágeis', icon: '🥾' },
-      { name: 'Tome: Golpe Giratório', icon: '📜' },
-    ],
-  },
-  {
-    id: 'chapolin',
-    name: 'Vila do Chapolin',
-    tier: 1,
-    minLevel: 1,
-    maxLevel: 5,
-    description: 'Vila costeira aterrorizada pelo terrível Alma Negra.',
-    icon: '🎩',
-    bossName: 'Alma Negra de Greiscu 🏴‍☠️',
-    dropsPreview: [
-      { name: 'Sabre de Bronze', icon: '🗡️' },
-      { name: 'Coifa de Prata', icon: '🪖' },
-      { name: 'Anel de Cobre', icon: '💍' },
-      { name: 'Flechas de Madeira', icon: '🎯' },
-      { name: 'Manual: Tiro Quádruplo', icon: '📜' },
-    ],
-  },
-
-  // ─── TIER 2 (LV. 5–12) ──────────────────────────────────────────────────
-  {
-    id: 'orcruins',
-    name: 'Castelo de Greiscu',
-    tier: 2,
-    minLevel: 5,
-    maxLevel: 12,
-    description: 'Fortificação ancestral dominada por orcs e pelo temível Esquelético.',
-    icon: '🏰',
-    bossName: 'Esquelético Pacato 💀',
-    requiresUnlockFrom: 'forest',
-    dropsPreview: [
-      { name: 'Machado Orc', icon: '🪓' },
-      { name: 'Espada de Aço', icon: '⚔️' },
-      { name: 'Cota de Malha', icon: '🛡️' },
-      { name: 'Escudo de Madeira', icon: '🛡️' },
-      { name: 'Mochila de Aventureiro', icon: '🎒' },
-    ],
-  },
-  {
-    id: 'esgotos',
-    name: 'Esgotos Tartaruga',
-    tier: 2,
-    minLevel: 5,
-    maxLevel: 12,
-    description: 'Subterrâneo escuro guardado pelo Clã do Pé e ratos mutantes.',
-    icon: '🥷',
-    bossName: 'Destruidor Ranzinza 🥷',
-    requiresUnlockFrom: 'forest',
-    dropsPreview: [
-      { name: 'Arco Longo', icon: '🏹' },
-      { name: 'Maça de Batalha', icon: '🏏' },
-      { name: 'Calça de Couro', icon: '👖' },
-      { name: 'Botas de Couro', icon: '🥾' },
-      { name: 'Colar de Prata', icon: '𓓿' },
-      { name: 'Virotes Perfurantes', icon: '🎯' },
-    ],
-  },
-
-  // ─── TIER 3 (LV. 12–20) ─────────────────────────────────────────────────
-  {
-    id: 'rogartes',
-    name: 'Escola de Rogartes',
-    tier: 3,
-    minLevel: 12,
-    maxLevel: 20,
-    description: 'Escola de magia lendária infestada por bruxos e dementadores.',
-    icon: '🧙‍♂️',
-    bossName: 'Voldemorte sem Nariz 🪄',
-    requiresUnlockFrom: 'orcruins',
-    dropsPreview: [
-      { name: 'Cajado Rúnico', icon: '🔮' },
-      { name: 'Varinha das Relíquias', icon: '🪄' },
-      { name: 'Robe Místico', icon: '🥋' },
-      { name: 'Elmo Rúnico', icon: '🪖' },
-      { name: 'Bolsa Rúnica', icon: '🎒' },
-      { name: 'Livro: Bola de Fogo', icon: '📜' },
-    ],
-  },
-
-  // ─── TIER 4 (LV. 20–35) ─────────────────────────────────────────────────
-  {
-    id: 'frozen',
-    name: 'Santuário de Atenas',
-    tier: 4,
-    minLevel: 20,
-    maxLevel: 35,
-    description: 'Picos congelados guardados pelos Cavaleiros de Ouro e espectros.',
-    icon: '🛡️',
-    bossName: 'Mestre do Santuário 🌟',
-    requiresUnlockFrom: 'rogartes',
-    dropsPreview: [
-      { name: 'Katana da Fúria', icon: '⚔️' },
-      { name: 'Marreta Biônica', icon: '🔨' },
-      { name: 'Arco dos Ventos', icon: '🏹' },
-      { name: 'Escudo do Zodíaco', icon: '🛡️' },
-      { name: 'Armadura de Ouro', icon: '👑' },
-      { name: 'Mochila Dragônica', icon: '🎒' },
-    ],
-  },
-
-  // ─── TIER 5 (LV. 35–99) ─────────────────────────────────────────────────
-  {
-    id: 'abyss',
-    name: 'Caverna do Dragão Perdido',
-    tier: 5,
-    minLevel: 35,
-    maxLevel: 99,
-    description: 'Abismo vulcânico onde o Vingador de Chifres guarda tesouros lendários.',
-    icon: '🌋',
-    bossName: 'Vingador de Chifres 🐲',
-    requiresUnlockFrom: 'frozen',
-    dropsPreview: [
-      { name: 'Espada Mítica do Vingador', icon: '⚔️' },
-      { name: 'Lâmina de Greiscu', icon: '🗡️' },
-      { name: 'Arco Apocalíptico', icon: '🏹' },
-      { name: 'Cajado da Eternidade', icon: '🔮' },
-      { name: 'Mochila do Zodíaco', icon: '🎒' },
-      { name: 'Flechas Divinas', icon: '🎯' },
-    ],
-  },
-];
+import { RegionData } from '../../game/GameCatalog';
 
 interface ExpeditionSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentRegion: string;
   characterLevel: number;
+  regions: RegionData[];
   unlockedRegions?: string[];
   onSelectRegion: (regionId: string) => void;
 }
@@ -186,15 +16,26 @@ export function ExpeditionSelectionModal({
   onClose,
   currentRegion,
   characterLevel,
-  unlockedRegions = ['forest', 'shereque', 'chapolin'],
+  regions,
+  unlockedRegions = [],
   onSelectRegion,
 }: ExpeditionSelectionModalProps) {
   const [selectedTier, setSelectedTier] = useState<number>(1);
 
   if (!isOpen) return null;
 
-  const safeUnlockedRegions = unlockedRegions || ['forest', 'shereque', 'chapolin'];
-  const filteredRegions = WORLD_REGIONS.filter((r) => r.tier === selectedTier);
+  const safeUnlockedRegions = unlockedRegions || [];
+  const filteredRegions = regions.filter((r) => r.tier === selectedTier);
+  const tiers = [...new Set(regions.map((region) => region.tier))]
+    .sort((a, b) => a - b)
+    .map((tier) => {
+      const tierRegions = regions.filter((region) => region.tier === tier);
+      return {
+        tier,
+        minLevel: Math.min(...tierRegions.map((region) => region.minLevel)),
+        maxLevel: Math.max(...tierRegions.map((region) => region.maxLevel)),
+      };
+    });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
@@ -220,8 +61,7 @@ export function ExpeditionSelectionModal({
 
         {/* Abas de Tiers de Nível */}
         <div className="flex border-b border-slate-800 bg-slate-950/40 p-2 gap-1.5 overflow-x-auto">
-          {[1, 2, 3, 4, 5].map((tier) => {
-            const labels = ['Tier 1 (Lv 1-5)', 'Tier 2 (Lv 5-12)', 'Tier 3 (Lv 12-20)', 'Tier 4 (Lv 20-35)', 'Tier 5 (Lv 35+)'];
+          {tiers.map(({ tier, minLevel, maxLevel }) => {
             const active = selectedTier === tier;
             return (
               <button
@@ -233,7 +73,7 @@ export function ExpeditionSelectionModal({
                     : 'bg-slate-850 hover:bg-slate-800 text-slate-400'
                 }`}
               >
-                {labels[tier - 1]}
+                Tier {tier} (Lv {minLevel}-{maxLevel})
               </button>
             );
           })}
@@ -282,7 +122,7 @@ export function ExpeditionSelectionModal({
                   <div className="flex items-center gap-3 text-[10px] font-mono text-slate-300 pt-1">
                     <span className="text-amber-400 font-semibold">👑 Boss Final: {region.bossName}</span>
                     <span className="text-slate-500">•</span>
-                    <span className="text-purple-400">🚩 5 Fases + Chefão</span>
+                    <span className="text-purple-400">🚩 {region.maxStages} Fases + Chefão</span>
                   </div>
 
                   {/* Preview de Drops Alvo */}
@@ -291,13 +131,13 @@ export function ExpeditionSelectionModal({
                       🎯 Loot Exclusivo da Região:
                     </span>
                     <div className="flex flex-wrap gap-1.5">
-                      {region.dropsPreview.map((item, idx) => (
+                      {region.dropsPreview.map((item) => (
                         <span
-                          key={idx}
+                          key={item}
                           className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-300"
                         >
-                          <span>{item.icon}</span>
-                          <span>{item.name}</span>
+                          <span>🎁</span>
+                          <span>{item}</span>
                         </span>
                       ))}
                     </div>

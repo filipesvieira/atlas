@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_BASE_URL } from '../../config';
 
 interface AuthScreenProps {
   onSuccess: (token: string, account: any) => void;
@@ -17,7 +18,7 @@ export function AuthScreen({ onSuccess }: AuthScreenProps) {
     setLoading(true);
     
     const path = isLogin ? '/api/v1/auth/login' : '/api/v1/auth/register';
-    const endpoint = `http://localhost:8080${path}`;
+    const endpoint = `${API_BASE_URL}${path}`;
 
     try {
       const res = await fetch(endpoint, {

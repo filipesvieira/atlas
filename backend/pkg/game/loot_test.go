@@ -19,6 +19,77 @@ func TestAllMonsterLootProfilesResolveInTemplates(t *testing.T) {
 	}
 }
 
+func TestEveryExpeditionMonsterHasCanonicalLootProfile(t *testing.T) {
+	for _, region := range ListExpeditionRegions() {
+		monsters := append([]Monster{}, region.Monsters...)
+		monsters = append(monsters, region.Boss)
+		for _, monster := range monsters {
+			entry, exists := MonsterRegistry.Get(monster.Key)
+			if !exists {
+				t.Errorf("Região %s: monstro %s não está registrado no MonsterRegistry", region.ID, monster.Key)
+				continue
+			}
+			if len(entry.Loot.Items) == 0 {
+				t.Errorf("Região %s: monstro %s não possui perfil de loot canônico", region.ID, monster.Key)
+			}
+		}
+	}
+}
+
+func TestRegionLootDoesNotLeakFutureTier(t *testing.T) {
+	for _, region := range ListExpeditionRegions() {
+		monsters := append([]Monster{}, region.Monsters...)
+		monsters = append(monsters, region.Boss)
+		for _, monster := range monsters {
+			profile := getLootProfileForMonster(monster.Key)
+			for _, itemName := range profile.Items {
+				template := findLootTemplate(itemName)
+				if template == nil {
+					continue
+				}
+				if template.Tier > region.Tier {
+					t.Errorf("Região %s (Tier %d): %s pode dropar %s de Tier %d", region.ID, region.Tier, monster.Key, itemName, template.Tier)
+				}
+				if template.RequiredLevel > region.MaxLevel {
+					t.Errorf("Região %s (Lv <= %d): %s pode dropar %s que requer Lv %d", region.ID, region.MaxLevel, monster.Key, itemName, template.RequiredLevel)
+				}
+			}
+		}
+	}
+}
+
+func TestDropsPreviewIsActuallyObtainableInRegion(t *testing.T) {
+	for _, region := range ListExpeditionRegions() {
+		obtainable := make(map[string]bool)
+		monsters := append([]Monster{}, region.Monsters...)
+		monsters = append(monsters, region.Boss)
+		for _, monster := range monsters {
+			for _, itemName := range getLootProfileForMonster(monster.Key).Items {
+				obtainable[itemName] = true
+			}
+		}
+		for _, previewItem := range region.DropsPreview {
+			if !obtainable[previewItem] {
+				t.Errorf("Região %s anuncia %s no preview, mas nenhum monstro da região pode dropá-lo", region.ID, previewItem)
+			}
+		}
+	}
+}
+
+func TestStarterPacksReferenceExistingTemplates(t *testing.T) {
+	for _, pack := range ListStarterPacks() {
+		items := []*StarterItemDefinition{pack.MainHand, pack.OffHand, pack.Ammo}
+		for index := range pack.Backpack {
+			items = append(items, &pack.Backpack[index])
+		}
+		for _, item := range items {
+			if item != nil && findLootTemplate(item.TemplateName) == nil {
+				t.Errorf("Starter pack %s referencia template inexistente: %s", pack.ID, item.TemplateName)
+			}
+		}
+	}
+}
+
 func TestRegionDropsPreviewBelongToRegion(t *testing.T) {
 	for regionID, reg := range ExpeditionRegions {
 		for _, previewItem := range reg.DropsPreview {

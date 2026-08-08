@@ -329,3 +329,39 @@ Claim, abertura de WebSocket e fechamento da sessão são serializados por perso
 ### Relatório auditável
 
 O modal exibe `report_id`, início/fim, região, fase inicial/final, ondas, chefes, ciclos completos, desbloqueios, eficiência, XP, ouro, nível antes/depois, itens guardados e itens convertidos. Um relatório antigo pode ser identificado e comparado diretamente com `expedition_logs`.
+
+---
+
+## 🎒 12. Arquitetura de UI/UX de Inventário & Equipamentos
+
+### Padronização de Raridades (`getRarityStyle`)
+O sistema adota uma paleta determinística unificada entre a tela principal (`TibiaEquipmentGrid`) e o modal de inventário (`TibiaBackpackModal`):
+
+| Raridade | Borda / Contorno | Fundo do Slot | Cor do Texto / Brilho |
+|---|---|---|---|
+| **`Comum`** | `border-slate-800` | `bg-slate-900/60` | `text-slate-300` |
+| **`Incomum`** | `border-emerald-500/60` | `bg-emerald-950/30` | `text-emerald-300` (Emerald Glow) |
+| **`Raro`** | `border-sky-500/60` | `bg-sky-950/30` | `text-sky-300` (Sky Glow) |
+| **`Épico`** | `border-purple-500/60` | `bg-purple-950/30` | `text-purple-300` (Purple Glow) |
+| **`Lendário`** | `border-orange-500/60` | `bg-orange-950/30` | `text-orange-300` (Orange Glow) |
+| **`Mítico`** | `border-rose-500/70` | `bg-rose-950/30` | `text-rose-300` (Rose Glow) |
+| **`Divino`** | `border-amber-400/80` | `bg-amber-950/40` | `text-amber-300` (Divine Gold Glow) |
+
+### Super Tooltip Rico nos Slots de Equipamento
+Ao passar o mouse sobre qualquer slot equipado na tela principal ou dentro da mochila, o tooltip renderiza:
+1. **Cabeçalho com Cor da Raridade**: Nome limpo do item (`getCleanItemName`) e badge colorido de raridade.
+2. **Identificação de Slot**: Rótulo oficial do slot (`Head`, `Weapon`, `Shield`, `Chest`, `Legs`, `Boots`, `Necklace`, `Ring`, `Ammo`, `Bag`).
+3. **Requisito de Nível Dinâmico**: Validação em tempo real com ícones (`✅ Requer Nível X` se atendido, `🔒 Requer Nível X` se insuficiente).
+4. **Estatísticas Primárias**: `Atk: +X`, `Def: +Y` e `Peso: Z oz`.
+5. **Badges Coloridos de Atributos**:
+   - `+STR` (Amber), `+DEX` (Emerald), `+INT` (Sky), `+HP` (Rose), `+MP` (Blue).
+   - `+Ouro %` (Yellow), `Lifesteal %` (Red), `Regen MP /s` (Cyan), `Crítico %` (Purple).
+6. **Efeito Especial & Ação Rápida**: Texto em itálico roxo para habilidades únicas e indicação `(Clique para desequipar)`.
+
+### Filtros e Gerenciamento do "Conteúdo da Mochila"
+Para suportar inventários em larga escala, a mochila conta com:
+- **Filtro de Categoria por Tipo de Slot**: Abas com ícones e contadores (`Todos`, `Armas ⚔️`, `Escudos 🛡️`, `Elmos 🪖`, `Armaduras 🥋`, `Calças 👖`, `Botas 🥾`, `Acessórios 📿`, `Mochilas 🎒`, `Munições 🏹`).
+- **Filtro por Raridade**: Botões rápidos para isolar tiers de raridade específicos.
+- **Busca por Nome em Tempo Real**: Campo de pesquisa dinâmico com botão de limpeza rápida.
+- **Seleção Inteligente para Venda**: O botão `Selecionar Todos` opera sobre os itens filtrados, facilitando a venda em lote por tipo ou raridade (ex: filtrar por "Comum" e vender todos os comuns em um único clique).
+

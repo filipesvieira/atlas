@@ -168,7 +168,7 @@ func unlocksFromBoss(regionID string, alreadyUnlocked []string) []string {
 		known[region] = struct{}{}
 	}
 	unlocked := []string{}
-	for _, candidate := range ExpeditionRegions {
+	for _, candidate := range ListExpeditionRegions() {
 		if candidate.RequiresUnlockFrom != regionID {
 			continue
 		}
@@ -225,10 +225,10 @@ func CalculateOfflineProgress(input OfflineSimulationInput) OfflineResult {
 	}
 
 	regionID := input.ActiveRegion
-	region, exists := ExpeditionRegions[regionID]
+	region, exists := GetExpeditionRegion(regionID)
 	if !exists {
-		regionID = "forest"
-		region = ExpeditionRegions[regionID]
+		regionID = DefaultExpeditionRegionID
+		region, _ = GetExpeditionRegion(regionID)
 	}
 	stage := input.CurrentStage
 	if stage < 1 || stage > region.MaxStages {

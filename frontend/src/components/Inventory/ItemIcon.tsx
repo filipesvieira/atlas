@@ -273,7 +273,7 @@ export function ItemIcon({
 
 export function getCleanItemName(fullName: string = ''): string {
   if (!fullName) return '';
-  return fullName.replace(/^(Comum|Incomum|Raro|Épico|Lendário)\s+/i, '').trim();
+  return fullName.replace(/^(Comum|Incomum|Raro|Épico|Lendário|Mítico|Divino)\s+/i, '').trim();
 }
 
 export function getItemAttack(item?: { attack?: number; physical_attack?: number; magic_attack?: number } | null): number {
@@ -281,3 +281,126 @@ export function getItemAttack(item?: { attack?: number; physical_attack?: number
   if (typeof item.attack === 'number' && item.attack > 0) return item.attack;
   return (item.physical_attack || 0) + (item.magic_attack || 0);
 }
+
+export function getRarityStyle(rarity?: string) {
+  switch (rarity) {
+    case 'Incomum':
+      return {
+        border: 'border-emerald-500/60 hover:border-emerald-400 bg-emerald-950/30',
+        text: 'text-emerald-300',
+        bg: 'bg-emerald-950/30',
+        badgeBg: 'bg-emerald-950/80',
+        badgeBorder: 'border-emerald-800/80',
+        badgeText: 'text-emerald-300',
+        glow: 'shadow-emerald-500/20',
+      };
+    case 'Raro':
+      return {
+        border: 'border-sky-500/60 hover:border-sky-400 bg-sky-950/30',
+        text: 'text-sky-300',
+        bg: 'bg-sky-950/30',
+        badgeBg: 'bg-sky-950/80',
+        badgeBorder: 'border-sky-800/80',
+        badgeText: 'text-sky-300',
+        glow: 'shadow-sky-500/20',
+      };
+    case 'Épico':
+      return {
+        border: 'border-purple-500/60 hover:border-purple-400 bg-purple-950/30',
+        text: 'text-purple-300',
+        bg: 'bg-purple-950/30',
+        badgeBg: 'bg-purple-950/80',
+        badgeBorder: 'border-purple-800/80',
+        badgeText: 'text-purple-300',
+        glow: 'shadow-purple-500/20',
+      };
+    case 'Lendário':
+      return {
+        border: 'border-orange-500/60 hover:border-orange-400 bg-orange-950/30',
+        text: 'text-orange-300',
+        bg: 'bg-orange-950/30',
+        badgeBg: 'bg-orange-950/80',
+        badgeBorder: 'border-orange-800/80',
+        badgeText: 'text-orange-300',
+        glow: 'shadow-orange-500/20',
+      };
+    case 'Mítico':
+      return {
+        border: 'border-rose-500/70 hover:border-rose-400 bg-rose-950/30',
+        text: 'text-rose-300',
+        bg: 'bg-rose-950/30',
+        badgeBg: 'bg-rose-950/80',
+        badgeBorder: 'border-rose-800/80',
+        badgeText: 'text-rose-300',
+        glow: 'shadow-rose-500/20',
+      };
+    case 'Divino':
+      return {
+        border: 'border-amber-400/80 hover:border-amber-300 bg-amber-950/40',
+        text: 'text-amber-300',
+        bg: 'bg-amber-950/40',
+        badgeBg: 'bg-amber-950/80',
+        badgeBorder: 'border-amber-800/80',
+        badgeText: 'text-amber-300',
+        glow: 'shadow-amber-400/30',
+      };
+    case 'Comum':
+    default:
+      return {
+        border: 'border-slate-800 hover:border-slate-700 bg-slate-900/60',
+        text: 'text-slate-300',
+        bg: 'bg-slate-900/60',
+        badgeBg: 'bg-slate-900/80',
+        badgeBorder: 'border-slate-800',
+        badgeText: 'text-slate-300',
+        glow: 'shadow-slate-500/10',
+      };
+  }
+}
+
+export function BonusBadges({ item }: { item?: any }) {
+  if (!item) return null;
+  const hasBonuses =
+    item.bonus_str ||
+    item.bonus_dex ||
+    item.bonus_int ||
+    item.bonus_hp ||
+    item.bonus_mp ||
+    item.gold_bonus ||
+    item.lifesteal ||
+    item.mana_regen ||
+    item.crit_chance;
+
+  if (!hasBonuses) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1 mt-1 text-[9px] font-mono">
+      {item.bonus_str ? <span className="px-1 bg-amber-950/80 text-amber-300 border border-amber-800/60 rounded">+{item.bonus_str} STR</span> : null}
+      {item.bonus_dex ? <span className="px-1 bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 rounded">+{item.bonus_dex} DEX</span> : null}
+      {item.bonus_int ? <span className="px-1 bg-sky-950/80 text-sky-300 border border-sky-800/60 rounded">+{item.bonus_int} INT</span> : null}
+      {item.bonus_hp ? <span className="px-1 bg-rose-950/80 text-rose-300 border border-rose-800/60 rounded">+{item.bonus_hp} HP</span> : null}
+      {item.bonus_mp ? <span className="px-1 bg-blue-950/80 text-blue-300 border border-blue-800/60 rounded">+{item.bonus_mp} MP</span> : null}
+      {item.gold_bonus ? <span className="px-1 bg-yellow-950/80 text-yellow-300 border border-yellow-800/60 rounded">+{item.gold_bonus}% Ouro</span> : null}
+      {item.lifesteal ? <span className="px-1 bg-red-950/80 text-red-300 border border-red-800/60 rounded">+{item.lifesteal}% Lifesteal</span> : null}
+      {item.mana_regen ? <span className="px-1 bg-cyan-950/80 text-cyan-300 border border-cyan-800/60 rounded">+{item.mana_regen} MP/s</span> : null}
+      {item.crit_chance ? <span className="px-1 bg-purple-950/80 text-purple-300 border border-purple-800/60 rounded">+{item.crit_chance}% Crit</span> : null}
+    </div>
+  );
+}
+
+export function getSlotLabel(slotKey: string): string {
+  const map: Record<string, string> = {
+    head: 'Head',
+    necklace: 'Necklace',
+    chest: 'Chest',
+    mainhand: 'Weapon',
+    offhand: 'Shield',
+    legs: 'Legs',
+    boots: 'Boots',
+    ring: 'Ring',
+    ammo: 'Ammo',
+    bag: 'Bag',
+  };
+  return map[slotKey] || slotKey;
+}
+

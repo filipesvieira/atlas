@@ -2,8 +2,14 @@ package game
 
 import "math/rand"
 
+const (
+	DefaultExpeditionRegionID  = "forest"
+	DefaultExpeditionMaxStages = 5
+)
+
 type ExpeditionRegion struct {
 	ID                 string    `json:"id"`
+	BiomeKey           string    `json:"biome_key"`
 	Name               string    `json:"name"`
 	Tier               int       `json:"tier"`
 	Order              int       `json:"order"`
@@ -23,6 +29,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 	// ─── TIER 1 (LV. 1–5) ───────────────────────────────────────────────────
 	"forest": {
 		ID:                 "forest",
+		BiomeKey:           "forest",
 		Name:               "Floresta dos Aprendizes",
 		Tier:               1,
 		Order:              1,
@@ -42,6 +49,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 	},
 	"shereque": {
 		ID:                 "shereque",
+		BiomeKey:           "shereque",
 		Name:               "Vila do Shereque",
 		Tier:               1,
 		Order:              2,
@@ -60,6 +68,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 	},
 	"chapolin": {
 		ID:                 "chapolin",
+		BiomeKey:           "chapolin",
 		Name:               "Vila do Chapolin",
 		Tier:               1,
 		Order:              3,
@@ -81,6 +90,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 	// ─── TIER 2 (LV. 5–12) ──────────────────────────────────────────────────
 	"orcruins": {
 		ID:                 "orcruins",
+		BiomeKey:           "orcruins",
 		Name:               "Castelo de Greiscu",
 		Tier:               2,
 		Order:              4,
@@ -102,6 +112,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 	},
 	"esgotos": {
 		ID:                 "esgotos",
+		BiomeKey:           "esgotos",
 		Name:               "Esgotos Tartaruga",
 		Tier:               2,
 		Order:              5,
@@ -122,6 +133,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 	// ─── TIER 3 (LV. 12–20) ─────────────────────────────────────────────────
 	"rogartes": {
 		ID:                 "rogartes",
+		BiomeKey:           "rogartes",
 		Name:               "Escola de Rogartes",
 		Tier:               3,
 		Order:              6,
@@ -142,6 +154,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 	// ─── TIER 4 (LV. 20–35) ─────────────────────────────────────────────────
 	"frozen": {
 		ID:                 "frozen",
+		BiomeKey:           "frozen",
 		Name:               "Santuário de Atenas",
 		Tier:               4,
 		Order:              7,
@@ -164,6 +177,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 	// ─── TIER 5 (LV. 35–99) ─────────────────────────────────────────────────
 	"abyss": {
 		ID:                 "abyss",
+		BiomeKey:           "abyss",
 		Name:               "Caverna do Dragão Perdido",
 		Tier:               5,
 		Order:              8,
@@ -192,9 +206,9 @@ func GetRandomMonsterForRegion(regionID string, r *rand.Rand) Monster {
 	if r == nil {
 		r = rand.New(rand.NewSource(1))
 	}
-	reg, exists := ExpeditionRegions[regionID]
+	reg, exists := GetExpeditionRegion(regionID)
 	if !exists {
-		reg = ExpeditionRegions["forest"]
+		reg, _ = GetExpeditionRegion(DefaultExpeditionRegionID)
 	}
 	mTemplate := reg.Monsters[r.Intn(len(reg.Monsters))]
 

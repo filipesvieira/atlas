@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../../config';
 
 interface CharacterScreenProps {
   token: string;
@@ -21,7 +22,7 @@ export function CharacterScreen({ token, onSelectCharacter }: CharacterScreenPro
   const fetchCharacters = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:8080/api/v1/characters', {
+      const res = await fetch(`${API_BASE_URL}/api/v1/characters`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -43,7 +44,7 @@ export function CharacterScreen({ token, onSelectCharacter }: CharacterScreenPro
     setError(null);
 
     try {
-      const res = await fetch('http://localhost:8080/api/v1/characters', {
+      const res = await fetch(`${API_BASE_URL}/api/v1/characters`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

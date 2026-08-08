@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { WS_BASE_URL } from '../config';
 
 export interface Item {
   id: string;
@@ -83,6 +84,7 @@ export interface CombatMessage {
   total_attack?: number;
   total_defense?: number;
   active_region?: string;
+  active_biome?: string;
   active_stance?: string;
   current_stage?: number;
   max_stages?: number;
@@ -108,7 +110,7 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
   const [maxStages, setMaxStages] = useState(5);
   const [isBossStage, setIsBossStage] = useState(initialChar?.is_boss_stage || false);
   const [unlockedRegions, setUnlockedRegions] = useState<string[]>(
-    initialChar?.unlocked_regions || ['forest', 'shereque', 'chapolin']
+    initialChar?.unlocked_regions || []
   );
   const [isExpeditionActive, setIsExpeditionActive] = useState(initialChar?.is_expedition_active || false);
   const [autoResumeExpedition, setAutoResumeExpeditionState] = useState(initialChar?.auto_resume_expedition || false);
@@ -131,9 +133,7 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 
     const connect = () => {
       if (!isMounted) return;
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.hostname;
-      const wsUrl = `${protocol}//${host}:8080/ws?token=${encodeURIComponent(token)}&character_id=${encodeURIComponent(characterId)}`;
+      const wsUrl = `${WS_BASE_URL}/ws?token=${encodeURIComponent(token)}&character_id=${encodeURIComponent(characterId)}`;
 
       const ws = new WebSocket(wsUrl);
       socketRef.current = ws;

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { TibiaBackpackModal, Item, EquipmentSlots } from './TibiaBackpackModal';
-import { ItemIcon, getCleanItemName, getItemAttack } from './ItemIcon';
+import { ItemIcon, getCleanItemName, getItemAttack, getRarityStyle, BonusBadges, getSlotLabel } from './ItemIcon';
 
 export type { Item, EquipmentSlots };
 
@@ -26,45 +26,33 @@ interface SlotItemProps {
   placeholderIcon: string;
   label: string;
   slotKey: string;
+  charLevel?: number;
   onUnequip?: (slot: string) => void;
 }
 
-function SlotItem({ item, placeholderIcon, label, slotKey, onUnequip }: SlotItemProps) {
-  let rarityBorder = 'border-amber-500 shadow-amber-500/10 hover:border-amber-400 bg-amber-950/40';
-  let rarityText = 'text-amber-300';
-
-  if (item) {
-    switch (item.rarity) {
-      case 'Comum':
-        rarityBorder = 'border-slate-500 shadow-slate-500/10 hover:border-slate-400 bg-slate-900/60';
-        rarityText = 'text-slate-300';
-        break;
-      case 'Incomum':
-        rarityBorder = 'border-emerald-500 shadow-emerald-500/10 hover:border-emerald-400 bg-emerald-950/40';
-        rarityText = 'text-emerald-300';
-        break;
-      case 'Raro':
-        rarityBorder = 'border-sky-500 shadow-sky-500/10 hover:border-sky-400 bg-sky-950/40';
-        rarityText = 'text-sky-300';
-        break;
-      case 'Lendário':
-        rarityBorder = 'border-orange-500 shadow-orange-500/10 hover:border-orange-400 bg-orange-950/40';
-        rarityText = 'text-orange-300';
-        break;
-    }
-  }
+function SlotItem({ item, placeholderIcon, label, slotKey, charLevel = 1, onUnequip }: SlotItemProps) {
+  const style = item ? getRarityStyle(item.rarity) : {
+    border: 'border-slate-800 bg-slate-950/80 hover:border-slate-700',
+    text: 'text-slate-600',
+    bg: 'bg-slate-950/80',
+    badgeBg: 'bg-slate-900',
+    badgeBorder: 'border-slate-800',
+    badgeText: 'text-slate-400',
+    glow: '',
+  };
 
   const cleanName = item ? getCleanItemName(item.name) : label;
-
   const isRightSlot = slotKey === 'bag' || slotKey === 'offhand' || slotKey === 'ammo';
-  const tooltipPos = isRightSlot ? 'right-full mr-2 -top-2' : 'left-full ml-2 -top-2';
+  const tooltipPos = isRightSlot ? 'right-full mr-3 -top-2' : 'left-full ml-3 -top-2';
+  const atkVal = item ? getItemAttack(item) : 0;
+  const isLevelLocked = item?.required_level ? charLevel < item.required_level : false;
 
   return (
     <div
       onClick={() => item && onUnequip && onUnequip(slotKey)}
       className={`w-11 h-11 rounded-lg border flex flex-col items-center justify-center relative cursor-pointer transition-all group hover:z-40 ${
         item
-          ? `${rarityBorder} shadow-md`
+          ? `${style.border} ${style.glow} shadow-md`
           : 'bg-slate-950/80 border-slate-800 text-slate-600 hover:border-slate-700'
       }`}
     >
@@ -75,37 +63,63 @@ function SlotItem({ item, placeholderIcon, label, slotKey, onUnequip }: SlotItem
             slotType={slotKey}
             specialEffect={item.special_effect}
             size="md"
-            className={`${rarityText} opacity-90 transition-transform group-hover:scale-110`}
+            className={`${style.text} opacity-90 transition-transform group-hover:scale-110`}
           />
-          {(getItemAttack(item) > 0 || (item.defense || 0) > 0) && (
+          {(atkVal > 0 || (item.defense || 0) > 0) && (
             <div className="text-[8px] font-mono text-emerald-400 font-bold leading-none mt-0.5">
-              +{getItemAttack(item) > 0 ? `${getItemAttack(item)}A` : `${item.defense}D`}
+              +{atkVal > 0 ? `${atkVal}A` : `${item.defense}D`}
             </div>
           )}
         </div>
       ) : (
         <span className="text-base opacity-40 select-none">{placeholderIcon}</span>
       )}
-      <span className="text-[8px] font-sans text-slate-500 absolute -bottom-1 bg-slate-900 px-0.5 rounded border border-slate-800 scale-90">
+      <span className="text-[8px] font-sans text-slate-500 absolute -bottom-1 bg-slate-900 px-0.5 rounded border border-slate-800 scale-90 truncate max-w-full">
         {label}
       </span>
       
-      {/* Super Tooltip Hover com Posicionamento Inteligente */}
+      {/* Tooltip Hover Rico com Posicionamento Inteligente e Atributos Completos */}
       {item && (
-        <div className={`hidden group-hover:flex absolute z-50 flex-col w-40 p-2 text-left bg-slate-900 border border-slate-700 rounded-lg shadow-2xl pointer-events-none ${tooltipPos}`}>
-          <div className={`font-bold text-[11px] mb-1 ${rarityText}`}>{cleanName}</div>
-          <div className="text-[9px] text-slate-400 mb-1 border-b border-slate-700 pb-1">
-            {item.rarity} {label}
+        <div className={`hidden group-hover:flex absolute z-50 flex-col w-52 p-3 text-left bg-slate-900/95 border border-slate-700 rounded-xl shadow-2xl pointer-events-none backdrop-blur-sm animate-in fade-in zoom-in-95 ${tooltipPos}`}>
+          <div className="flex justify-between items-start gap-1">
+            <div className={`font-bold text-xs ${style.text}`}>{cleanName}</div>
+            <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold border ${style.badgeBg} ${style.badgeBorder} ${style.badgeText}`}>
+              {item.rarity}
+            </span>
           </div>
-          <div className="flex justify-between text-[10px] mb-1">
-            <span className="text-rose-400">Atk: +{getItemAttack(item)}</span>
-            <span className="text-sky-400">Def: +{item.defense || 0}</span>
+          
+          <div className="text-[9px] text-slate-400 border-b border-slate-800 pb-1 mb-1 font-mono">
+            Slot: {getSlotLabel(slotKey)}
           </div>
-          <div className="text-[10px] text-slate-400 mb-1">Peso: {item.weight} oz</div>
-          {item.special_effect && (
-            <div className="text-[10px] text-purple-400 italic leading-tight mt-1">{item.special_effect}</div>
+
+          {/* Requisito de Nível */}
+          {item.required_level && item.required_level > 1 && (
+            <div className={`text-[10px] font-mono font-bold mb-1.5 flex items-center gap-1 ${
+              isLevelLocked ? 'text-rose-400' : 'text-emerald-400'
+            }`}>
+              <span>{isLevelLocked ? '🔒' : '✅'}</span>
+              <span>Requer Nível {item.required_level}</span>
+            </div>
           )}
-          <div className="mt-2 text-[9px] text-amber-500 font-bold border-t border-slate-700 pt-1">
+
+          {/* Estatísticas Principais */}
+          <div className="flex justify-between text-[10px] font-mono mb-1">
+            <span className="text-rose-400 font-bold">Atk: +{atkVal}</span>
+            <span className="text-sky-400 font-bold">Def: +{item.defense || 0}</span>
+            <span className="text-slate-400">{(item.weight || 0).toFixed(1)} oz</span>
+          </div>
+
+          {/* Badges de Bônus de Atributos */}
+          <BonusBadges item={item} />
+
+          {/* Efeito Especial */}
+          {item.special_effect && (
+            <div className="text-[9px] text-purple-400 italic leading-tight mt-1.5 border-t border-slate-800 pt-1">
+              {item.special_effect}
+            </div>
+          )}
+
+          <div className="mt-2 text-[9px] text-amber-500 font-bold border-t border-slate-800 pt-1">
             (Clique para desequipar)
           </div>
         </div>
@@ -229,29 +243,29 @@ export function TibiaEquipmentGrid({
       <div className="flex flex-col items-center justify-center bg-slate-950 p-3 rounded-xl border border-slate-800 shadow-inner">
         {/* Linha 1: Necklace | Head | Backpack */}
         <div className="flex gap-2.5 mb-2">
-          <SlotItem item={safeEquipment.necklace} placeholderIcon="📿" label="Necklace" slotKey="necklace" onUnequip={onUnequipItem} />
-          <SlotItem item={safeEquipment.head} placeholderIcon="🪖" label="Head" slotKey="head" onUnequip={onUnequipItem} />
-          <SlotItem item={safeEquipment.bag} placeholderIcon="🎒" label="Bag" slotKey="bag" onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.necklace} placeholderIcon="📿" label="Necklace" slotKey="necklace" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.head} placeholderIcon="🪖" label="Head" slotKey="head" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.bag} placeholderIcon="🎒" label="Bag" slotKey="bag" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
         </div>
 
         {/* Linha 2: MainHand | Chest | OffHand */}
         <div className="flex gap-2.5 mb-2">
-          <SlotItem item={safeEquipment.mainhand} placeholderIcon="⚔️" label="Weapon" slotKey="mainhand" onUnequip={onUnequipItem} />
-          <SlotItem item={safeEquipment.chest} placeholderIcon="🛡️" label="Chest" slotKey="chest" onUnequip={onUnequipItem} />
-          <SlotItem item={safeEquipment.offhand} placeholderIcon="🛡️" label="Shield" slotKey="offhand" onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.mainhand} placeholderIcon="⚔️" label="Weapon" slotKey="mainhand" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.chest} placeholderIcon="🛡️" label="Chest" slotKey="chest" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.offhand} placeholderIcon="🛡️" label="Shield" slotKey="offhand" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
         </div>
 
         {/* Linha 3: Ring | Legs | Ammo */}
         <div className="flex gap-2.5 mb-2">
-          <SlotItem item={safeEquipment.ring} placeholderIcon="💍" label="Ring" slotKey="ring" onUnequip={onUnequipItem} />
-          <SlotItem item={safeEquipment.legs} placeholderIcon="👖" label="Legs" slotKey="legs" onUnequip={onUnequipItem} />
-          <SlotItem item={safeEquipment.ammo} placeholderIcon="🏹" label="Ammo" slotKey="ammo" onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.ring} placeholderIcon="💍" label="Ring" slotKey="ring" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.legs} placeholderIcon="👖" label="Legs" slotKey="legs" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.ammo} placeholderIcon="🏹" label="Ammo" slotKey="ammo" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
         </div>
 
         {/* Linha 4: Boots */}
         <div className="flex gap-2.5">
           <div className="w-11 h-11"></div>
-          <SlotItem item={safeEquipment.boots} placeholderIcon="🥾" label="Boots" slotKey="boots" onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.boots} placeholderIcon="🥾" label="Boots" slotKey="boots" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
           <div className="w-11 h-11"></div>
         </div>
 
