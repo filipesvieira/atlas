@@ -1146,3 +1146,173 @@ function drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.fill();
 }
 
+/** Cenário: Planalto Central (Brasília - Congresso Nacional, Cúpulas, Rampa e Espelho d'Água) */
+export function getPlanaltoBackground(w = 500, h = 260): HTMLCanvasElement {
+  return getOffscreenCanvas('bg_planalto', w, h, (ctx) => {
+    // 1. Céu Azul Vibrante do Cerrado de Brasília
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, h * 0.6);
+    skyGrad.addColorStop(0, '#0284c7');
+    skyGrad.addColorStop(0.5, '#38bdf8');
+    skyGrad.addColorStop(1, '#bae6fd');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, w, h * 0.6);
+
+    // Nuvens Volumosas e Brancas (Cumulus do Planalto)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    const drawCloud = (cx: number, cy: number, r: number) => {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.arc(cx + r * 0.8, cy - r * 0.3, r * 0.75, 0, Math.PI * 2);
+      ctx.arc(cx + r * 1.5, cy, r * 0.85, 0, Math.PI * 2);
+      ctx.arc(cx - r * 0.7, cy + r * 0.1, r * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    drawCloud(60, 45, 22);
+    drawCloud(190, 35, 28);
+    drawCloud(340, 40, 25);
+    drawCloud(460, 50, 20);
+
+    // 2. CONGRESSO NACIONAL - AS DUAS TORRES GÊMEAS VERTICAIS
+    const towerW = 20;
+    const towerH = 110;
+    const towerX1 = w * 0.41;
+    const towerX2 = towerX1 + towerW + 8;
+    const towerY = h * 0.14;
+
+    // Sombra suave atrás das torres
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.15)';
+    ctx.fillRect(towerX1 - 2, towerY, towerW * 2 + 12, towerH);
+
+    // Torre 1 (Esquerda)
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(towerX1, towerY, towerW, towerH);
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillRect(towerX1 + towerW - 3, towerY, 3, towerH);
+
+    // Torre 2 (Direita)
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(towerX2, towerY, towerW, towerH);
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillRect(towerX2 + towerW - 3, towerY, 3, towerH);
+
+    // Janelas das Torres em Linhas Horizontais
+    ctx.fillStyle = '#475569';
+    for (let y = towerY + 6; y < towerY + towerH - 6; y += 7) {
+      ctx.fillRect(towerX1 + 3, y, towerW - 6, 2.5);
+      ctx.fillRect(towerX2 + 3, y, towerW - 6, 2.5);
+    }
+
+    // Passarela Central de Conexão entre as Torres
+    ctx.fillStyle = '#64748b';
+    ctx.fillRect(towerX1 + towerW, towerY + towerH * 0.45, 8, 14);
+    ctx.fillStyle = '#0284c7';
+    ctx.fillRect(towerX1 + towerW + 1, towerY + towerH * 0.45 + 3, 6, 8);
+
+    // Mastro com a Bandeira do Brasil atrás das Torres
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(towerX2 + 18, towerY + towerH);
+    ctx.lineTo(towerX2 + 18, towerY + 15);
+    ctx.stroke();
+
+    ctx.fillStyle = '#16a34a';
+    ctx.fillRect(towerX2 + 18, towerY + 15, 16, 10);
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.moveTo(towerX2 + 26, towerY + 16);
+    ctx.lineTo(towerX2 + 32, towerY + 20);
+    ctx.lineTo(towerX2 + 26, towerY + 24);
+    ctx.lineTo(towerX2 + 20, towerY + 20);
+    ctx.fill();
+
+    // 3. EDIFÍCIO DA BASE / LAJE DO CONGRESSO
+    const baseW = w * 0.88;
+    const baseX = (w - baseW) / 2;
+    const baseY = h * 0.52;
+    const baseH = 22;
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(baseX, baseY, baseW, baseH);
+    ctx.fillStyle = '#1e293b';
+    // Vidraça da fachada do Congresso
+    for (let gx = baseX + 8; gx < baseX + baseW - 8; gx += 10) {
+      ctx.fillRect(gx, baseY + 6, 7, baseH - 8);
+    }
+
+    // 4. CÚPULA CONVEXA (SENADO FEDERAL - ESQUERDA)
+    const cupola1X = w * 0.22;
+    const cupola1Y = baseY;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(cupola1X, cupola1Y + 2, 42, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // 5. CÚPULA CÔNCAVA (CÂMARA DOS DEPUTADOS - PRATO PRA CIMA NA DIREITA)
+    const cupola2X = w * 0.76;
+    const cupola2Y = baseY + 4;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(cupola2X, cupola2Y, 52, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Corpo cônico do prato da câmara
+    ctx.beginPath();
+    ctx.moveTo(cupola2X - 52, cupola2Y);
+    ctx.quadraticCurveTo(cupola2X, cupola2Y + 24, cupola2X + 52, cupola2Y);
+    ctx.lineTo(cupola2X + 32, cupola2Y + 12);
+    ctx.quadraticCurveTo(cupola2X, cupola2Y + 28, cupola2X - 32, cupola2Y + 12);
+    ctx.fill();
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.stroke();
+
+    // 6. RAMPA MONUMENTAL CENTRAL
+    ctx.fillStyle = '#f1f5f9';
+    ctx.beginPath();
+    ctx.moveTo(w * 0.44, baseY + baseH);
+    ctx.lineTo(w * 0.34, h * 0.72);
+    ctx.lineTo(w * 0.42, h * 0.72);
+    ctx.lineTo(w * 0.50, baseY + baseH);
+    ctx.fill();
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.stroke();
+
+    // 7. ESPELHO D'ÁGUA EM FRENTE AO CONGRESSO
+    const waterGrad = ctx.createLinearGradient(0, h * 0.60, 0, h * 0.74);
+    waterGrad.addColorStop(0, '#0284c7');
+    waterGrad.addColorStop(0.5, '#38bdf8');
+    waterGrad.addColorStop(1, '#0369a1');
+    ctx.fillStyle = waterGrad;
+    ctx.fillRect(baseX + 10, h * 0.62, baseW - 20, 20);
+
+    // Reflexo sutil das torres no espelho d'água
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.fillRect(towerX1 + 4, h * 0.62, towerW * 2 + 2, 18);
+    for (let r = h * 0.64; r < h * 0.80; r += 5) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(baseX + 30, r);
+      ctx.lineTo(baseX + baseW - 30, r);
+      ctx.stroke();
+    }
+
+    // 8. GRAMADO VERDE VIBRANTE DA ESPLANADA DOS MINISTÉRIOS (Piso de Combate)
+    const lawnGrad = ctx.createLinearGradient(0, h * 0.72, 0, h);
+    lawnGrad.addColorStop(0, '#22c55e');
+    lawnGrad.addColorStop(0.3, '#16a34a');
+    lawnGrad.addColorStop(1, '#15803d');
+    ctx.fillStyle = lawnGrad;
+    ctx.fillRect(0, h * 0.72, w, h * 0.28);
+
+    // Textura de grama aparada em faixas
+    ctx.fillStyle = 'rgba(34, 197, 94, 0.25)';
+    for (let lx = 0; lx < w; lx += 40) {
+      ctx.fillRect(lx, h * 0.72, 20, h * 0.28);
+    }
+  });
+}
+
+

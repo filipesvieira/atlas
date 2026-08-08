@@ -6,6 +6,7 @@ import {
   getForestBackground,
   getFrozenBackground,
   getOrcRuinsBackground,
+  getPlanaltoBackground,
   getRogartesBackground,
   getSherequeBackground,
 } from '../renderers/biomes/BiomeRenderers';
@@ -38,6 +39,7 @@ export const biomeRegistry = new GameBiomeRegistry().registerAll([
   { key: 'chapolin', render: getChapolinBackground },
   { key: 'orcruins', render: getOrcRuinsBackground },
   { key: 'esgotos', render: getEsgotosBackground },
+  { key: 'planalto', aliases: ['brasilia', 'planalto_central'], render: getPlanaltoBackground },
   { key: 'rogartes', render: getRogartesBackground },
   { key: 'frozen', render: getFrozenBackground },
   { key: 'abyss', render: getAbyssBackground },

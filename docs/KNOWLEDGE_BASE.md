@@ -137,6 +137,7 @@ Chada região possui **5 Fases (Stages)**:
 | **Tier 1** | `chapolin` | 🎩 **Vila do Chapolin** | **Alma Negra 🏴‍☠️** | Praia tropical ao pôr do sol, mar azul, coqueiros. |
 | **Tier 2** | `orcruins` | 🏰 **Castelo de Greiscu** | **Esquelético Pacato 💀** | Noite noturna, lua púrpura, ruínas de castelo e lajotas. |
 | **Tier 2** | `esgotos` | 🥷 **Esgotos Tartaruga** | **Destruidor Ranzinza 🥷** | Subterrâneo de tijolos escuros, tubos e líquido verde neon. |
+| **Tier 2** | `planalto` | 🏛️ **Planalto dos Três Poderes** | **Xandaum, o Guardião ⚖️** | Esplanada monumental, mármore branco e céu limpo. |
 | **Tier 3** | `rogartes` | 🧙‍♂️ **Escola de Rogartes** | **Voldemorte sem Nariz 🪄** | Salão noturno místico, estrelas piscando, círculo rúnico. |
 | **Tier 4** | `frozen` | 🛡️ **Santuário de Atenas** | **Mestre do Santuário 🌟** | Picos congelados, geleira azul e Aurora Borealis no céu. |
 | **Tier 5** | `abyss` | 🌋 **Caverna do Dragão Perdido** | **Vingador de Chifres 🐲** | Caverna vulcânica, rios de lava fervente, obsidiana. |

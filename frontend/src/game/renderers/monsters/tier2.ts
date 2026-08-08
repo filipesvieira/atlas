@@ -620,5 +620,348 @@ export const tier2MonsterVisuals: MonsterVisualDefinition[] = [
       ctx.fillRect(size / 2 - 4, 7, 2, 1);
       ctx.fillRect(size / 2 + 2, 7, 2, 1);
     },
-  }
+  },
+  {
+    key: 'planalto_militante',
+    biomeKey: 'planalto',
+    aliases: ['militante', 'militante_13', 'militante_do_treze'],
+    render: (ctx, size) => {
+      drawMonsterShadow(ctx, size);
+      // 1. Pernas com Bermuda Escura e Tênis
+      ctx.fillStyle = '#1e293b'; // Bermuda jeans/escura
+      ctx.fillRect(size / 2 - 10, 28, 8, 10);
+      ctx.fillRect(size / 2 + 2, 28, 8, 10);
+      ctx.fillStyle = '#f8fafc'; // Tênis claro
+      ctx.fillRect(size / 2 - 11, 38, 9, 6);
+      ctx.fillRect(size / 2 + 2, 38, 9, 6);
+
+      // 2. Tronco com Camiseta Vermelha Vibrante
+      ctx.fillStyle = '#dc2626'; // Vermelho intenso
+      ctx.fillRect(size / 2 - 13, 14, 26, 16);
+
+      // Estrela Branca no Peito
+      ctx.fillStyle = '#ffffff';
+      const starX = size / 2 - 2;
+      const starY = 21;
+      ctx.beginPath();
+      ctx.moveTo(starX, starY - 5);
+      ctx.lineTo(starX + 2, starY - 1);
+      ctx.lineTo(starX + 6, starY);
+      ctx.lineTo(starX + 3, starY + 3);
+      ctx.lineTo(starX + 4, starY + 7);
+      ctx.lineTo(starX, starY + 4);
+      ctx.lineTo(starX - 4, starY + 7);
+      ctx.lineTo(starX - 3, starY + 3);
+      ctx.lineTo(starX - 6, starY);
+      ctx.lineTo(starX - 2, starY - 1);
+      ctx.closePath();
+      ctx.fill();
+
+      // Letras "PT" dentro da estrela
+      ctx.fillStyle = '#dc2626';
+      ctx.font = 'bold 5px sans-serif';
+      ctx.fillText('PT', starX - 3, starY + 2);
+
+      // 3. Braço Direito Fazendo o "Joinha / L" (Polegar erguido como na foto)
+      ctx.fillStyle = '#e2a97e'; // Tom de pele
+      ctx.fillRect(size / 2 + 13, 16, 7, 7);
+      // Mão com polegar pra cima
+      ctx.fillRect(size / 2 + 18, 12, 4, 8);
+      ctx.fillRect(size / 2 + 16, 15, 6, 6);
+
+      // Braço Esquerdo relaxed
+      ctx.fillStyle = '#e2a97e';
+      ctx.fillRect(size / 2 - 17, 16, 5, 12);
+
+      // 4. Cabeça, Rosto e Cabelo Curto
+      ctx.fillStyle = '#e2a97e';
+      ctx.beginPath();
+      ctx.arc(size / 2, 10, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cabelo preto curto
+      ctx.fillStyle = '#1c1917';
+      ctx.beginPath();
+      ctx.arc(size / 2, 8, 8, Math.PI, Math.PI * 2);
+      ctx.fill();
+
+      // Sorriso simpático e olhos
+      ctx.fillStyle = '#451a03';
+      ctx.fillRect(size / 2 - 4, 8, 2, 2);
+      ctx.fillRect(size / 2 + 2, 8, 2, 2);
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(size / 2, 12, 3, 0, Math.PI);
+      ctx.stroke();
+    },
+  },
+  {
+    key: 'planalto_patriota',
+    biomeKey: 'planalto',
+    aliases: ['patriota', 'patriota_caminhao', 'patriota_do_caminhao'],
+    render: (ctx, size) => {
+      drawMonsterShadow(ctx, size);
+      // 1. Pernas com Calça Jeans e Tênis
+      ctx.fillStyle = '#1d4ed8'; // Jeans azul
+      ctx.fillRect(size / 2 - 9, 28, 7, 10);
+      ctx.fillRect(size / 2 + 2, 28, 7, 10);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(size / 2 - 10, 38, 8, 6);
+      ctx.fillRect(size / 2 + 2, 38, 8, 6);
+
+      // 2. Tronco Enrolado na Grande Bandeira do Brasil (Verde e Amarela)
+      ctx.fillStyle = '#16a34a'; // Verde bandeira
+      ctx.fillRect(size / 2 - 15, 14, 30, 16);
+
+      // Losango Amarelo Ouro no Tronco
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.moveTo(size / 2, 15);
+      ctx.lineTo(size / 2 + 11, 22);
+      ctx.lineTo(size / 2, 29);
+      ctx.lineTo(size / 2 - 11, 22);
+      ctx.closePath();
+      ctx.fill();
+
+      // Círculo Azul da Bandeira com Faixa Branca
+      ctx.fillStyle = '#1d4ed8';
+      ctx.beginPath();
+      ctx.arc(size / 2, 22, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(size / 2 - 4, 21, 8, 1.5);
+
+      // Capa da Bandeira esvoaçando nas costas
+      ctx.fillStyle = '#15803d';
+      ctx.fillRect(size / 2 - 18, 16, 4, 18);
+      ctx.fillRect(size / 2 + 14, 16, 4, 18);
+
+      // 3. Cabeça com Pintura Facial Verde e Amarela (Como na foto 3)
+      ctx.fillStyle = '#fcd34d'; // Tom de pele clara
+      ctx.beginPath();
+      ctx.arc(size / 2, 9, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Pintura facial temática na bochecha (Verde e Amarela)
+      ctx.fillStyle = '#16a34a';
+      ctx.fillRect(size / 2 - 5, 8, 4, 3);
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(size / 2 - 5, 11, 4, 3);
+
+      // Cabelo castanho comprido ondulado
+      ctx.fillStyle = '#78350f';
+      ctx.beginPath();
+      ctx.arc(size / 2, 6, 8, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(size / 2 - 8, 7, 3, 14); // Mechas caindo
+      ctx.fillRect(size / 2 + 5, 7, 3, 14);
+
+      // Sorriso radiante e olhos
+      ctx.fillStyle = '#451a03';
+      ctx.fillRect(size / 2 - 3, 7, 2, 2);
+      ctx.fillRect(size / 2 + 2, 7, 2, 2);
+      ctx.strokeStyle = '#b45309';
+      ctx.beginPath();
+      ctx.arc(size / 2, 11, 3, 0, Math.PI);
+      ctx.stroke();
+    },
+  },
+  {
+    key: 'planalto_pulica',
+    biomeKey: 'planalto',
+    aliases: ['pulica', 'policia', 'policia_choque'],
+    render: (ctx, size) => {
+      drawMonsterShadow(ctx, size);
+      // 1. Pernas com Calça Tática Preta e Coldre de Perna
+      ctx.fillStyle = '#0f172a'; // Calça preta tática
+      ctx.fillRect(size / 2 - 11, 28, 9, 11);
+      ctx.fillRect(size / 2 + 2, 28, 9, 11);
+
+      // Tiras de retenção e Coldre tático modular
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(size / 2 + 8, 30, 4, 6);
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(size / 2 + 9, 31, 3, 5);
+
+      // Coturnos pretos reforçados
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(size / 2 - 12, 38, 10, 6);
+      ctx.fillRect(size / 2 + 2, 38, 10, 6);
+
+      // 2. Tronco com Farda Preta e Colete Balístico Pesado
+      ctx.fillStyle = '#1e1b4b'; // Farda azul marinho/preta
+      ctx.fillRect(size / 2 - 14, 14, 28, 16);
+
+      // Colete Balístico Tático Modular com Bolsos
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(size / 2 - 12, 13, 24, 16);
+
+      // Bolsos modulares e presilhas
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(size / 2 - 10, 18, 8, 6);
+      ctx.fillRect(size / 2 + 2, 18, 8, 6);
+      ctx.fillRect(size / 2 - 6, 24, 12, 4);
+
+      // Tarjeta de identificação e brasão prateado
+      ctx.fillStyle = '#dc2626';
+      ctx.fillRect(size / 2 - 9, 15, 6, 2);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillRect(size / 2 + 3, 15, 5, 2);
+
+      // Óculos escuros pendurados no peito
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(size / 2 - 3, 17, 6, 3);
+
+      // 3. Braços Fortes com Insígnia e Luvas Táticas
+      ctx.fillStyle = '#1e1b4b';
+      ctx.fillRect(size / 2 - 17, 14, 5, 12);
+      ctx.fillRect(size / 2 + 12, 14, 5, 12);
+      // Bandeira tática na manga
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(size / 2 - 17, 17, 4, 3);
+
+      // Cassetete de contenção na mão
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(size / 2 - 19, 24, 3, 14);
+
+      // 4. Cabeça com Feições Imponentes e Boina Preta Tática Inclinada
+      ctx.fillStyle = '#b45309'; // Tom de pele bronzeado/forte
+      ctx.beginPath();
+      ctx.arc(size / 2, 9, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Semblante sério
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(size / 2 - 4, 8, 3, 2);
+      ctx.fillRect(size / 2 + 1, 8, 3, 2);
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(size / 2 - 3, 12, 6, 1.5);
+
+      // Boina Preta Militar estilosa e inclinada para a direita
+      ctx.fillStyle = '#020617';
+      ctx.beginPath();
+      ctx.ellipse(size / 2 + 1, 4, 10, 4.5, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+      // Caimento da boina na lateral
+      ctx.fillRect(size / 2 - 8, 4, 4, 6);
+
+      // Insígnia prateada brilhante na boina
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillRect(size / 2 - 5, 3, 3, 3);
+    },
+  },
+  {
+    key: 'planalto_boss_xandaum',
+    biomeKey: 'planalto',
+    aliases: ['xandaum', 'xandao', 'soberano_toga', 'boss_xandaum'],
+    render: (ctx, size) => {
+      drawMonsterShadow(ctx, size);
+      // 1. Aura Jurídica Mística de Suprema Autoridade (Brilho Âmbar e Violeta)
+      const auraGrad = ctx.createRadialGradient(size / 2, size / 2, 10, size / 2, size / 2, 32);
+      auraGrad.addColorStop(0, 'rgba(217, 119, 6, 0.2)');
+      auraGrad.addColorStop(0.7, 'rgba(147, 51, 234, 0.15)');
+      auraGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = auraGrad;
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, 32, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 2. GRANDE TOGA PRETA MAGISTRAL ESVOAÇANTE COM CAPA E OMBREIRAS (Foto 5)
+      ctx.fillStyle = '#020617'; // Toga preta profunda
+      ctx.beginPath();
+      // Ombreiras estruturadas da toga
+      ctx.moveTo(size / 2 - 16, 12);
+      ctx.lineTo(size / 2 - 24, size - 2); // Asa esquerda da toga
+      ctx.lineTo(size / 2 - 12, size - 2);
+      ctx.lineTo(size / 2 - 8, 26);
+      ctx.lineTo(size / 2 + 8, 26);
+      ctx.lineTo(size / 2 + 12, size - 2);
+      ctx.lineTo(size / 2 + 24, size - 2); // Asa direita da toga
+      ctx.lineTo(size / 2 + 16, 12);
+      ctx.closePath();
+      ctx.fill();
+
+      // Dobras e forro da toga esvoaçante
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(size / 2 - 22, 22, 6, 20);
+      ctx.fillRect(size / 2 + 16, 22, 6, 20);
+
+      // 3. TERNO FORMAL, CAMISA BRANCA E GRAVATA TEXTURIZADA POR BAIXO
+      ctx.fillStyle = '#0f172a'; // Paletó do terno
+      ctx.fillRect(size / 2 - 9, 14, 18, 18);
+
+      // Camisa social branca impecável
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(size / 2 - 4, 14);
+      ctx.lineTo(size / 2, 22);
+      ctx.lineTo(size / 2 + 4, 14);
+      ctx.fill();
+
+      // Gravata texturizada cinza chumbo
+      ctx.fillStyle = '#475569';
+      ctx.beginPath();
+      ctx.moveTo(size / 2 - 1.5, 15);
+      ctx.lineTo(size / 2 + 1.5, 15);
+      ctx.lineTo(size / 2 + 2, 25);
+      ctx.lineTo(size / 2, 28);
+      ctx.lineTo(size / 2 - 2, 25);
+      ctx.closePath();
+      ctx.fill();
+
+      // Cordão de credencial no peito
+      ctx.strokeStyle = '#020617';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(size / 2 - 3, 20, 6, 6);
+
+      // Calça social preta e sapatos de verniz brilhantes
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(size / 2 - 8, 30, 6, 12);
+      ctx.fillRect(size / 2 + 2, 30, 6, 12);
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(size / 2 - 9, 41, 7, 4);
+      ctx.fillRect(size / 2 + 2, 41, 7, 4);
+
+      // 4. MÃO COM RELÓGIO DOURADO E A SUPREMA CANETA DA JUSTIÇA
+      // Mão esquerda com relógio dourado de luxo
+      ctx.fillStyle = '#fcd34d';
+      ctx.fillRect(size / 2 + 10, 24, 4, 5);
+      ctx.fillStyle = '#eab308'; // Relógio de ouro
+      ctx.fillRect(size / 2 + 10, 23, 4, 2);
+
+      // Mão direita segurando a lendária Caneta Notificadora
+      ctx.fillStyle = '#fcd34d';
+      ctx.fillRect(size / 2 - 13, 24, 4, 5);
+      // Caneta dourada com ponta de despacho azul brilhante
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(size / 2 - 16, 20, 3, 10);
+      ctx.fillStyle = '#38bdf8'; // Tinta mágica luminosa
+      ctx.fillRect(size / 2 - 16, 19, 3, 2);
+
+      // 5. CABEÇA CARECA IMPONENTE E SEMBLANTE DETERMINADO (Foto 5)
+      ctx.fillStyle = '#fcd34d'; // Tom de pele
+      ctx.beginPath();
+      ctx.arc(size / 2, 8, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Brilho característico na careca reluzente
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.arc(size / 2 - 2, 5, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Olhar firme, sobrancelhas e semblante de autoridade máxima
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(size / 2 - 5, 7, 3, 2); // Sobrancelha direita
+      ctx.fillRect(size / 2 + 2, 7, 3, 2); // Sobrancelha esquerda
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(size / 2 - 4, 9, 2, 2); // Olho
+      ctx.fillRect(size / 2 + 2, 9, 2, 2);
+      // Expressão austera
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(size / 2 - 3, 12, 6, 1.5);
+    },
+  },
 ];
+

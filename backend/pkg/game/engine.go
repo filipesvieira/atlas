@@ -501,17 +501,23 @@ func (s *GameSession) processTick() {
 					m = Monster{Name: "Guarda-Costas", Level: 1, Health: 60, MaxHealth: 60, Attack: 7, AttackType: AttackTypeMelee}
 				}
 				m.ID = fmt.Sprintf("mob_%d_%d", time.Now().UnixNano(), i)
-				m.GridX = (GridWidth - 3) + i // ex: GridX = 12, 13
-				m.GridY = HeroGridY            // Fila indiana central (GridY = 4)
+				m.GridX = (GridWidth - 2) + (i * 3) // Guarda-costas na vanguarda espaçados (ex: 13, 16)
+				laneY := HeroGridY
+				if i%2 == 0 {
+					laneY = HeroGridY - 1 // Flanco superior
+				} else {
+					laneY = HeroGridY + 1 // Flanco inferior
+				}
+				m.GridY = laneY
 				m.State = "CHASE"
 				s.CurrentMonsters = append(s.CurrentMonsters, m)
 			}
 
-			// 2. Boss entra POR ÚLTIMO no final da fila (GridX maior, retaguarda da marcha)
+			// 2. Boss entra com presença imponente na retaguarda central (GridX maior)
 			bossMob := regInfo.Boss
 			bossMob.ID = fmt.Sprintf("boss_%d", time.Now().UnixNano())
-			bossMob.GridX = GridWidth - 1 // Entra pela extrema direita (GridX = 14)
-			bossMob.GridY = HeroGridY     // Fila indiana central (GridY = 4)
+			bossMob.GridX = GridWidth + 2 // Entra marchando majestoso logo atrás (GridX = 17)
+			bossMob.GridY = HeroGridY     // Linha central de comando (GridY = 4)
 			bossMob.State = "CHASE"
 			s.CurrentMonsters = append(s.CurrentMonsters, bossMob)
 
@@ -533,7 +539,7 @@ func (s *GameSession) processTick() {
 			})
 			return
 		} else {
-			// ESTÁGIOS 1 A 4: SPAWN DE MONSTROS NORMAIS EM FILA INDIANA
+			// ESTÁGIOS 1 A 4: SPAWN DE MONSTROS EM FORMAÇÃO TÁTICA E ESPAÇADA
 			s.IsBossStage = false
 			count := s.CurrentStage
 			if count < 1 {
@@ -548,11 +554,23 @@ func (s *GameSession) processTick() {
 					m = Monster{Name: "Goblin Salteador", Level: 1, Health: 60, MaxHealth: 60, Attack: 7, AttackType: AttackTypeMelee}
 				}
 				m.ID = fmt.Sprintf("mob_%d_%d", time.Now().UnixNano(), i)
-				m.GridX = (GridWidth - count) + i // Espaçados horizontalmente em fila indiana
-				if m.GridX < HeroGridX+1 {
-					m.GridX = HeroGridX + 1
+				// Espaçamento tático: monstros chegam escalonados em marcha (2 a 3 tiles de distância entre si)
+				m.GridX = (GridWidth - 1) + (i * 3)
+				if m.GridX < HeroGridX+2 {
+					m.GridX = HeroGridX + 2
 				}
-				m.GridY = HeroGridY // Fila indiana central (GridY = 4)
+				// Distribuição por faixas (Lanes) para visibilidade limpa de placas de vida
+				laneY := HeroGridY
+				if count > 1 {
+					if i == 1 {
+						laneY = HeroGridY - 1 // Flanco superior
+					} else if i == 2 {
+						laneY = HeroGridY + 1 // Flanco inferior
+					} else if i == 3 {
+						laneY = HeroGridY - 2 // Flanco extremo superior
+					}
+				}
+				m.GridY = laneY
 				m.State = "CHASE"
 				s.CurrentMonsters = append(s.CurrentMonsters, m)
 			}

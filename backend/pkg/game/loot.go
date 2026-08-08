@@ -122,6 +122,19 @@ var lootTemplates = []LootTemplate{
 	{Name: "Colar de Prata", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 2, BaseMagic: 0, BaseDef: 2, BaseWeight: 1.5, Hands: 0, BaseMP: 15},
 	{Name: "Anel de Prata", Slot: SlotRing, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 2, BaseDef: 2, BaseWeight: 0.8, Hands: 0, BaseINT: 2},
 
+	// ==================== TIER 2: PLANALTO CENTRAL ====================
+	{Name: "Martelo Constitucional", Slot: SlotMainHand, WeaponType: WeaponTypeClub, RequiredLevel: 8, Tier: 2, BaseAtk: 18, BaseMagic: 0, BaseDef: 2, BaseWeight: 42.0, Hands: 1, BaseSTR: 2, BaseHP: 15},
+	{Name: "Caneta Esferográfica Suprema", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 22, BaseDef: 1, BaseWeight: 8.0, Hands: 1, BaseINT: 2, BaseMP: 20, ManaRegen: 1},
+	{Name: "Megafone do Povo", Slot: SlotMainHand, WeaponType: WeaponTypeBow, RequiredLevel: 8, Tier: 2, BaseAtk: 17, BaseMagic: 0, BaseDef: 1, BaseWeight: 16.0, Hands: 2, BaseDEX: 2, CritChance: 3.0},
+	{Name: "Boina Tática da Puliça", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 1, BaseMagic: 0, BaseDef: 8, BaseWeight: 15.0, Hands: 0, BaseHP: 12, BaseDEX: 1},
+	{Name: "Toga da Inviolabilidade", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 2, BaseDef: 12, BaseWeight: 35.0, Hands: 0, BaseHP: 20, BaseMP: 15, BaseINT: 1},
+	{Name: "Calça Social Engomada", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 6, BaseWeight: 12.0, Hands: 0, BaseSTR: 1, BaseINT: 1},
+	{Name: "Coturno da Lei", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 4, BaseWeight: 14.0, Hands: 0, BaseHP: 10, BaseDEX: 1},
+	{Name: "Cordão da Estrela Rubra", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 2, BaseMagic: 0, BaseDef: 2, BaseWeight: 1.2, Hands: 0, BaseHP: 15, BaseSTR: 1, Lifesteal: 1.5},
+	{Name: "Anel do Supremo Relator", Slot: SlotRing, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 3, BaseDef: 2, BaseWeight: 0.6, Hands: 0, BaseMP: 20, BaseINT: 2, GoldBonus: 5.0},
+	{Name: "Pasta Executiva Presidencial", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 2, BaseWeight: 8.0, Hands: 0, BaseHP: 25, GoldBonus: 10.0},
+	{Name: "Virotes da Notificação", Slot: SlotAmmo, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 10, BaseMagic: 0, BaseDef: 0, BaseWeight: 1.8, Hands: 0},
+
 	// ==================== TIER 3 (NÍVEL 12+) ====================
 	{Name: "Espada de Aço", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 15, Tier: 3, BaseAtk: 30, BaseMagic: 0, BaseDef: 2, BaseWeight: 35.5, Hands: 1, BaseSTR: 3},
 	{Name: "Machado de Guerra", Slot: SlotMainHand, WeaponType: WeaponTypeAxe, RequiredLevel: 15, Tier: 3, BaseAtk: 33, BaseMagic: 0, BaseDef: 0, BaseWeight: 55.0, Hands: 1, BaseSTR: 3},
@@ -438,7 +451,7 @@ var MonsterLootProfileMap = map[string]MonsterLootProfile{
 	"chapolin_bandit":        {Items: []string{"Espada do Aprendiz", "Machadinha de Madeira", "Broquel de Madeira", "Anel de Cobre", "Flechas de Madeira"}, DropChance: 0.35, MinRarity: "Comum", MaxRarity: "Incomum"},
 	"chapolin_boss_alma":      {Items: []string{"Espada do Aprendiz", "Machadinha de Madeira", "Broquel de Madeira", "Anel de Cobre", "Manual: Tiro Quádruplo"}, DropChance: 1.0, MinRarity: "Raro", MaxRarity: "Raro"},
 
-	// ─── TIER 2 (Orcruins, Esgotos) ───
+	// ─── TIER 2 (Orcruins, Esgotos, Planalto Central) ───
 	"orcruins_orc":           {Items: []string{"Machado Orc", "Sabre de Bronze", "Cota de Malha", "Escudo de Madeira", "Arco Longo"}, DropChance: 0.35, MinRarity: "Comum", MaxRarity: "Raro"},
 	"orcruins_orc_mage":      {Items: []string{"Cajado Rúnico", "Coifa de Prata", "Colar de Prata", "Escudo de Madeira"}, DropChance: 0.35, MinRarity: "Comum", MaxRarity: "Raro"},
 	"orcruins_skeleton":      {Items: []string{"Coifa de Prata", "Cajado Rúnico", "Escudo de Madeira", "Flechas de Aço"}, DropChance: 0.35, MinRarity: "Comum", MaxRarity: "Raro"},
@@ -449,6 +462,11 @@ var MonsterLootProfileMap = map[string]MonsterLootProfile{
 	"esgotos_ninja":          {Items: []string{"Sabre de Bronze", "Arco Longo", "Coifa de Prata", "Botas de Couro", "Flechas de Aço"}, DropChance: 0.35, MinRarity: "Comum", MaxRarity: "Raro"},
 	"esgotos_rat":            {Items: []string{"Maça de Batalha", "Calça de Couro", "Botas de Couro", "Colar de Prata"}, DropChance: 0.35, MinRarity: "Comum", MaxRarity: "Raro"},
 	"esgotos_boss_destroyer": {Items: []string{"Arco Longo", "Maça de Batalha", "Cota de Malha", "Colar de Prata", "Calça de Couro", "Botas de Couro", "Virotes Perfurantes"}, DropChance: 1.0, MinRarity: "Raro", MaxRarity: "Épico"},
+
+	"planalto_militante":     {Items: []string{"Martelo Constitucional", "Cordão da Estrela Rubra", "Calça Social Engomada", "Pasta Executiva Presidencial"}, DropChance: 0.35, MinRarity: "Comum", MaxRarity: "Raro"},
+	"planalto_patriota":      {Items: []string{"Megafone do Povo", "Virotes da Notificação", "Coturno da Lei", "Calça Social Engomada"}, DropChance: 0.35, MinRarity: "Comum", MaxRarity: "Raro"},
+	"planalto_pulica":        {Items: []string{"Boina Tática da Puliça", "Coturno da Lei", "Martelo Constitucional", "Virotes da Notificação"}, DropChance: 0.35, MinRarity: "Comum", MaxRarity: "Raro"},
+	"planalto_boss_xandaum":  {Items: []string{"Caneta Esferográfica Suprema", "Toga da Inviolabilidade", "Anel do Supremo Relator", "Martelo Constitucional", "Pasta Executiva Presidencial", "Virotes da Notificação"}, DropChance: 1.0, MinRarity: "Raro", MaxRarity: "Épico"},
 
 	// ─── TIER 3 (Rogartes) ───
 	"rogartes_dementor":      {Items: []string{"Espada de Aço", "Cetro do Esquelético", "Elmo Rúnico", "Peitoral de Platina", "Bolsa Rúnica"}, DropChance: 0.35, MinRarity: "Incomum", MaxRarity: "Épico"},

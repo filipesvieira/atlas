@@ -87,7 +87,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Boss: Monster{Key: "chapolin_boss_alma", VisualKey: "chapolin_boss_alma", IsBoss: true, Name: "Alma Negra de Greiscu 🏴‍☠️", Level: 5, Health: 400, MaxHealth: 400, Attack: 26, AttackType: AttackTypeMelee},
 	},
 
-	// ─── TIER 2 (LV. 5–12) ──────────────────────────────────────────────────
+	// ─── TIER 2 (LV. 5–19) ──────────────────────────────────────────────────
 	"orcruins": {
 		ID:                 "orcruins",
 		BiomeKey:           "orcruins",
@@ -128,6 +128,26 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 			{Key: "esgotos_rat", VisualKey: "esgotos_rat", Name: "Rato Mutante", Level: 10, Health: 200, MaxHealth: 200, Attack: 23, AttackType: AttackTypeMelee},
 		},
 		Boss: Monster{Key: "esgotos_boss_destroyer", VisualKey: "esgotos_boss_destroyer", IsBoss: true, Name: "Destruidor Ranzinza 🥷", Level: 12, Health: 650, MaxHealth: 650, Attack: 42, AttackType: AttackTypeMelee},
+	},
+	"planalto": {
+		ID:                 "planalto",
+		BiomeKey:           "planalto",
+		Name:               "Planalto dos Três Poderes",
+		Tier:               2,
+		Order:              6,
+		MinLevel:           8,
+		MaxLevel:           19,
+		Description:        "Cenário político místico onde militantes e guardiões da lei disputam a Suprema Caneta.",
+		Icon:               "🏛️",
+		MaxStages:          5,
+		RequiresUnlockFrom: "forest",
+		DropsPreview:       []string{"Martelo Constitucional", "Caneta Esferográfica Suprema", "Megafone do Povo", "Toga da Inviolabilidade", "Boina Tática da Puliça", "Pasta Executiva Presidencial"},
+		Monsters: []Monster{
+			{Key: "planalto_militante", VisualKey: "planalto_militante", Name: "Militante do Treze ⭐️", Level: 8, Health: 165, MaxHealth: 165, Attack: 18, AttackType: AttackTypeMelee},
+			{Key: "planalto_patriota", VisualKey: "planalto_patriota", Name: "Patriota do Caminhão 🇧🇷", Level: 10, Health: 195, MaxHealth: 195, Attack: 22, AttackType: AttackTypeRanged},
+			{Key: "planalto_pulica", VisualKey: "planalto_pulica", Name: "Puliça de Choque 👮", Level: 12, Health: 235, MaxHealth: 235, Attack: 26, AttackType: AttackTypeMelee},
+		},
+		Boss: Monster{Key: "planalto_boss_xandaum", VisualKey: "planalto_boss_xandaum", IsBoss: true, Name: "Xandaum, o Soberano da Toga ⚖️", Level: 16, Health: 800, MaxHealth: 800, Attack: 48, AttackType: AttackTypeRanged},
 	},
 
 	// ─── TIER 3 (LV. 12–20) ─────────────────────────────────────────────────

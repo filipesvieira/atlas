@@ -44,6 +44,12 @@ interface RenderMonster {
   hitFlashTimer: number; // >0 faz o monstro piscar em vermelho ao levar dano
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// ⚙️ CONFIGURAÇÃO DA LINHA DE BATALHA (CHÃO DE COMBATE)
+// Altere BATTLE_GROUND_Y para subir ou descer o Herói e os Monstros em todos os cenários.
+// ───────────────────────────────────────────────────────────────────────────
+export const BATTLE_GROUND_Y = 195; // Posição vertical no chão (em canvas de 260px)
+
 export class GameViewport {
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
@@ -63,9 +69,9 @@ export class GameViewport {
   private heroMana = 30;
   private heroMaxMana = 30;
   private heroX = 100;
-  private heroY = 140;
+  private heroY = BATTLE_GROUND_Y;
   private targetHeroX = 100;
-  private targetHeroY = 140;
+  private targetHeroY = BATTLE_GROUND_Y;
   private heroWalkFrame = 0;
 
   // Estado dos Monstros e Bioma
@@ -451,9 +457,9 @@ export class GameViewport {
       const gridX = mob.grid_x ?? (14 - (activeMonsters.length - 1 - idx) * 2);
       const gridY = mob.grid_y ?? 4;
 
-      // Converter coordenadas de grid (32px por tile) para pixels
+      // Converter coordenadas de grid para pixels alinhados ao solo de combate (BATTLE_GROUND_Y)
       const targetPixelX = gridX * 32 + 16;
-      const targetPixelY = gridY * 32 + 16;
+      const targetPixelY = BATTLE_GROUND_Y + (gridY - 4) * 12;
 
       let m = this.monsters.get(mobId);
       if (!m) {
@@ -501,11 +507,11 @@ export class GameViewport {
     // 4. Animar Ataques e Efeitos de Combate
     if (msg.damage_dealt && msg.damage_dealt > 0) {
       this.triggerAttackAnimation();
-      this.addFloatingText(`-${msg.damage_dealt}`, 340, 90, '#ef4444');
+      this.addFloatingText(`-${msg.damage_dealt}`, 340, BATTLE_GROUND_Y - 50, '#ef4444');
     }
 
     if (msg.damage_taken && msg.damage_taken > 0) {
-      this.addFloatingText(`-${msg.damage_taken}`, this.heroX, 90, '#fbbf24');
+      this.addFloatingText(`-${msg.damage_taken}`, this.heroX, BATTLE_GROUND_Y - 50, '#fbbf24');
 
       // Disparo de magia/fogo de monstros à distância contra o herói
       this.monsters.forEach((m) => {
@@ -528,7 +534,7 @@ export class GameViewport {
     }
 
     if (msg.item_found) {
-      this.addFloatingText(`+${msg.item_found.name}`, 220, 70, '#a855f7');
+      this.addFloatingText(`+${msg.item_found.name}`, 220, BATTLE_GROUND_Y - 60, '#a855f7');
     }
   }
 
@@ -543,7 +549,7 @@ export class GameViewport {
         startX: this.heroX + 15,
         startY: this.heroY - 5,
         targetX: 340,
-        targetY: 140,
+        targetY: BATTLE_GROUND_Y,
         currentX: this.heroX + 15,
         currentY: this.heroY - 5,
         progress: 0,

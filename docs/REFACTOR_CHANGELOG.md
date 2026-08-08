@@ -21,6 +21,20 @@
     - Contadores dinâmicos de itens por categoria e mensagem de estado vazio amigável com reset de filtros.
     - Integração de seleção em lote inteligente com os itens filtrados.
 
+## [Unreleased] - 2026-08-08
+
+### Adicionado (Expedição Tier 2: Planalto Central de Brasília)
+- **Nova Expedição**: `Planalto dos Três Poderes` (`planalto`, Níveis 8 a 19, Tier 2) no `expeditions.go`.
+- **Novo Bioma Cênico**: `renderPlanaltoBiome` com Congresso Nacional (torres gêmeas, cúpula do Senado, cúpula da Câmara, rampa monumental, espelho d'água e gramado da esplanada).
+- **Novos Monstros & Boss**:
+  - `planalto_militante` (*Militante do Treze ⭐️* - Camiseta vermelha com estrela do PT e sinal do "L").
+  - `planalto_patriota` (*Patriota do Caminhão 🇧🇷* - Enrolado na bandeira do Brasil com pintura facial).
+  - `planalto_pulica` (*Puliça de Choque 👮* - Boina preta tática, colete balístico e cassetete).
+  - `planalto_boss_xandaum` (*Xandaum, o Soberano da Toga ⚖️* - Careca imponente, toga preta esvoaçante de magistrado, relógio de ouro e caneta de despachos).
+- **Catálogo Exclusivo de Loot (11 novos templates balanceados)**:
+  - *Martelo Constitucional* (Clava Melee), *Caneta Esferográfica Suprema* (Varinha Mágica), *Megafone do Povo* (Arco Ranged), *Boina Tática da Puliça* (Head), *Toga da Inviolabilidade* (Chest), *Calça Social Engomada* (Legs), *Coturno da Lei* (Boots), *Cordão da Estrela Rubra* (Necklace), *Anel do Supremo Relator* (Ring), *Pasta Executiva Presidencial* (Bag) e *Virotes da Notificação* (Ammo).
+- **Auditoria de Conteúdo**: 9 regiões, 39 monstros/bosses, 39 perfis de loot, 84 templates de itens e 0 inconsistências.
+
 ## Removido / substituído
 
 - `WORLD_REGIONS` duplicado no React.
