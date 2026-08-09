@@ -1,16 +1,19 @@
-import { PixelArtRenderer } from '../../game/PixelArtRenderer';
 import { biomeRegistry } from '../../game/registries/BiomeRegistry';
 import { heroRegistry } from '../../game/registries/HeroRegistry';
 import { monsterRegistry } from '../../game/registries/MonsterRegistry';
+import { CombatEffectRegistry } from '../../game/effects/CombatEffectRegistry';
+import { Position } from '../../game/effects/types';
 
 interface FloatingText {
   id: string;
   text: string;
   x: number;
   y: number;
+  vx: number;
+  vy: number;
   color: string;
   alpha: number;
-  scale: number;
+  scale?: number;
 }
 
 interface Projectile {
@@ -23,7 +26,7 @@ interface Projectile {
   currentY: number;
   progress: number;
   color: string;
-  type: 'fireball' | 'arrow' | 'slash';
+  type: string;
 }
 
 interface RenderMonster {
@@ -37,6 +40,7 @@ interface RenderMonster {
   maxHealth: number;
   attackType: string;
   state: string;
+  statusEffects?: Array<{ key: string; remaining_ticks: number; magnitude: number }>;
   currentX: number;
   currentY: number;
   targetX: number;
@@ -78,7 +82,10 @@ export class GameViewport {
   private regionId = 'forest';
   private monsters: Map<string, RenderMonster> = new Map();
 
-  // Efeitos visuais
+  // Subsistema Modular de Efeitos
+  private effectRegistry = new CombatEffectRegistry();
+
+  // Efeitos visuais e partículas
   private floatingTexts: FloatingText[] = [];
   private projectiles: Projectile[] = [];
   private isActive = true;
@@ -161,10 +168,13 @@ export class GameViewport {
       }
     });
 
-    // 3. Atualizar Projéteis
+    // 3. Atualizar Subsistema Modular de Efeitos
+    this.effectRegistry.update(_dt * 1000);
+
+    // 4. Atualizar Projéteis
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
-      p.progress += 0.08;
+      p.progress += 0.14;
       p.currentX = p.startX + (p.targetX - p.startX) * p.progress;
       p.currentY = p.startY + (p.targetY - p.startY) * p.progress;
 
@@ -173,20 +183,21 @@ export class GameViewport {
       }
     }
 
-    // 4. Atualizar Textos Flutuantes
+    // 5. Atualizar Textos Flutuantes (Física Parabólica & Gravidade Suave)
     for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
       const ft = this.floatingTexts[i];
-      ft.y -= 0.6;
-      ft.alpha -= 0.015;
+      ft.x += ft.vx;
+      ft.y += ft.vy;
+      ft.vy += 0.08; // Gravidade suave após o impulso
+      ft.alpha -= 0.016;
 
       if (ft.alpha <= 0) {
         this.floatingTexts.splice(i, 1);
       }
     }
 
-    // 5. Atualizar Partículas (Campfire/Stars)
+    // 6. Atualizar Partículas (Campfire/Stars)
     if (!this.isActive) {
-      // Cria partículas (fagulhas da fogueira ou vagalumes)
       if (Math.random() < 0.1) {
         this.particles.push({
           x: 236 + (Math.random() * 20 - 10),
@@ -215,60 +226,51 @@ export class GameViewport {
     const ctx = this.ctx;
     if (!ctx) return;
 
-    // 0. Limpar totalmente o canvas e desativar antialiasing para nitidez cravada (sem borrado/smearing)
+    // 0. Limpar totalmente o canvas e desativar antialiasing para nitidez cravada
     ctx.clearRect(0, 0, this.width, this.height);
     ctx.imageSmoothingEnabled = false;
 
-    // 1. Desenhar cenário sem conhecer regiões concretas. O registry resolve
-    // region/biome -> renderer e mantém o loop principal fechado para extensão.
+    // 1. Desenhar cenário
     const biomeKey = this.isActive ? this.regionId : 'camp';
     const bgBuffer = biomeRegistry.render(biomeKey, this.width, this.height);
     this.targetHeroX = this.isActive ? 100 : 200;
-    
     ctx.drawImage(bgBuffer, 0, 0, this.width, this.height);
 
     // Desenhar partículas
     this.particles.forEach((p) => {
-      ctx.fillStyle = `rgba(251, 146, 60, ${Math.max(0, p.alpha)})`; // orange-400
+      ctx.fillStyle = `rgba(251, 146, 60, ${Math.max(0, p.alpha)})`;
       ctx.fillRect(p.x, p.y, 2, 2);
     });
 
-    // 2. Desenhar Herói do Jogador (Com Animação de Caminhada / Bobbing)
+    // 2. Desenhar Herói do Jogador
     const heroBob = Math.sin(this.heroWalkFrame) * 3;
     const spriteSize = 48;
     const heroSprite = heroRegistry.render(this.vocation, spriteSize);
-
     ctx.drawImage(heroSprite, this.heroX - spriteSize / 2, this.heroY - spriteSize / 2 + heroBob);
+    this.drawHeroPlate(ctx, this.heroX, this.heroY - 37 + heroBob);
 
-    // Placa de Nome do Herói
-    this.drawHeroPlate(ctx, this.heroX, this.heroY - 32 + heroBob);
-
-    // 3. Desenhar Monstros
+    // 3. Desenhar Monstros Vivos
     this.monsters.forEach((m) => {
-      // Culling: Se o monstro estiver completamente fora do canvas à direita, não processa nem desenha
       if (m.currentX > this.width + 30) {
         return;
       }
 
-      // Fade-In suave conforme o monstro entra na arena
       const entranceAlpha = Math.max(0, Math.min(1, (this.width - m.currentX + 32) / 48));
       const mobBob = Math.sin(this.heroWalkFrame * 0.8) * 2;
       const isBoss = m.isBoss || false;
-      const spriteSize = isBoss ? 64 : 48;
+      const mobSpriteSize = isBoss ? 64 : 48;
       const visualKey = m.visualKey || m.key || m.name;
-      const mSprite = PixelArtRenderer.getMonsterTexture(visualKey, spriteSize);
 
       ctx.save();
       ctx.globalAlpha = entranceAlpha;
 
-      // Sombra realista no solo
+      // Sombra no solo
       ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
       ctx.beginPath();
       ctx.ellipse(m.currentX, m.currentY + (isBoss ? 24 : 16), isBoss ? 24 : 16, isBoss ? 7 : 5, 0, 0, Math.PI * 2);
       ctx.fill();
 
       if (isBoss) {
-        // Aura elemental pulsante ao redor do Boss
         const auraRadius = 24 + Math.sin(Date.now() / 200) * 4;
         const auraGrad = ctx.createRadialGradient(m.currentX, m.currentY + 10, 5, m.currentX, m.currentY + 10, auraRadius);
         auraGrad.addColorStop(0, 'rgba(234, 88, 12, 0.6)');
@@ -279,30 +281,26 @@ export class GameViewport {
         ctx.fill();
       }
 
-      // Se o monstro estiver em fuga (FLEE), espelhar horizontalmente
+      ctx.translate(m.currentX - mobSpriteSize / 2, m.currentY - mobSpriteSize / 2 + mobBob);
       if (m.state === 'FLEE') {
-        ctx.translate(m.currentX, m.currentY + mobBob);
         ctx.scale(-1, 1);
-        ctx.drawImage(mSprite, -spriteSize / 2, -spriteSize / 2);
-      } else {
-        // Efeito de flash/piscar quando leva dano
-        if (m.hitFlashTimer > 0) {
-          ctx.globalAlpha = entranceAlpha * 0.65;
-        }
-        ctx.drawImage(mSprite, m.currentX - spriteSize / 2, m.currentY - spriteSize / 2 + mobBob);
       }
-
+      if (m.hitFlashTimer > 0) {
+        ctx.globalAlpha = entranceAlpha * 0.65;
+      }
+      monsterRegistry.render(ctx, visualKey, mobSpriteSize);
       ctx.restore();
 
-      // Placa de Nome e Barra de Vida: Ancorada na cabeça do monstro com fade-in suave
-      // Só desenha quando o monstro já estiver entrando no campo de visão (sem clamping que empilha na borda)
       if (m.currentX <= this.width + 10) {
         const plateOffsetY = isBoss ? 42 : 30;
         this.drawMonsterPlate(ctx, m.currentX, m.currentY - plateOffsetY + mobBob, m, entranceAlpha);
       }
     });
 
-    // 4. Desenhar Projéteis (Magia / Flecha)
+    // 4. Desenhar Efeitos Modulares de Habilidades e Combate
+    this.effectRegistry.render(ctx);
+
+    // 5. Desenhar Projéteis
     this.projectiles.forEach((p) => {
       ctx.fillStyle = p.color;
       ctx.beginPath();
@@ -314,13 +312,14 @@ export class GameViewport {
       ctx.fillRect(p.currentX - 1, p.currentY - 1, 3, 3);
     });
 
-    // 5. Desenhar Textos Flutuantes (Dano / Cura)
+    // 6. Desenhar Textos Flutuantes (Dano / Cura)
     this.floatingTexts.forEach((ft) => {
       ctx.save();
       ctx.globalAlpha = Math.max(0, ft.alpha);
-      ctx.font = 'bold 12px monospace';
+      const fontSize = ft.scale && ft.scale > 1.0 ? Math.round(12 * ft.scale) : 12;
+      ctx.font = `bold ${fontSize}px monospace`;
       ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = ft.scale && ft.scale > 1.0 ? 3 : 2;
       ctx.strokeText(ft.text, ft.x, ft.y);
       ctx.fillStyle = ft.color;
       ctx.fillText(ft.text, ft.x, ft.y);
@@ -388,7 +387,8 @@ export class GameViewport {
     ctx.textAlign = 'center';
 
     const isBoss = m.isBoss;
-    const prefix = isBoss ? '👑 ' : '';
+    const isSlowed = m.statusEffects?.some((st) => st.key === 'slow');
+    const prefix = (isBoss ? '👑 ' : '') + (isSlowed ? '❄️ ' : '');
     const text = `${prefix}${m.name} (Lv.${m.level})`;
     const textWidth = ctx.measureText(text).width;
 
@@ -409,7 +409,7 @@ export class GameViewport {
     }
 
     // Nome em Amarelo Dourado para Boss, Vermelho Coral suave para normal
-    ctx.fillStyle = isBoss ? '#fde047' : '#fca5a5';
+    ctx.fillStyle = isBoss ? '#fde047' : isSlowed ? '#67e8f9' : '#fca5a5';
     ctx.fillText(text, x, y - 2);
 
     // Barra de HP (Mais larga para Boss)
@@ -494,6 +494,7 @@ export class GameViewport {
           maxHealth: mob.max_health ?? 100,
           attackType: mob.attack_type || 'melee',
           state: mob.state || 'CHASE',
+          statusEffects: mob.status_effects || [],
           currentX: 520, // Surge fora da tela à direita e entra caminhando
           currentY: targetPixelY,
           targetX: targetPixelX,
@@ -512,6 +513,7 @@ export class GameViewport {
         m.health = mob.health ?? m.health;
         m.maxHealth = mob.max_health ?? m.maxHealth;
         m.state = mob.state || m.state;
+        m.statusEffects = mob.status_effects || m.statusEffects;
         m.targetX = targetPixelX;
         m.targetY = targetPixelY;
       }
@@ -524,14 +526,59 @@ export class GameViewport {
       }
     });
 
-    // 4. Animar Ataques e Efeitos de Combate
-    if (msg.damage_dealt && msg.damage_dealt > 0) {
+    // 4. Animar Efeitos Modulares de Combate (Combat Effects Protocol)
+    const monsterPosMap = new Map<string, Position>();
+    this.monsters.forEach((m) => {
+      monsterPosMap.set(m.id, { x: m.currentX, y: m.currentY });
+    });
+
+    if (msg.combat_effects && msg.combat_effects.length > 0) {
+      let hasHeroAttack = false;
+      let primaryTargetX = 340;
+      let primaryTargetY = BATTLE_GROUND_Y;
+
+      for (const eff of msg.combat_effects) {
+        this.effectRegistry.spawnEffect(eff, { x: this.heroX, y: this.heroY }, monsterPosMap);
+        if (eff.kind === 'attack' || (eff.kind === 'skill' && eff.key !== 'divine_heal')) {
+          hasHeroAttack = true;
+          if (eff.target_ids && eff.target_ids.length > 0 && monsterPosMap.has(eff.target_ids[0])) {
+            const p = monsterPosMap.get(eff.target_ids[0])!;
+            primaryTargetX = p.x;
+            primaryTargetY = p.y;
+          }
+        }
+
+        const targetPos =
+          eff.target_ids && eff.target_ids.length > 0 && monsterPosMap.get(eff.target_ids[0])
+            ? monsterPosMap.get(eff.target_ids[0])!
+            : { x: 340, y: BATTLE_GROUND_Y };
+
+        if (eff.key === 'divine_heal' || eff.kind === 'heal') {
+          // Cura Sagrada: Flutua suavemente sobre o herói
+          this.addFloatingText(`+${eff.amount} HP`, this.heroX, BATTLE_GROUND_Y - 40, '#4ade80', 1.25, 0, -1.6);
+        } else if (eff.is_crit) {
+          // Dano Crítico: Salto alto e dourado brilhante no centro
+          this.addFloatingText(`⚡ CRIT! -${eff.amount}`, targetPos.x, targetPos.y - 50, '#fde047', 1.45, 0, -3.2);
+        } else if (eff.kind === 'skill' && eff.amount > 0) {
+          // Habilidade / Magia: Salto em leque para a direita com cor temática
+          const skillColor = eff.key === 'ice_shard' ? '#38bdf8' : eff.key === 'multishot' ? '#facc15' : '#fb923c';
+          this.addFloatingText(`-${eff.amount}`, targetPos.x + 14, targetPos.y - 42, skillColor, 1.2, 0.95, -2.8);
+        } else if (eff.kind === 'attack' && eff.amount > 0) {
+          // Ataque Básico: Salto em leque para a esquerda com tom coral suave
+          this.addFloatingText(`-${eff.amount}`, targetPos.x - 14, targetPos.y - 38, '#fca5a5', 1.0, -0.85, -2.0);
+        }
+      }
+
+      if (hasHeroAttack) {
+        this.triggerAttackAnimation(primaryTargetX, primaryTargetY);
+      }
+    } else if (msg.damage_dealt && msg.damage_dealt > 0) {
       this.triggerAttackAnimation();
-      this.addFloatingText(`-${msg.damage_dealt}`, 340, BATTLE_GROUND_Y - 50, '#ef4444');
+      this.addFloatingText(`-${msg.damage_dealt}`, 340, BATTLE_GROUND_Y - 45, '#fca5a5', 1.0, -0.85, -2.0);
     }
 
     if (msg.damage_taken && msg.damage_taken > 0) {
-      this.addFloatingText(`-${msg.damage_taken}`, this.heroX, BATTLE_GROUND_Y - 50, '#fbbf24');
+      this.addFloatingText(`-${msg.damage_taken}`, this.heroX, BATTLE_GROUND_Y - 45, '#fbbf24', 1.05, (Math.random() - 0.5) * 0.8, -2.0);
 
       // Disparo de magia/fogo de monstros à distância contra o herói
       this.monsters.forEach((m) => {
@@ -554,22 +601,22 @@ export class GameViewport {
     }
 
     if (msg.item_found) {
-      this.addFloatingText(`+${msg.item_found.name}`, 220, BATTLE_GROUND_Y - 60, '#a855f7');
+      this.addFloatingText(`+${msg.item_found.name}`, 220, BATTLE_GROUND_Y - 55, '#c084fc', 1.2, 0, -1.8);
     }
   }
 
   /** Animação fluida de ataque baseada na vocação */
-  private triggerAttackAnimation() {
+  private triggerAttackAnimation(targetPixelX: number = 340, targetPixelY: number = BATTLE_GROUND_Y) {
     const attackStyle = heroRegistry.getAttackStyle(this.vocation);
 
     if (attackStyle === 'magic') {
       // Disparar Orbe Mágico Azul
       this.projectiles.push({
-        id: `proj_${Date.now()}`,
+        id: `proj_${Date.now()}_${Math.random()}`,
         startX: this.heroX + 15,
         startY: this.heroY - 5,
-        targetX: 340,
-        targetY: BATTLE_GROUND_Y,
+        targetX: targetPixelX,
+        targetY: targetPixelY - 10,
         currentX: this.heroX + 15,
         currentY: this.heroY - 5,
         progress: 0,
@@ -579,11 +626,11 @@ export class GameViewport {
     } else if (attackStyle === 'arrow') {
       // Disparar Flecha Amarela
       this.projectiles.push({
-        id: `proj_${Date.now()}`,
+        id: `proj_${Date.now()}_${Math.random()}`,
         startX: this.heroX + 15,
         startY: this.heroY - 5,
-        targetX: 340,
-        targetY: 140,
+        targetX: targetPixelX,
+        targetY: targetPixelY - 10,
         currentX: this.heroX + 15,
         currentY: this.heroY - 5,
         progress: 0,
@@ -591,24 +638,35 @@ export class GameViewport {
         type: 'arrow',
       });
     } else {
-      // Guerreiro Melee: Avança suavemente e golpeia
-      this.targetHeroX = 260;
+      // Guerreiro Melee: Avança suavemente na direção do monstro e golpeia
+      const advanceDistance = Math.min(260, Math.max(160, targetPixelX - 45));
+      this.targetHeroX = advanceDistance;
       setTimeout(() => {
         this.targetHeroX = 100;
-      }, 300);
+      }, 280);
     }
   }
 
-  /** Adiciona número flutuante de dano/cura */
-  public addFloatingText(text: string, x: number, y: number, color: string) {
+  /** Adiciona número flutuante de dano/cura com dispersão parabólica */
+  public addFloatingText(
+    text: string,
+    x: number,
+    y: number,
+    color: string,
+    scale: number = 1.0,
+    vx: number = 0,
+    vy: number = -2.2
+  ) {
     this.floatingTexts.push({
       id: `ft_${Date.now()}_${Math.random()}`,
       text,
       x,
       y,
+      vx,
+      vy,
       color,
       alpha: 1.0,
-      scale: 1.0,
+      scale: scale ?? 1.0,
     });
   }
 

@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { TibiaBackpackModal, Item, EquipmentSlots } from './TibiaBackpackModal';
 import { ItemIcon, getCleanItemName, getItemAttack, getRarityStyle, BonusBadges, getSlotLabel } from './ItemIcon';
+import type { DerivedStats } from '../../hooks/useGameSocket';
 
 export type { Item, EquipmentSlots };
 
 interface TibiaEquipmentGridProps {
   character?: any;
+  derivedStats?: DerivedStats | null;
   equipment?: EquipmentSlots;
   backpack?: Item[];
   cap?: number;
@@ -130,6 +132,7 @@ function SlotItem({ item, placeholderIcon, label, slotKey, charLevel = 1, onUneq
 
 export function TibiaEquipmentGrid({
   character,
+  derivedStats = null,
   equipment = {},
   backpack = [],
   cap = 1500,
@@ -181,7 +184,7 @@ export function TibiaEquipmentGrid({
   }
 
   const maxSlots = 20 + bagSlotsBonus;
-  const effectiveCap = cap + bagCapBonus;
+  const effectiveCap = derivedStats ? derivedStats.total_capacity : (cap + bagCapBonus);
 
   // Peso total da mochila
   const backpackWeight = safeBackpack.reduce((sum, item) => sum + (item ? (item.weight || 0) : 0), 0);
@@ -296,6 +299,7 @@ export function TibiaEquipmentGrid({
         isOpen={isBackpackOpen}
         onClose={() => setIsBackpackOpen(false)}
         character={character}
+        derivedStats={derivedStats}
         backpack={safeBackpack}
         equipment={safeEquipment}
         equippedBag={safeEquipment.bag}

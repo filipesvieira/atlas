@@ -218,8 +218,22 @@ func HandleClaimOfflineProgress(w http.ResponseWriter, r *http.Request) {
 	_, sessionAlreadyActive := activeSessions[charID]
 	sessionsMu.Unlock()
 	if sessionAlreadyActive {
-		jsonError(w, http.StatusConflict, "A sessão em tempo real já está ativa; o progresso offline não pode ser reivindicado novamente")
-		return
+		// Se a sessão anterior ainda está desconectando e gravando o snapshot,
+		// aguarda alguns milissegundos para concluir a liberação com segurança.
+		for attempt := 0; attempt < 10; attempt++ {
+			time.Sleep(50 * time.Millisecond)
+			sessionsMu.Lock()
+			_, stillActive := activeSessions[charID]
+			sessionsMu.Unlock()
+			if !stillActive {
+				sessionAlreadyActive = false
+				break
+			}
+		}
+		if sessionAlreadyActive {
+			jsonError(w, http.StatusConflict, "A sessão em tempo real já está ativa; o progresso offline não pode ser reivindicado novamente")
+			return
+		}
 	}
 
 	claim, err := db.ClaimOfflineProgress(claims.AccountID, charID, time.Now().UTC())

@@ -193,7 +193,8 @@ func appendUnique(values []string, candidates ...string) []string {
 // relog em uma horda parcialmente derrotada.
 func CalculateOfflineProgress(input OfflineSimulationInput) OfflineResult {
 	result := OfflineResult{ItemsFound: []Item{}, ItemsConverted: []Item{}, RegionsUnlocked: []string{}}
-	if input.Character == nil || !input.IsExpeditionActive || input.PeriodStart.IsZero() {
+	isEligible := input.IsExpeditionActive || (input.Character != nil && input.Character.AutoResumeExpedition)
+	if input.Character == nil || !isEligible || input.PeriodStart.IsZero() {
 		return result
 	}
 	end := input.PeriodEnd

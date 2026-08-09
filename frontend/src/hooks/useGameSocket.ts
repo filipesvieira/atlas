@@ -34,12 +34,31 @@ export interface EquipmentSlots {
   legs?: Item | null;
   boots?: Item | null;
   ring?: Item | null;
+  ammo?: Item | null;
+  bag?: Item | null;
 }
 
 export interface InventoryData {
   equipment: EquipmentSlots;
   backpack: Item[];
   cap: number;
+}
+
+export interface DerivedStats {
+  effective_str: number;
+  effective_dex: number;
+  effective_int: number;
+  effective_vit: number;
+  total_attack: number;
+  total_defense: number;
+  max_health: number;
+  max_mana: number;
+  total_capacity: number;
+  crit_chance: number;
+  mana_regen_per_second: number;
+  current_dps: number;
+  speed_multiplier: number;
+  primary_archetype: string;
 }
 
 export interface CombatMessage {
@@ -57,6 +76,11 @@ export interface CombatMessage {
     gold_bank: number;
     vocation: string;
     origin: string;
+    str?: number;
+    dex?: number;
+    int_stat?: number;
+    vit?: number;
+    unspent_points?: number;
     masteries?: {
       sword_mastery?: number;
       axe_mastery?: number;
@@ -71,18 +95,31 @@ export interface CombatMessage {
     auto_resume_expedition?: boolean;
   };
   inventory?: InventoryData;
+  monsters?: any[];
   monster?: {
     name: string;
     level: number;
     health: number;
     max_health: number;
     attack: number;
+    status_effects?: Array<{ key: string; remaining_ticks: number; magnitude: number }>;
   };
   damage_dealt?: number;
   damage_taken?: number;
   dps?: number;
   total_attack?: number;
   total_defense?: number;
+  derived_stats?: DerivedStats;
+  combat_effects?: Array<{
+    kind: 'skill' | 'attack' | 'heal' | 'status';
+    key: string;
+    source_id?: string;
+    target_ids?: string[];
+    amount?: number;
+    is_crit?: boolean;
+    status_key?: string;
+  }>;
+  skill_cooldowns?: Record<string, number>;
   active_region?: string;
   active_biome?: string;
   active_stance?: string;
@@ -96,6 +133,8 @@ export interface CombatMessage {
 
 export function useGameSocket(token: string, characterId: string, initialChar?: any) {
   const [character, setCharacter] = useState<any>(initialChar || null);
+  const [derivedStats, setDerivedStats] = useState<DerivedStats | null>(null);
+  const [skillCooldowns, setSkillCooldowns] = useState<Record<string, number>>({});
   const [inventory, setInventory] = useState<InventoryData>({
     equipment: {},
     backpack: [],
@@ -200,6 +239,14 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 
           if (msg.monster !== undefined) {
             setMonster(msg.monster);
+          }
+
+          if (msg.derived_stats) {
+            setDerivedStats(msg.derived_stats);
+          }
+
+          if (msg.skill_cooldowns !== undefined) {
+            setSkillCooldowns(msg.skill_cooldowns);
           }
 
           setIsExpeditionActive(msg.is_active);
@@ -316,6 +363,8 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 
   return {
     character,
+    derivedStats,
+    skillCooldowns,
     inventory,
     monster,
     totalAttack,

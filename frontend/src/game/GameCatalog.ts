@@ -1,5 +1,19 @@
 import { API_BASE_URL } from '../config';
 
+export interface SkillCatalogEntry {
+  key: string;
+  name: string;
+  icon: string;
+  description: string;
+  mana_cost: number;
+  min_level: number;
+  cooldown_ticks?: number;
+  cooldown_seconds?: number;
+  allowed_archetypes: string[];
+  target_type: string;
+  visual_key: string;
+}
+
 interface GameCatalogResponse {
   version: string;
   regions: Array<{
@@ -19,6 +33,7 @@ interface GameCatalogResponse {
     is_secret: boolean;
   }>;
   starter_packs: StarterPackData[];
+  skills?: SkillCatalogEntry[];
 }
 
 export interface RegionData {
@@ -53,6 +68,7 @@ export interface GameCatalogData {
   version: string;
   regions: RegionData[];
   starterPacks: StarterPackData[];
+  skills: SkillCatalogEntry[];
 }
 
 let catalogPromise: Promise<GameCatalogData> | null = null;
@@ -60,7 +76,7 @@ let catalogPromise: Promise<GameCatalogData> | null = null;
 function mapCatalog(response: GameCatalogResponse): GameCatalogData {
   return {
     version: response.version,
-    regions: response.regions
+    regions: (response.regions || [])
       .map((region) => ({
         id: region.id,
         biomeKey: region.biome_key || region.id,
@@ -79,6 +95,7 @@ function mapCatalog(response: GameCatalogResponse): GameCatalogData {
       }))
       .sort((a, b) => a.order - b.order),
     starterPacks: response.starter_packs || [],
+    skills: response.skills || [],
   };
 }
 

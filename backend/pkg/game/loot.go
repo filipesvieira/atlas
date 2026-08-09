@@ -185,7 +185,10 @@ var lootTemplates = []LootTemplate{
 	// Skill Books
 	{Name: "Tome: Golpe Giratório", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, SkillKey: "whirlwind", RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 25.0, Hands: 0},
 	{Name: "Manual: Tiro Quádruplo", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, SkillKey: "multishot", RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 18.0, Hands: 0},
+	{Name: "Tome: Golpe Brutal", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, SkillKey: "brutal_strike", RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 24.0, Hands: 0},
+	{Name: "Manual: Tiro Preciso", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, SkillKey: "sniper_shot", RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 18.0, Hands: 0},
 	{Name: "Livro: Bola de Fogo", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, SkillKey: "fireball", RequiredLevel: 12, Tier: 3, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 22.0, Hands: 0},
+	{Name: "Livro: Estilhaço de Gelo", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, SkillKey: "ice_shard", RequiredLevel: 20, Tier: 4, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 22.0, Hands: 0},
 	{Name: "Livro: Cura Divina", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, SkillKey: "divine_heal", RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 20.0, Hands: 0},
 }
 
@@ -410,10 +413,14 @@ func GenerateItemFromTemplate(name, rarity string, r *rand.Rand) *Item {
 		return nil
 	}
 	if template.Slot == SlotSkillBook {
+		finalRarity := normalizeRarity(rarity)
+		if finalRarity == "Comum" || finalRarity == "Incomum" {
+			finalRarity = "Raro"
+		}
 		return &Item{
 			ID:             fmt.Sprintf("skillbook_%016x", r.Uint64()),
 			Name:           template.Name,
-			Rarity:         "Raro",
+			Rarity:         finalRarity,
 			Weight:         template.BaseWeight,
 			RequiredLevel:  template.RequiredLevel,
 			SpecialEffect:  fmt.Sprintf("Slot: skill_book | Skill: %s", template.SkillKey),
@@ -461,12 +468,12 @@ var MonsterLootProfileMap = map[string]MonsterLootProfile{
 
 	"esgotos_ninja":          {Items: []string{"Sabre de Bronze", "Arco Longo", "Coifa de Prata", "Botas de Couro", "Flechas de Aço"}, DropChance: 0.35, MinRarity: "Comum", MaxRarity: "Raro"},
 	"esgotos_rat":            {Items: []string{"Maça de Batalha", "Calça de Couro", "Botas de Couro", "Colar de Prata"}, DropChance: 0.35, MinRarity: "Comum", MaxRarity: "Raro"},
-	"esgotos_boss_destroyer": {Items: []string{"Arco Longo", "Maça de Batalha", "Cota de Malha", "Colar de Prata", "Calça de Couro", "Botas de Couro", "Virotes Perfurantes"}, DropChance: 1.0, MinRarity: "Raro", MaxRarity: "Épico"},
+	"esgotos_boss_destroyer": {Items: []string{"Arco Longo", "Maça de Batalha", "Cota de Malha", "Colar de Prata", "Calça de Couro", "Botas de Couro", "Virotes Perfurantes", "Manual: Tiro Preciso"}, DropChance: 1.0, MinRarity: "Raro", MaxRarity: "Épico"},
 
 	"planalto_militante":     {Items: []string{"Martelo Constitucional", "Cordão da Estrela Rubra", "Calça Social Engomada", "Pasta Executiva Presidencial"}, DropChance: 0.35, MinRarity: "Comum", MaxRarity: "Raro"},
 	"planalto_patriota":      {Items: []string{"Megafone do Povo", "Virotes da Notificação", "Coturno da Lei", "Calça Social Engomada"}, DropChance: 0.35, MinRarity: "Comum", MaxRarity: "Raro"},
 	"planalto_pulica":        {Items: []string{"Boina Tática da Puliça", "Coturno da Lei", "Martelo Constitucional", "Virotes da Notificação"}, DropChance: 0.35, MinRarity: "Comum", MaxRarity: "Raro"},
-	"planalto_boss_xandaum":  {Items: []string{"Caneta Esferográfica Suprema", "Toga da Inviolabilidade", "Anel do Supremo Relator", "Martelo Constitucional", "Pasta Executiva Presidencial", "Virotes da Notificação"}, DropChance: 1.0, MinRarity: "Raro", MaxRarity: "Épico"},
+	"planalto_boss_xandaum":  {Items: []string{"Caneta Esferográfica Suprema", "Toga da Inviolabilidade", "Anel do Supremo Relator", "Martelo Constitucional", "Pasta Executiva Presidencial", "Virotes da Notificação", "Tome: Golpe Brutal"}, DropChance: 1.0, MinRarity: "Raro", MaxRarity: "Épico"},
 
 	// ─── TIER 3 (Rogartes) ───
 	"rogartes_dementor":      {Items: []string{"Espada de Aço", "Cetro do Esquelético", "Elmo Rúnico", "Peitoral de Platina", "Bolsa Rúnica"}, DropChance: 0.35, MinRarity: "Incomum", MaxRarity: "Épico"},
@@ -478,7 +485,7 @@ var MonsterLootProfileMap = map[string]MonsterLootProfile{
 	"frozen_zombie":          {Items: []string{"Marreta Biônica", "Botas de Aço Rúnico", "Saiote dos Magos", "Mochila Dragônica"}, DropChance: 0.35, MinRarity: "Raro", MaxRarity: "Épico"},
 	"frozen_golem":           {Items: []string{"Marreta Biônica", "Katana da Fúria", "Orbe Protetor", "Robe Místico"}, DropChance: 0.35, MinRarity: "Raro", MaxRarity: "Épico"},
 	"frozen_chimera":         {Items: []string{"Arco dos Ventos", "Flechas Incendiárias", "Amuleto Dragônico", "Mochila Dragônica"}, DropChance: 0.35, MinRarity: "Raro", MaxRarity: "Épico"},
-	"frozen_boss_master":     {Items: []string{"Katana da Fúria", "Marreta Biônica", "Arco dos Ventos", "Varinha das Relíquias", "Orbe Protetor", "Coroa de Ouro", "Robe Místico", "Mochila Dragônica"}, DropChance: 1.0, MinRarity: "Épico", MaxRarity: "Lendário"},
+	"frozen_boss_master":     {Items: []string{"Katana da Fúria", "Marreta Biônica", "Arco dos Ventos", "Varinha das Relíquias", "Orbe Protetor", "Coroa de Ouro", "Robe Místico", "Mochila Dragônica", "Livro: Estilhaço de Gelo"}, DropChance: 1.0, MinRarity: "Épico", MaxRarity: "Lendário"},
 
 	// ─── TIER 5 (Abyss) ───
 	"abyss_dragon":           {Items: []string{"Lâmina de Greiscu", "Arco Apocalíptico", "Flechas Divinas", "Amuleto do Zodíaco"}, DropChance: 0.35, MinRarity: "Raro", MaxRarity: "Lendário"},
@@ -491,6 +498,11 @@ var MonsterLootProfileMap = map[string]MonsterLootProfile{
 }
 
 func getLootProfileForMonster(monsterKeyOrName string) MonsterLootProfile {
+	lookup := strings.ToLower(strings.TrimSpace(monsterKeyOrName))
+	if prof, exists := MonsterLootProfileMap[lookup]; exists && len(prof.Items) > 0 {
+		return prof
+	}
+
 	if entry, exists := MonsterRegistry.Get(monsterKeyOrName); exists && len(entry.Loot.Items) > 0 {
 		return entry.Loot
 	}

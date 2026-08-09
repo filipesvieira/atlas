@@ -18,6 +18,8 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
 
   const {
     character: liveChar,
+    derivedStats,
+    skillCooldowns,
     inventory,
     totalAttack,
     totalDefense,
@@ -48,9 +50,19 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
 
   const char = liveChar || initialChar;
 
-  // Verifica se o personagem já escolheu uma vocação/kit inicial estritamente (Guerreiro, Arqueiro ou Mago)
+  // Verifica se o personagem já concluiu o onboarding inicial (apenas novos jogadores Lv.1 sem itens/XP são guiados)
   const hasChosenStarterPack = Boolean(
-    char && char.vocation && (char.vocation === 'Guerreiro' || char.vocation === 'Arqueiro' || char.vocation === 'Mago')
+    char && (
+      char.level > 1 ||
+      char.experience > 0 ||
+      (char.unlocked_regions && char.unlocked_regions.length > 1) ||
+      (inventory.backpack && inventory.backpack.length > 0) ||
+      inventory.equipment.head ||
+      inventory.equipment.chest ||
+      inventory.equipment.mainhand ||
+      inventory.equipment.bag ||
+      (char.vocation && char.vocation !== 'Aprendiz')
+    )
   );
   const showOnboardingModal = isOnboardingOpen || !hasChosenStarterPack;
 
@@ -68,8 +80,8 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
     ? Math.max(0, Math.min(100, Math.round(((char.experience - xpCurrentLevelBase) / (xpNextLevel - xpCurrentLevelBase)) * 100)))
     : 0;
 
-  // Cap base de 1000 oz escalado pelo Nível
-  const baseCapacity = char ? 1000 + char.level * 10 : 1500;
+  // Capacidade total autoritativa (1000 + nível*10 + FOR*15 + mochila)
+  const totalCapacity = derivedStats?.total_capacity || (char ? 1000 + char.level * 10 + (char.str || 5) * 15 : 1500);
 
   return (
     <div className="p-4 bg-slate-950 min-h-screen text-slate-100 font-sans">
@@ -78,9 +90,10 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
         <div className="md:col-span-3 flex flex-col gap-4">
           <TibiaEquipmentGrid
             character={char}
+            derivedStats={derivedStats}
             equipment={inventory.equipment}
             backpack={inventory.backpack}
-            cap={baseCapacity}
+            cap={totalCapacity}
             totalAttack={totalAttack}
             totalDefense={totalDefense}
             health={char.health}
@@ -186,10 +199,10 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
             masteries={char.masteries} 
             learnedSkills={char.learned_skills} 
             activeSkills={char.active_skills} 
+            skillCooldowns={skillCooldowns}
+            primaryArchetype={derivedStats?.primary_archetype || 'melee'}
             onToggleSkill={toggleSkill} 
           />
-
-
 
           {/* Card de Status & Experiência Balanceada */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-xl text-xs space-y-2.5">
@@ -229,7 +242,10 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
 
               <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
                 {/* FOR / STR */}
-                <div className="flex justify-between items-center bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                <div
+                  className="flex justify-between items-center bg-slate-950 px-2 py-1 rounded border border-slate-800"
+                  title="FOR: +1.5 Ataque Físico Melee por ponto, +15 Capacidade (Cap) por ponto base."
+                >
                   <span className="text-slate-300">⚔️ FOR: <strong className="text-amber-400">{char.str || 5}</strong></span>
                   {char.unspent_points > 0 && (
                     <button
@@ -243,13 +259,16 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
                 </div>
 
                 {/* DES / DEX */}
-                <div className="flex justify-between items-center bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                <div
+                  className="flex justify-between items-center bg-slate-950 px-2 py-1 rounded border border-slate-800"
+                  title="DES: +1.5 Ataque à Distância, +Crítico assintótico com Diminishing Returns (até 50% Hard Cap)."
+                >
                   <span className="text-slate-300">🏹 DES: <strong className="text-emerald-400">{char.dex || 5}</strong></span>
                   {char.unspent_points > 0 && (
                     <button
                       onClick={() => allocateStat('dex')}
                       className="px-1.5 py-0.5 bg-amber-500 text-slate-950 font-bold rounded hover:bg-amber-400 transition"
-                      title="+1.5 Dano Distância, +0.25% Crítico"
+                      title="+1.5 Dano Distância, +Crítico Assintótico"
                     >
                       +
                     </button>
@@ -257,13 +276,16 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
                 </div>
 
                 {/* INT / INT */}
-                <div className="flex justify-between items-center bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                <div
+                  className="flex justify-between items-center bg-slate-950 px-2 py-1 rounded border border-slate-800"
+                  title="INT: +2.0 Ataque Mágico, +12 Max Mana, +Regeneração contínua de MP (até 6.0 MP/s)."
+                >
                   <span className="text-slate-300">🔮 INT: <strong className="text-sky-400">{char.int_stat || 5}</strong></span>
                   {char.unspent_points > 0 && (
                     <button
                       onClick={() => allocateStat('int')}
                       className="px-1.5 py-0.5 bg-amber-500 text-slate-950 font-bold rounded hover:bg-amber-400 transition"
-                      title="+2.0 Dano Mágico, +12 Max Mana"
+                      title="+2.0 Dano Mágico, +12 Max Mana, +Regen MP"
                     >
                       +
                     </button>
@@ -271,7 +293,10 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
                 </div>
 
                 {/* VIT / VIT */}
-                <div className="flex justify-between items-center bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                <div
+                  className="flex justify-between items-center bg-slate-950 px-2 py-1 rounded border border-slate-800"
+                  title="VIT: +25 Max HP, +0.5 Defesa Física por ponto base."
+                >
                   <span className="text-slate-300">❤️ VIT: <strong className="text-rose-400">{char.vit || 5}</strong></span>
                   {char.unspent_points > 0 && (
                     <button

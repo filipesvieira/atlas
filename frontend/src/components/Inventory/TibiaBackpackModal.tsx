@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ItemIcon, getCleanItemName, getItemAttack, getRarityStyle, BonusBadges, getSlotLabel } from './ItemIcon';
+import type { DerivedStats } from '../../hooks/useGameSocket';
 
 export interface Item {
   id: string;
@@ -42,6 +43,7 @@ interface TibiaBackpackModalProps {
   isOpen: boolean;
   onClose: () => void;
   character?: any;
+  derivedStats?: DerivedStats | null;
   backpack?: Item[];
   equipment?: EquipmentSlots;
   equippedBag?: Item | null;
@@ -75,6 +77,7 @@ export function TibiaBackpackModal({
   isOpen,
   onClose,
   character,
+  derivedStats = null,
   backpack = [],
   equipment = {},
   equippedBag = null,
@@ -289,11 +292,13 @@ export function TibiaBackpackModal({
   const baseDex = character?.dex ?? character?.DEX ?? 5;
   const baseInt = character?.int_stat ?? character?.int ?? character?.INT ?? 5;
 
-  const totalStr = baseStr + eqBonus.str;
-  const totalDex = baseDex + eqBonus.dex;
-  const totalInt = baseInt + eqBonus.int;
-  const totalCrit = 5.0 + totalDex * 0.25 + eqBonus.crit;
-  const totalManaRegen = 3 + eqBonus.manaRegen;
+  const totalStr = derivedStats ? derivedStats.effective_str : baseStr + eqBonus.str;
+  const totalDex = derivedStats ? derivedStats.effective_dex : baseDex + eqBonus.dex;
+  const totalInt = derivedStats ? derivedStats.effective_int : baseInt + eqBonus.int;
+  const critFromDex = (totalDex / (totalDex + 300)) * 25.0;
+  const totalCrit = derivedStats ? derivedStats.crit_chance : Math.min(50.0, Math.round((5.0 + critFromDex + eqBonus.crit) * 100) / 100);
+  const regenFromInt = (totalInt / (totalInt + 300)) * 6.0;
+  const totalManaRegen = derivedStats ? derivedStats.mana_regen_per_second : Math.round((1.5 + regenFromInt + eqBonus.manaRegen) * 10) / 10;
 
   if (!isOpen) return null;
 

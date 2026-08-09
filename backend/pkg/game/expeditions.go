@@ -122,7 +122,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🥷",
 		MaxStages:          5,
 		RequiresUnlockFrom: "forest",
-		DropsPreview:       []string{"Arco Longo", "Maça de Batalha", "Calça de Couro", "Botas de Couro", "Colar de Prata", "Virotes Perfurantes"},
+		DropsPreview:       []string{"Arco Longo", "Maça de Batalha", "Calça de Couro", "Botas de Couro", "Colar de Prata", "Virotes Perfurantes", "Manual: Tiro Preciso"},
 		Monsters: []Monster{
 			{Key: "esgotos_ninja", VisualKey: "esgotos_ninja", Name: "Ninja do Clã do Pé", Level: 7, Health: 150, MaxHealth: 150, Attack: 17, AttackType: AttackTypeRanged},
 			{Key: "esgotos_rat", VisualKey: "esgotos_rat", Name: "Rato Mutante", Level: 10, Health: 200, MaxHealth: 200, Attack: 23, AttackType: AttackTypeMelee},
@@ -141,7 +141,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🏛️",
 		MaxStages:          5,
 		RequiresUnlockFrom: "forest",
-		DropsPreview:       []string{"Martelo Constitucional", "Caneta Esferográfica Suprema", "Megafone do Povo", "Toga da Inviolabilidade", "Boina Tática da Puliça", "Pasta Executiva Presidencial"},
+		DropsPreview:       []string{"Martelo Constitucional", "Caneta Esferográfica Suprema", "Megafone do Povo", "Toga da Inviolabilidade", "Boina Tática da Puliça", "Pasta Executiva Presidencial", "Tome: Golpe Brutal"},
 		Monsters: []Monster{
 			{Key: "planalto_militante", VisualKey: "planalto_militante", Name: "Militante do Treze ⭐️", Level: 8, Health: 165, MaxHealth: 165, Attack: 18, AttackType: AttackTypeMelee},
 			{Key: "planalto_patriota", VisualKey: "planalto_patriota", Name: "Patriota do Caminhão 🇧🇷", Level: 10, Health: 195, MaxHealth: 195, Attack: 22, AttackType: AttackTypeRanged},
@@ -184,7 +184,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🛡️",
 		MaxStages:          5,
 		RequiresUnlockFrom: "rogartes",
-		DropsPreview:       []string{"Katana da Fúria", "Marreta Biônica", "Arco dos Ventos", "Orbe Protetor", "Robe Místico", "Mochila Dragônica"},
+		DropsPreview:       []string{"Katana da Fúria", "Marreta Biônica", "Arco dos Ventos", "Orbe Protetor", "Robe Místico", "Mochila Dragônica", "Livro: Estilhaço de Gelo"},
 		Monsters: []Monster{
 			{Key: "frozen_specter", VisualKey: "frozen_specter", Name: "Lorde Espectro", Level: 22, Health: 380, MaxHealth: 380, Attack: 40, AttackType: AttackTypeRanged},
 			{Key: "frozen_zombie", VisualKey: "frozen_zombie", Name: "Zumbi Congelado", Level: 25, Health: 440, MaxHealth: 440, Attack: 45, AttackType: AttackTypeMelee},

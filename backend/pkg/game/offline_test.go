@@ -44,9 +44,20 @@ func TestOfflineSimulationIsDeterministic(t *testing.T) {
 func TestPausedExpeditionProducesNoOfflineRewards(t *testing.T) {
 	input := offlineFixture()
 	input.IsExpeditionActive = false
+	input.Character.AutoResumeExpedition = false
 	result := CalculateOfflineProgress(input)
 	if result.MinutesOffline != 0 || result.XPGained != 0 || len(result.ItemsFound) != 0 {
 		t.Fatalf("expedição pausada gerou recompensa: %+v", result)
+	}
+}
+
+func TestAutoResumeExpeditionProducesOfflineRewardsWhenPausedFromDefeat(t *testing.T) {
+	input := offlineFixture()
+	input.IsExpeditionActive = false
+	input.Character.AutoResumeExpedition = true
+	result := CalculateOfflineProgress(input)
+	if result.MinutesOffline <= 0 || result.XPGained <= 0 {
+		t.Fatalf("auto-retorno ativo pós-derrota não gerou progresso offline: %+v", result)
 	}
 }
 
@@ -101,7 +112,7 @@ func TestOfflineBossUnlockOrderIsDeterministicAndOnlyNewRegions(t *testing.T) {
 	if !reflect.DeepEqual(first.RegionsUnlocked, second.RegionsUnlocked) {
 		t.Fatalf("ordem de desbloqueios não determinística: %v / %v", first.RegionsUnlocked, second.RegionsUnlocked)
 	}
-	if len(first.RegionsUnlocked) != 2 || first.RegionsUnlocked[0] != "esgotos" || first.RegionsUnlocked[1] != "orcruins" {
+	if len(first.RegionsUnlocked) != 3 || first.RegionsUnlocked[0] != "esgotos" || first.RegionsUnlocked[1] != "orcruins" || first.RegionsUnlocked[2] != "planalto" {
 		t.Fatalf("desbloqueios inesperados: %v", first.RegionsUnlocked)
 	}
 }

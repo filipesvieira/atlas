@@ -326,7 +326,7 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 				if targetReg == "" {
 					targetReg = act.Region
 				}
-				session.SetRegion(targetReg)
+				session.SelectRegion(targetReg)
 			case "SET_STANCE":
 				session.SetStance(act.Stance)
 			case "DISCARD_ITEM":

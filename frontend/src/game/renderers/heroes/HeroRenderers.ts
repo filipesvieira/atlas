@@ -87,21 +87,59 @@ export function getKnightSprite(size = 48): HTMLCanvasElement {
     ctx.fillRect(size / 2 - 1, 12, 2, 2);
     ctx.fillRect(size / 2 + 2, 12, 2, 2);
 
-    // 5. Espada Longa de Aço Arming Sword na Mão Direita
-    ctx.fillStyle = '#e2e8f0'; // Lâmina afiada prateada
-    ctx.beginPath();
-    ctx.moveTo(size / 2 + 12, 12);
-    ctx.lineTo(size / 2 + 20, -6);
-    ctx.lineTo(size / 2 + 23, -6);
-    ctx.lineTo(size / 2 + 15, 12);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff'; // Filo de corte brilhante
-    ctx.fillRect(size / 2 + 16, 0, 2, 8);
+    // 5. Espada Longa de Aço Arming Sword na Mão Direita (Totalmente visível e detalhada)
+    // Manopla de Aço segurando o punho
+    ctx.fillStyle = '#64748b';
+    ctx.fillRect(size / 2 + 9, 20, 6, 6);
 
-    ctx.fillStyle = '#fbbf24'; // Guarda transversal dourada
-    ctx.fillRect(size / 2 + 9, 10, 10, 3);
+    // Cabo de Couro e Pomo Dourado
     ctx.fillStyle = '#451a03'; // Empunhadura
-    ctx.fillRect(size / 2 + 13, 13, 3, 5);
+    ctx.fillRect(size / 2 + 11, 21, 3, 7);
+    ctx.fillStyle = '#fbbf24'; // Pomo esférico
+    ctx.beginPath();
+    ctx.arc(size / 2 + 12.5, 29, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Guarda Cruzada Dourada (Crossguard)
+    ctx.fillStyle = '#fbbf24';
+    ctx.fillRect(size / 2 + 7, 19, 12, 3);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(size / 2 + 11, 18, 4, 1);
+
+    // Lâmina Longa de Aço Forjado (Empunhada em prontidão de combate)
+    ctx.fillStyle = '#e2e8f0'; // Aço prateado polido
+    ctx.beginPath();
+    ctx.moveTo(size / 2 + 10, 19);
+    ctx.lineTo(size / 2 + 16, 4);
+    ctx.lineTo(size / 2 + 19, 4);
+    ctx.lineTo(size / 2 + 14, 19);
+    ctx.closePath();
+    ctx.fill();
+
+    // Ponta afiada chanfrada
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.moveTo(size / 2 + 16, 4);
+    ctx.lineTo(size / 2 + 17.5, 1.5);
+    ctx.lineTo(size / 2 + 19, 4);
+    ctx.closePath();
+    ctx.fill();
+
+    // Filo de corte brilhante (Reflexo de luz)
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(size / 2 + 12, 18);
+    ctx.lineTo(size / 2 + 17.5, 3);
+    ctx.stroke();
+
+    // Sulco Central de Alívio (Fuller)
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(size / 2 + 12, 18);
+    ctx.lineTo(size / 2 + 16.5, 5);
+    ctx.stroke();
 
     // 6. Escudo Cruzado (Heater Shield) na Mão Esquerda (Emblema de Cruz Vermelha)
     const shieldX = size / 2 - 20;
@@ -324,6 +362,133 @@ export function getArcherSprite(size = 48): HTMLCanvasElement {
     ctx.lineTo(size / 2 + 26, 15);
     ctx.lineTo(size / 2 + 26, 21);
     ctx.fill();
+  });
+}
+
+/** Sprite do Herói Andarilho / Caminhante / Civil (Jaqueta Vermelha com Capuz, Calça Jeans, Botas de Trilha e Grande Mochila de Trekking com Esteira, Cantil e Corda - Imagem 1) */
+export function getWandererSprite(size = 48): HTMLCanvasElement {
+  return getOffscreenCanvas('sprite_wanderer', size, size, (ctx) => {
+    // Sombra projetada
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.beginPath();
+    ctx.ellipse(size / 2, size - 4, 14, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 1. GRANDE MOCHILA DE EXPEDIÇÃO / TREKKING NAS COSTAS (Verde Oliva / Cáqui com Utilitários)
+    const bagX = size / 2 - 18;
+    const bagY = 6;
+    const bagW = 14;
+    const bagH = 26;
+
+    // Corpo Principal da Mochila
+    ctx.fillStyle = '#14532d'; // Verde floresta escuro base
+    ctx.beginPath();
+    ctx.roundRect(bagX, bagY, bagW, bagH, 4);
+    ctx.fill();
+
+    ctx.fillStyle = '#166534'; // Placa frontal/bolso principal
+    ctx.fillRect(bagX + 2, bagY + 4, bagW - 4, bagH - 8);
+
+    // Esteira / Isolante Térmico enrolado no topo da mochila (Azul Escuro com tiras pretas)
+    ctx.fillStyle = '#1e3a8a';
+    ctx.beginPath();
+    ctx.roundRect(bagX - 1, bagY - 4, bagW + 2, 5, 2);
+    ctx.fill();
+    ctx.fillStyle = '#0f172a'; // Tiras pretas de fixação
+    ctx.fillRect(bagX + 2, bagY - 4, 2, 5);
+    ctx.fillRect(bagX + bagW - 4, bagY - 4, 2, 5);
+
+    // Cantil / Garrafa de Água na lateral
+    ctx.fillStyle = '#38bdf8'; // Garrafa azul claro
+    ctx.fillRect(bagX - 3, bagY + 10, 4, 8);
+    ctx.fillStyle = '#0f172a'; // Tampa
+    ctx.fillRect(bagX - 2, bagY + 8, 2, 2);
+
+    // Kit de Primeiros Socorros Vermelho na lateral superior
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(bagX - 4, bagY + 2, 5, 5);
+    ctx.fillStyle = '#ffffff'; // Cruz branca
+    ctx.fillRect(bagX - 2, bagY + 3, 1, 3);
+    ctx.fillRect(bagX - 3, bagY + 4, 3, 1);
+
+    // Feixe de Corda de Escalada no bolso frontal
+    ctx.fillStyle = '#d97706'; // Terracota / Cânhamo
+    ctx.fillRect(bagX + 4, bagY + 7, 6, 10);
+    ctx.fillStyle = '#b45309';
+    for (let ry = bagY + 8; ry < bagY + 16; ry += 2) {
+      ctx.fillRect(bagX + 4, ry, 6, 1);
+    }
+
+    // Mosquetões e fivelas de aço penduradas na base
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(bagX + 2, bagY + bagH - 2, 3, 3);
+    ctx.fillRect(bagX + 7, bagY + bagH - 2, 3, 3);
+
+    // 2. PERNAS, CALÇA JEANS E BOTAS DE CAMINHADA
+    ctx.fillStyle = '#1e293b'; // Calça jeans escuro
+    ctx.fillRect(size / 2 - 7, 26, 5, 14);
+    ctx.fillRect(size / 2 + 2, 26, 5, 14);
+
+    // Botas de Trilha Marrons Robustas com Solado Escuro
+    ctx.fillStyle = '#78350f'; // Couro marrom
+    ctx.fillRect(size / 2 - 8, 38, 6, 6);
+    ctx.fillRect(size / 2 + 1, 38, 6, 6);
+    ctx.fillStyle = '#451a03'; // Solado tratorado
+    ctx.fillRect(size / 2 - 9, 42, 8, 2);
+    ctx.fillRect(size / 2 + 1, 42, 8, 2);
+    ctx.fillStyle = '#fef3c7'; // Cadarços
+    ctx.fillRect(size / 2 - 7, 39, 4, 1);
+    ctx.fillRect(size / 2 + 2, 39, 4, 1);
+
+    // 3. TRONCO: JAQUETA VERMELHA VIVA ESPORTIVA COM ZÍPER E GOLA (Imagem 1)
+    ctx.fillStyle = '#dc2626'; // Vermelho vivo
+    ctx.fillRect(size / 2 - 8, 14, 16, 13);
+    ctx.fillStyle = '#b91c1c'; // Sombra da jaqueta
+    ctx.fillRect(size / 2 - 8, 22, 16, 5);
+
+    // Gola e Zíper Central
+    ctx.fillStyle = '#ef4444'; // Gola/capuz rebatido
+    ctx.fillRect(size / 2 - 6, 12, 12, 3);
+    ctx.fillStyle = '#1e293b'; // Camiseta escura sob o zíper
+    ctx.fillRect(size / 2 - 2, 14, 4, 3);
+    ctx.fillStyle = '#f8fafc'; // Linha prateada do zíper
+    ctx.fillRect(size / 2 - 1, 16, 2, 10);
+
+    // Alças da Mochila nos Ombros
+    ctx.fillStyle = '#15803d';
+    ctx.fillRect(size / 2 - 7, 14, 3, 11);
+    ctx.fillRect(size / 2 + 4, 14, 3, 11);
+
+    // Fivela Peitoral das Alças
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(size / 2 - 4, 19, 8, 2);
+
+    // 4. CABEÇA, ROSTO AMIGÁVEL E CABELO CASTANHO MODERNO
+    ctx.fillStyle = '#fed7aa'; // Tom de pele clara natural
+    ctx.fillRect(size / 2 - 5, 6, 10, 8);
+
+    // Olhos Expressivos e Sorriso
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(size / 2, 8, 2, 2);
+    ctx.fillStyle = '#b45309'; // Sorriso sutil
+    ctx.fillRect(size / 2 - 1, 12, 4, 1);
+
+    // Cabelo Castanho Estiloso
+    ctx.fillStyle = '#451a03'; // Cabelo escuro
+    ctx.fillRect(size / 2 - 6, 3, 12, 5);
+    ctx.fillRect(size / 2 - 6, 5, 2, 4); // Mecha lateral
+    ctx.fillStyle = '#78350f'; // Brilho no topo do cabelo
+    ctx.fillRect(size / 2 - 3, 3, 7, 2);
+
+    // 5. BRAÇOS E MÃOS SEGURANDO AS ALÇAS DA MOCHILA (Postura de Caminhada Confortável)
+    ctx.fillStyle = '#dc2626'; // Mangas da jaqueta
+    ctx.fillRect(size / 2 - 9, 15, 3, 8);
+    ctx.fillRect(size / 2 + 6, 15, 3, 8);
+
+    // Mãos segurando as alças
+    ctx.fillStyle = '#fed7aa';
+    ctx.fillRect(size / 2 - 8, 20, 4, 4);
+    ctx.fillRect(size / 2 + 4, 20, 4, 4);
   });
 }
 

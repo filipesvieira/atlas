@@ -381,7 +381,7 @@ func characterToGame(c *Character) *game.CharacterData {
 		LearnedSkills: c.LearnedSkills, ActiveSkills: c.ActiveSkills, UnlockedRegions: c.UnlockedRegions,
 		IsExpeditionActive: c.IsExpeditionActive, ActiveRegion: c.ActiveRegion, ActiveStance: c.ActiveStance,
 		CurrentStage: c.CurrentStage, IsBossStage: c.IsBossStage, StateRevision: c.StateRevision,
-		LastLogin: c.LastLogin, LastLogout: c.LastLogout,
+		LastLogin: c.LastLogin, LastLogout: c.LastLogout, AutoResumeExpedition: c.AutoResumeExpedition,
 	}
 }
 
@@ -518,7 +518,7 @@ func claimOfflineProgressOnce(accountID, charID string, now time.Time) (*Offline
 		accepted := make([]game.Item, 0, len(result.ItemsFound))
 		converted := make([]game.Item, 0)
 		for _, item := range result.ItemsFound {
-			if len(gameInv.Backpack) < session.GetMaxSlotCapacity() && session.GetTotalWeight()+item.Weight <= session.GetTotalCapacity() {
+			if len(gameInv.Backpack) < session.GetMaxSlotCapacity() && session.GetTotalWeight()+item.Weight <= session.GetMaxWeightCapacity() {
 				gameInv.Backpack = append(gameInv.Backpack, item)
 				accepted = append(accepted, item)
 			} else {
@@ -558,7 +558,7 @@ func claimOfflineProgressOnce(accountID, charID string, now time.Time) (*Offline
 	skillsJSON, _ := json.Marshal(character.LearnedSkills)
 	activeJSON, _ := json.Marshal(character.ActiveSkills)
 	unlockedJSON, _ := json.Marshal(character.UnlockedRegions)
-	_, err = tx.Exec(`UPDATE characters SET vocation=$2,level=$3,experience=$4,health=$5,max_health=$6,mana=$7,max_mana=$8,gold_bank=$9,str=$10,dex=$11,int_stat=$12,vit=$13,unspent_points=$14,masteries=$15,learned_skills=$16,active_skills=$17,unlocked_regions=$18,last_login=$19,offline_claimed_at=$20,current_stage=$21,is_boss_stage=$22,state_revision=$23 WHERE id=$1`, character.ID, character.Vocation, character.Level, character.Experience, character.Health, character.MaxHealth, character.Mana, character.MaxMana, character.GoldBank, character.STR, character.DEX, character.INT, character.VIT, character.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, now, now, character.CurrentStage, character.IsBossStage, character.StateRevision)
+	_, err = tx.Exec(`UPDATE characters SET vocation=$2,level=$3,experience=$4,health=$5,max_health=$6,mana=$7,max_mana=$8,gold_bank=$9,str=$10,dex=$11,int_stat=$12,vit=$13,unspent_points=$14,masteries=$15,learned_skills=$16,active_skills=$17,unlocked_regions=$18,is_expedition_active=$19,active_region=$20,active_stance=$21,current_stage=$22,is_boss_stage=$23,state_revision=$24,auto_resume_expedition=$25,last_login=$26,offline_claimed_at=$27 WHERE id=$1`, character.ID, character.Vocation, character.Level, character.Experience, character.Health, character.MaxHealth, character.Mana, character.MaxMana, character.GoldBank, character.STR, character.DEX, character.INT, character.VIT, character.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, character.IsExpeditionActive, character.ActiveRegion, character.ActiveStance, character.CurrentStage, character.IsBossStage, character.StateRevision, character.AutoResumeExpedition, now, now)
 	if err != nil {
 		return nil, err
 	}
