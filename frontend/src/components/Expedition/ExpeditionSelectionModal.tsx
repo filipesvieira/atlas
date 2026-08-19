@@ -8,6 +8,7 @@ interface ExpeditionSelectionModalProps {
   characterLevel: number;
   regions: RegionData[];
   unlockedRegions?: string[];
+  discoveredLoot?: string[];
   onSelectRegion: (regionId: string) => void;
 }
 
@@ -25,15 +26,28 @@ export function ExpeditionSelectionModal({
   if (!isOpen) return null;
 
   const safeUnlockedRegions = unlockedRegions || [];
+  const defeatedSet = new Set(safeUnlockedRegions);
   const filteredRegions = regions.filter((r) => r.tier === selectedTier);
+
+  // Helper: retorna o progresso de chefes derrotados no tier anterior (data-driven)
+  const getTierBossProgress = (targetTier: number) => {
+    if (targetTier <= 1) return { defeated: 0, total: 0, complete: true };
+    const prevTierRegions = regions.filter((r) => r.tier === targetTier - 1);
+    const defeated = prevTierRegions.filter((r) => defeatedSet.has(r.id)).length;
+    return { defeated, total: prevTierRegions.length, complete: defeated >= prevTierRegions.length };
+  };
+
   const tiers = [...new Set(regions.map((region) => region.tier))]
     .sort((a, b) => a - b)
     .map((tier) => {
       const tierRegions = regions.filter((region) => region.tier === tier);
+      const bossProgress = getTierBossProgress(tier);
       return {
         tier,
         minLevel: Math.min(...tierRegions.map((region) => region.minLevel)),
         maxLevel: Math.max(...tierRegions.map((region) => region.maxLevel)),
+        bossProgress,
+        isTierLocked: tier > 1 && !bossProgress.complete,
       };
     });
 
@@ -45,9 +59,9 @@ export function ExpeditionSelectionModal({
           <div className="flex items-center gap-2.5">
             <span className="text-2xl">🗺️</span>
             <div>
-              <h2 className="text-base font-bold text-amber-400">Mapa do Mundo & Expedições</h2>
-              <p className="text-[11px] text-slate-400">
-                Selecione seu destino estratégico para farmar equipamentos específicos!
+              <h3 className="text-lg font-bold text-amber-400">Mapa do Mundo & Regiões de Expedição</h3>
+              <p className="text-xs text-slate-400">
+                Selecione seu destino estratégico para enfrentar monstros e chefes das regiões.
               </p>
             </div>
           </div>
@@ -61,36 +75,57 @@ export function ExpeditionSelectionModal({
 
         {/* Abas de Tiers de Nível */}
         <div className="flex border-b border-slate-800 bg-slate-950/40 p-2 gap-1.5 overflow-x-auto">
-          {tiers.map(({ tier, minLevel, maxLevel }) => {
+          {tiers.map(({ tier, minLevel, maxLevel, isTierLocked }) => {
             const active = selectedTier === tier;
             return (
               <button
                 key={tier}
                 onClick={() => setSelectedTier(tier)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap border ${
                   active
-                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                    : 'bg-slate-850 hover:bg-slate-800 text-slate-400'
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold shadow-md shadow-amber-500/20'
+                    : isTierLocked
+                    ? 'bg-slate-950/60 border-slate-800 text-slate-500 hover:bg-slate-900/80 hover:text-slate-400'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-slate-100'
                 }`}
               >
-                Tier {tier} (Lv {minLevel}-{maxLevel})
+                <span>Tier {tier}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                    active ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  Lv. {minLevel}-{maxLevel}
+                </span>
+                {isTierLocked && <span className="text-[10px]">🔒</span>}
               </button>
             );
           })}
         </div>
 
-        {/* Lista de Expedições do Tier */}
-        <div className="p-4 overflow-y-auto space-y-3.5 flex-1">
+        {/* Lista de Expedições do Tier Selecionado */}
+        <div className="p-4 overflow-y-auto space-y-3.5 flex-1 custom-scrollbar">
           {filteredRegions.map((region) => {
             const isLevelMet = characterLevel >= region.minLevel;
-            const isUnlockedByBoss = safeUnlockedRegions.includes(region.id) || !region.requiresUnlockFrom;
-            const isAvailable = isLevelMet || isUnlockedByBoss;
+            const needsTierComplete = region.tier > 1 && (region.requiresTierComplete || !region.requiresUnlockFrom);
+            let isUnlockedByBoss = true;
+            let tierProgress: { defeated: number; total: number } | null = null;
+            if (needsTierComplete) {
+              const progress = getTierBossProgress(region.tier);
+              isUnlockedByBoss = progress.complete;
+              if (!progress.complete) {
+                tierProgress = { defeated: progress.defeated, total: progress.total };
+              }
+            } else if (region.requiresUnlockFrom) {
+              isUnlockedByBoss = defeatedSet.has(region.id);
+            }
+            const isAvailable = isLevelMet && isUnlockedByBoss;
             const isSelected = currentRegion === region.id;
 
             return (
               <div
                 key={region.id}
-                className={`p-3.5 rounded-xl border transition-all flex flex-col md:flex-row justify-between gap-3 ${
+                className={`p-3.5 rounded-xl border transition-all flex flex-col md:flex-row justify-between items-center gap-3 ${
                   isSelected
                     ? 'bg-amber-950/30 border-amber-500 shadow-lg shadow-amber-500/10'
                     : !isAvailable
@@ -99,11 +134,11 @@ export function ExpeditionSelectionModal({
                 }`}
               >
                 {/* Informações da Região */}
-                <div className="space-y-1.5 flex-1">
+                <div className="space-y-2 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">{region.icon}</span>
-                    <div>
-                      <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-bold text-sm text-slate-100">{region.name}</h3>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 font-mono text-emerald-400 font-bold border border-slate-700">
                           Lv. {region.minLevel}-{region.maxLevel}
@@ -113,34 +148,21 @@ export function ExpeditionSelectionModal({
                             ● Ativa
                           </span>
                         )}
+                        {defeatedSet.has(region.id) && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-bold">
+                            ✨ Boss Derrotado
+                          </span>
+                        )}
                       </div>
                       <p className="text-[11px] text-slate-400 mt-0.5">{region.description}</p>
                     </div>
                   </div>
 
                   {/* Informações do Chefão & Fases */}
-                  <div className="flex items-center gap-3 text-[10px] font-mono text-slate-300 pt-1">
+                  <div className="flex items-center gap-3 text-[10px] font-mono text-slate-300 pt-0.5">
                     <span className="text-amber-400 font-semibold">👑 Boss Final: {region.bossName}</span>
                     <span className="text-slate-500">•</span>
                     <span className="text-purple-400">🚩 {region.maxStages} Fases + Chefão</span>
-                  </div>
-
-                  {/* Preview de Drops Alvo */}
-                  <div className="pt-1.5">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      🎯 Loot Exclusivo da Região:
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {region.dropsPreview.map((item) => (
-                        <span
-                          key={item}
-                          className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-300"
-                        >
-                          <span>🎁</span>
-                          <span>{item}</span>
-                        </span>
-                      ))}
-                    </div>
                   </div>
                 </div>
 
@@ -154,6 +176,8 @@ export function ExpeditionSelectionModal({
                       <p className="text-[10px] text-slate-500 max-w-[130px]">
                         {!isLevelMet
                           ? `Requer Nível ${region.minLevel}`
+                          : tierProgress
+                          ? `👑 ${tierProgress.defeated}/${tierProgress.total} Chefes do Tier ${region.tier - 1}`
                           : `Derrote o Boss da expedição anterior para liberar!`}
                       </p>
                     </div>

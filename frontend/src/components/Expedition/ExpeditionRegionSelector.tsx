@@ -6,6 +6,7 @@ interface ExpeditionRegionSelectorProps {
   currentRegion?: string;
   characterLevel: number;
   unlockedRegions?: string[];
+  discoveredLoot?: string[];
   currentStage?: number;
   maxStages?: number;
   isBossStage?: boolean;
@@ -16,6 +17,7 @@ export function ExpeditionRegionSelector({
   currentRegion = 'forest',
   characterLevel,
   unlockedRegions = [],
+  discoveredLoot = [],
   currentStage = 1,
   maxStages = 5,
   isBossStage = false,
@@ -107,6 +109,7 @@ export function ExpeditionRegionSelector({
         characterLevel={characterLevel}
         regions={catalog?.regions || []}
         unlockedRegions={unlockedRegions}
+        discoveredLoot={discoveredLoot}
         onSelectRegion={onSelectRegion}
       />
     </>

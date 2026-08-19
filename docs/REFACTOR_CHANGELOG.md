@@ -1,25 +1,319 @@
 # Refatoração modular — changelog
 
-## Adicionado
+## [V7.2.0] - 2026-08-18 (Profissões Especializadas, Raridade de Trabalhadores & Simulação Offline Contínua)
 
-- Registries genéricos de frontend (`Registry`, `BiomeRegistry`,
-  `MonsterRegistry`, `HeroRegistry`).
-- Renderers separados por domínio e tier.
-- `MonsterContentRegistry` e `ItemTemplateRegistry` no backend.
-- Catálogo declarativo de starter packs.
-- Endpoint público `GET /api/v1/game/catalog`.
-- `biome_key` nas expedições e `active_biome` no realtime.
-- Testes de consistência entre loot, tier, nível, preview e starter templates.
-- Configuração central de URLs HTTP/WebSocket.
-- **UX/UI de Equipamentos & Mochila**:
-  - Padronização de cores e estilos de raridade unificada (`getRarityStyle`) cobrindo `Comum`, `Incomum`, `Raro`, `Épico`, `Lendário`, `Mítico`, `Divino`.
-  - Tooltips ricos nos equipamentos da tela principal com badges de bônus (+STR, +DEX, +INT, +HP, +MP, +Ouro, Lifesteal, Regen MP, Crítico), slot label e requisitos de nível dinâmicos (`✅/🔒 Requer Nível X`).
-  - Barra avançada de filtros no "Conteúdo da Mochila":
-    - Filtro por Tipo de Equipamento (Armas ⚔️, Escudos 🛡️, Elmos 🪖, Armaduras 🥋, Calças 👖, Botas 🥾, Acessórios 📿, Mochilas 🎒, Munições 🏹).
-    - Filtro por Raridade com chips coloridos temáticos.
-    - Campo de busca instantânea por nome do item com botão de limpeza rápida.
-    - Contadores dinâmicos de itens por categoria e mensagem de estado vazio amigável com reset de filtros.
-    - Integração de seleção em lote inteligente com os itens filtrados.
+- **Profissões Especializadas de Artesanato**: Registradas as 6 profissões de manufatura (`blacksmith`, `jeweler`, `leatherworker`, `tailor`, `woodworker`, `alchemist`) separadas das 6 profissões de coleta bruta.
+- **Mapeamento de Receitas Canônico**: Receitas de armas, escudos, anéis, armaduras, calças, capacetes, botas, mochilas e munições agora demandam estritamente o artesão correspondente (ex: Joalheiro para anéis e amuletos, Coureiro para sandálias e mochilas, Ferreiro para espadas e escudos).
+- **Pioneiros com Dupla Profissão**: Os 7 pioneiros iniciais cobrem 100% das 6 coletas e 6 artesanatos desde o nível 1, impedindo que jogadores fiquem travados no início do jogo.
+- **Raridade Procedimental de Trabalhadores (*Arrivals*)**: Novos moradores que chegam por moradia e prosperidade são sorteados com chances de raridade determinística por conta: Comum (65%, 1 profissão), Raro (25%, 2 profissões), Épico (8%, 2 profissões Nv. 2) e Lendário (2%, 2 profissões Grão-Mestre Nv. 3).
+- **Mensagens Humanizadas de Ambição**: O herói exibe mensagens claras de requisitos (ex: *"Nenhum morador especializado em Joalheiro está livre"*).
+- **Correção da Simulação Offline Contínua**: Removido o encerramento prematuro (`break`) que descartava horas offline após uma derrota inicial. O motor agora consome tempo de descanso na fogueira (`offlineCampRecoverySeconds`) e reinicia na Fase 1 em loop contínuo durante todo o período offline.
+- **Tempo de Descanso Dinâmico na Fogueira**: Escalonamento por HP Máximo, Nível e Vitalidade (piso de 30s para iniciantes e teto de 180s para end-game), valorizando construções do acampamento e o atributo Vitalidade.
+- **Alinhamento do DPS e Ritmo Offline**: Duração de combate contra monstros offline sincronizada com o DPS real do herói, sem penalidade artificial de dilatação por eficiência.
+- **Renderização Visual e Locomoção Canvas 2D**:
+  - Animação de braços/armas e pernas (`walkStep`) dos heróis em combate e locomoção.
+  - Redesenho completo e animações procedurais dos 4 monstros da Floresta (Lobo com 4 patas e cauda, Goblin com lança, Aranha Viúva-Negra em 8 patas senoidais e Boss Ursinho Zangado Care Bear).
+  - Movimentação suave contínua dos monstros no viewport com sincronia de velocidade e passos (`walkDistance`).
+
+- Livros de habilidade agora são estudados independentemente da arma equipada; compatibilidade permanece autoritativa somente na ativação e execução.
+- O frontend deixa de confundir livros cujo nome começa com `Manual:` com manuais de construção e passa a usar `item_kind`/`slot_type` canônicos.
+- Livros duplicados não são consumidos e informam que a habilidade já foi aprendida.
+- Craft manual em lote passa a ser uma única ordem ao servidor, limitada a 50 unidades, com quantidade concluída, raridades, carga segura e motivo de interrupção reais.
+- A interface documenta que não há falha aleatória total no craft manual: a variação de equipamento é a raridade.
+- `Prioridade` ganhou semântica visível e inequívoca: ordena Ambições, sem alterar chance, raridade ou velocidade.
+- O botão `Limpar` remove Ambições concluídas ou esgotadas e preserva todos os itens independentes do Arsenal.
+- Moradores retornam automaticamente de coletas concluídas, depositam o que couber e ficam livres; excedentes permanecem protegidos sem prender o trabalhador.
+- Prosperidade tornou-se reputação produtiva permanente, com fontes explícitas e marcos populacionais; novas chegadas exigem simultaneamente Prosperidade e vaga de moradia.
+- Nove perfis de chegada foram adicionados com nomes determinísticos por personagem, elevando a etapa atual a até 16 moradores.
+- O cenário do refúgio recebeu estações visuais exclusivas para todos os 16 moradores e rótulos de estado localizados.
+- Logs de obra usam o nome localizado da construção e o nível alvo, removendo chaves internas como `workbench`.
+- Catálogo atualizado para `2026.08-settlement-v1.1-usability-growth` sem migration destrutiva.
+
+## [V7.0.0] - 2026-08-13 (Assentamento Vivo, Moradores & Ambições)
+
+- Profissões deixam de retirar o herói do combate: três moradores pioneiros executam coletas persistentes e paralelas.
+- Nova migration `000013` preserva saves e converte ordens legadas para trabalhadores compatíveis.
+- Nova fila autoritativa de Ambições do Herói com raridade mínima, prioridade, tentativas, catalisador e estados bloqueados recuperáveis.
+- Reserva transacional impede gasto duplo de ouro/materiais; resultados automáticos ficam protegidos no Arsenal.
+- Cabana passa a controlar capacidade populacional, enquanto construções continuam exclusivamente manuais.
+- Hub econômico foi reorganizado em Ordens de Trabalho, Ambições & Arsenal, Oficina Manual e Moradores.
+- Catálogo atualizado para `2026.08-settlement-v1-residents-desires`.
+
+## [V6.0.0] - 2026-08-13 (Progressão Protegida, Profissões, Coleta & Crafting)
+
+- Adicionado migrador versionado embutido, classificação conservadora de XP legado e bloqueio auditável de snapshots ambíguos.
+- Progressão agora mantém `lifetime_experience`, `highest_level_ever`, `progression_version` e eventos monotônicos; morte/troca de região comunicam explicitamente que apenas a fase reinicia.
+- Lease distribuído impede duas sessões simultâneas e claim offline concorrente para o mesmo personagem.
+- Criados registries declarativos para seis profissões, seis expedições de coleta, recursos econômicos e receitas.
+- Coleta idle usa seed/snapshot persistidos, claim idempotente e carga pendente sem expiração quando o depósito está cheio.
+- Todos os 39 monstros/chefes entregam partes temáticas em vez de matéria-prima profissional.
+- Equipamentos genéricos possuem receita equivalente; monstros comuns não entregam equipamento pronto por padrão e chefes mantêm chance pequena de artefato/manual.
+- Itens antigos recebem apenas `source=legacy_drop`, sem reroll. Crafts recebem `source=crafted` e proteção contra auto-venda por 24 horas.
+- Crafting possui preview autoritativo, locks, request ID, ledger, piso/teto de raridade, bônus limitados de profissão/estação e catalisadores.
+- Excedentes de caça, offline e coleta viram carga pendente; nenhum recurso é truncado silenciosamente.
+- Frontend ganhou Hub de Profissões & Oficina, estimativas de coleta, filtros completos do depósito e sincronização imediata da capacidade.
+- Novo `tools/audit-economy.mjs` verifica políticas, cobertura, migrations e ausência de reroll legado.
+- Seeds de coleta e crafting agora usam `crypto/rand` no servidor e são persistidos; `request_id` não influencia resultado econômico.
+- Cancelamento de coleta preserva ciclos completos, seus recursos e XP profissional; apenas a fração de ciclo incompleta é perdida.
+- Migrations `000008`–`000010` consolidam schemas legados, revisões, catálogos estáticos e unicidade regional do compêndio.
+- Erros de leitura JSON deixam de ser convertidos silenciosamente em estado vazio; snapshots corrompidos bloqueiam a operação com erro explícito.
+- Conflitos otimistas recarregam na sessão o snapshot vencedor do banco e ficam disponíveis na telemetria administrativa.
+- Configurações de venda automática só são confirmadas no frontend após persistência bem-sucedida.
+- Migration `000011` generaliza a fila de resgate: artefatos, manuais e demais itens protegidos que não caibam na mochila/baú são persistidos sem conversão ou descarte, inclusive no offline.
+- Corrigida a inferência PostgreSQL conflitante do troféu (`source_key VARCHAR(120)` versus `resource_key VARCHAR(80)`), que impedia carregar economia, iniciar caçadas e habilitar coletas.
+- A grade de coleta agora diferencia carregamento de bloqueio real, explica o fluxo idle e oferece CTAs explícitos `Iniciar · duração`.
+- Removida a escolha obrigatória de classe/kit. A migration `000012` conclui o onboarding legado e o botão `❔ Estilos` passa a ser somente ajuda classless.
+
+## [V5.1.0] - 2026-08-11 (Correções e Endurecimento Crítico do Code Review Atlas V5)
+
+### Gate 0: Bloqueio de Exploração e Segurança
+- **P0-01 (Starter Pack One-Shot)**:
+  - Adicionadas colunas `starter_pack_claimed` (boolean) e `starter_pack_key` (varchar) na migration `000005_starter_pack_claimed.sql`.
+  - `ChooseStarterPack` em `engine.go` agora rejeita tentativas subsequentes e marca o resgate antes de salvar.
+  - Sincronização completa de campos em `db.Character`, `game.CharacterData`, queries SQL e converters do WebSocket.
+- **P0-02 (Validação de Slot Autoritativa)**:
+  - `EquipItem` em `engine.go` valida o slot canônico com `GetItemSlotType(&targetItem)`. Rejeita qualquer tentativa de equipar itens em slots incompatíveis antes de qualquer mutação.
+  - Rejeita tentativa de equipar munição sem arco ou besta equipados.
+- **P0-04 (Preservação Absoluta de Itens Protegidos)**:
+  - No fluxo de overflow com baú cheio, itens protegidos (raridades raras+, mochilas, livros, manuais e quests) nunca são convertidos em ouro forçadamente.
+- **P1-05 (Paridade de XP e Níveis)**:
+  - `ApplyExperienceGain` agora é a única fonte da verdade de ganho de XP e subida de nível em combate online (`engine.go`) e offline (`db.go`), garantindo cálculo canônico de experiência restante e pontos não gastos.
+- **P1-10 (Hardening JWT e Endpoints)**:
+  - `AuthMiddleware` e WebSocket usam `jwt.WithValidMethods([]string{"HS256"})`, `jwt.WithIssuer("atlas-server")`, `jwt.WithAudience("atlas-client")`.
+  - `http.MaxBytesReader` de 1MB aplicado em `HandleRegister`, `HandleLogin` e `HandleCreateCharacter`.
+  - Normalização estrita de e-mails (`strings.ToLower(strings.TrimSpace(req.Email))`).
+
+### Gate 1: Progressão, Identidade e Governança
+- **P1-01 (Desbloqueio de Regiões por Chefe)**:
+  - `EnsureUnlockedRegionsForLevel` atualizado para não desbloquear automaticamente regiões encadeadas que exigem vitória contra chefe (`RequiresUnlockFrom`).
+  - `CheckRegionAvailability` e modal do frontend `ExpeditionSelectionModal.tsx` agora exigem `isLevelMet && isUnlockedByBoss`.
+- **P1-03 (Chaves Canônicas Explícitas em Itens)**:
+  - Todos os templates de `lootTemplates` em `loot.go` agora possuem `Key` explícito em `snake_case`.
+  - `ItemTemplateRegistry` verifica duplicidade e garante integridade das chaves.
+- **P2-01 (Allowlist de Origin Estrita)**:
+  - `IsOriginAllowed` em `config.go` utiliza correspondência exata sem prefixos corrompíveis.
+- **P2-02 (Telemetria Real)**:
+  - `HandleAdminTelemetry` agora reporta uso real de memória via `runtime.ReadMemStats`, uptime real desde inicialização do processo e status real de ping no banco.
+- **P2-04 (Integridade do Catálogo Estendida)**:
+  - `ValidateIntegrity` agora valida ordens únicas de expedição, detecta ciclos de dependência de regiões via DFS, valida profiles de boss e integridade de todos os templates.
+
+### Gate 2: Venda Automática e Paridade Offline
+- **P0-03 (Motor de Auto-Venda Aprimorado e Paridade Offline)**:
+  - `EvaluateAutoSell` em `autosell.go` agora agrupa itens por `TemplateKey`, respeita `SellSlotTypes`, protege `ItemKindQuest`, ordena deterministicamente grupos e candidatos e avalia qualidade do item de forma holística (`ItemPower` + stats derivados + valor).
+  - Gatilho no motor online (`engine.go`) avalia ocupação projetada considerando o item entrante (`len(backpack)+1` e peso projetado) em relação ao `TriggerPercent` (75%).
+  - `CalculateOfflineProgress` (`offline.go`) agora recebe `AutoSellSettings` e higieniza a mochila offline usando `EvaluateAutoSell` com o mesmo comportamento.
+  - `UpdateAutoSellSettings` valida limites dos parâmetros (`TriggerPercent`, `TargetPercent`, limite de templates protegidos).
+
+---
+
+## [Unreleased] - 2026-08-11 (Execução do Plano Mestre V5 — Fases 0, 1 e 2: Baseline, Segurança e Governança)
+
+### Fase 0: Baseline & Testes de Caracterização (PR 01)
+- **Congelamento de Fórmulas e Regras Críticas**: Criado `characterization_test.go` cobrindo cálculo de atributos derivados (HP por VIT, Mana por INT, Capacidade total por STR, Slots por raridade de mochila, Attack e Defense), além da integridade da matriz de expedições e chefes.
+- **Cobertura Contínua**: 100% de aprovação na suíte de 39 testes automatizados em `pkg/game` e `internal/config`.
+
+### Fase 1: Segurança Operacional, Configuração e Admin (PR 02 & PR 03)
+- **Centralização com `AppConfig` (`internal/config/config.go`)**:
+  - Remoção de segredos hardcoded e suporte a carregamento estruturado de ambiente (`ENVIRONMENT`, `PORT`, `JWT_SECRET`, `DATABASE_URL`, `ALLOWED_ORIGINS`).
+  - Validação fail-fast no startup para ambientes `production` e `staging` (exigência mínima de 32 bytes de segredo).
+- **CORS e WebSocket Origin Control**:
+  - Restrição de origens no CORS HTTP e no `websocket.Upgrader.CheckOrigin` via `appConfig.IsOriginAllowed()`, eliminando aceitação irrestrita de conexões cross-origin maliciosas.
+- **Autenticação & Autorização Reforçadas**:
+  - Inclusão do campo `Role` nas claims do JWT com validação estrita do algoritmo de assinatura `HS256`.
+  - `AdminMiddleware` ativo com validação real de `claims.Role == "admin"`, bloqueando acessos não autorizados a rotas de telemetria com `403 Forbidden`.
+- **Health e Readiness Probes**:
+  - `/health/live`: verificação de processo vivo.
+  - `/health/ready`: checagem real de conectividade no PostgreSQL com `db.DB.PingContext()`.
+### Fase 3: Progressão Única & Transações Atômicas (PR 05, PR 06 & PR 07)
+- **Regra Única e Autoritativa de Acesso a Regiões (`CheckRegionAvailability`)**:
+  - Implementada verificação autoritativa em `expeditions.go` validando simultaneamente nível do aventureiro e pré-requisitos de desbloqueio de chefes anteriores (`RequiresUnlockFrom`).
+  - `SelectRegion` no motor de jogo agora valida com `CheckRegionAvailability`, emitindo mensagem de bloqueio explicativa caso os requisitos não sejam cumpridos (`🔒 Região Bloqueada: Derrote o Chefe de [Região] para desbloquear`).
+- **Persistência Atômica de Economia (`SaveCharacterAndInventoryAtomic`)**:
+  - Criada mutação transacional PostgreSQL unindo atualização de ouro/atributos do personagem e do inventário na mesma transação.
+  - `BulkSell` agora persiste ouro e inventário atomicamente via `SaveCharAndInvFunc`, eliminando riscos de duplicação ou descompasso em falhas de rede/banco.
+- **Suíte de Testes de Progressão**:
+  - `TestCheckRegionAvailability_Rules` cobrindo regiões iniciais, encadeadas, regras de chefes e níveis mínimos com 100% de cobertura.
+
+### Fase 8: Compêndio de Exploração & Descoberta Progressiva de Loot (PR 17 & PR 18 — Frente L)
+- **Persistência de Descobertas (`character_loot_discoveries`)**:
+  - Tabela PostgreSQL indexada com data da 1ª descoberta, última obtenção, contador cumulativo e maior raridade já obtida por personagem.
+  - Função `BackfillInventoryDiscoveries` idempotente no login para garantir retrocompatibilidade com aventureiros veteranos.
+- **Registro em Tempo Real em Combate**:
+  - Drop de loot em combate online agora dispara descoberta no compêndio e anuncia evento especial (`✨ COMPÊNDIO: Você descobriu [Item]!`).
+  - Sincronização via WebSocket em `WELCOME_EVENT` (`discovered_loot`).
+- **Interface do Mapa do Mundo com Névoa de Guerra no Loot (`ExpeditionSelectionModal.tsx`)**:
+  - Barra de progresso do Compêndio por Região e Contador Geral Global/Tier (`🔍 Compêndio de Loot: X/Y (Z%)`).
+  - Selo especial `✨ 100% Explorada` ao completar todos os drops de uma região.
+  - Cards misteriosos `❓ ???` com tooltips imersivos para itens ainda não descobertos, preservando o elemento de surpresa e estímulo à caça e progressão.
+
+### Fase 9 & 10: Venda Automática Customizável & Shadow Evaluation (PR 19 & PR 20 — Frente M)
+- **Persistência de Regras (`character_auto_sell_settings`)**:
+  - Tabela PostgreSQL com colunas `enabled`, `online_enabled`, `offline_enabled`, `trigger_percent` (padrão 75%), `target_percent` (padrão 60%), `sell_rarities`, `sell_slot_types`, `only_duplicates`, `keep_best_per_template`, `protected_template_keys` e `revision`.
+  - Funções de banco `GetCharacterAutoSellSettings` e `SaveCharacterAutoSellSettings`.
+- **Motor Autoritativo de Avaliação (`pkg/game/autosell.go`)**:
+  - `EvaluateAutoSell` com cálculo de ocupação ponderada (maior valor entre slots e peso).
+  - Preço de venda autoritativo com taxa de 80% do valor comercial do item (`CalculateAutoSellItemPrice`).
+  - **Proteções Rígidas Inquebráveis**: Mochilas (`SlotBag`), Manuais de Construção (`ItemKindConstructionManual`), Livros de Habilidades (`ItemKindSkillBook`), raridades não marcadas e melhores cópias de cada template são estritamente preservados.
+  - Limpeza gradual até a meta (`target_percent`), sem esvaziar a mochila desnecessariamente.
+- **Shadow Evaluation em Tempo Real & Modal de Configuração (`AutoSellModal.tsx`)**:
+  - Modal rico estilo Tibia-dark com sliders de gatilho e meta, toggles de raridades e preservação de duplicatas.
+  - Painel de prévia em tempo real (`🔍 Prévia de Venda com sua Mochila Atual`) informando exatamente quantos itens seriam vendidos, quantos preservados, ouro estimado e itens protegidos antes de salvar.
+
+### Fase 11: Baú de Achados / Overflow de Expedição (PR 21 & PR 22)
+- **Persistência de Itens Excedentes (`character_overflow_chests`)**:
+  - Tabela PostgreSQL com 20 slots de armazenamento seguro sem expiração para itens protegidos encontrados com a mochila cheia.
+  - Funções `GetCharacterOverflowChest`, `SaveCharacterOverflowChest`, `AddOverflowChestItem`.
+- **Integração no Motor Online & Offline**:
+  - Quando a mochila atinge a capacidade máxima e a auto-venda não libera espaço, itens protegidos (Raros, Épicos, Lendários, Mochilas, Manuais, Livros) são automaticamente direcionados para o **Baú de Achados**.
+  - Log informativo em tempo real: `📦 BAÚ DE ACHADOS: Mochila cheia! O item protegido [Item] foi guardado no Baú de Achados!`.
+- **Interface e Resgate (`OverflowChestModal.tsx`)**:
+  - Modal acessível pelo inventário com contagem de slots (`X/20`), cards de itens detalhados e botão de resgate instantâneo para a mochila quando houver espaço.
+  - Indicador visual animado `📦 Baú (X)` no cabeçalho do inventário quando houver itens guardados.
+
+### Fase 4: Protocolo WebSocket V2, Handlers Tipados & Confiabilidade (PR 08 & PR 09 — Frente H)
+- **Envelope Padronizado e Sequenciamento Monotônico (`ws_envelope.go`)**:
+  - Implementado envelope WebSocket V2 (`WsEnvelope`) com suporte a `seq` monotônico crescente, `request_id`, `state_revision` e categorização de criticidade (`EventCategoryCritical`, `EventCategoryState`, `EventCategoryEphemeral`).
+  - **Zero Event Loss para Eventos Econômicos**: Drops de loot, subidas de nível, transações de ouro, desmontes e avanços de construção são imunes a descarte silencioso em momentos de sobrecarga do buffer.
+- **Roteador Modular de Comandos (`command_router.go`)**:
+  - Decomposição do bloco monolítico `switch` de `ws.go` (~656 linhas) em uma tabela de despacho tipada e desacoplada (`DispatchCommand`), simplificando a manutenção e reduzindo acoplamento.
+- **Mecanismo de Resync Autoritativo (`REQUEST_STATE_SYNC` & `STATE_SNAPSHOT`)**:
+  - Endpoint dedicado para solicitação instantânea de snapshot pelo cliente em caso de detecção de lacunas de sequência de rede.
+  - Hook do frontend `useGameSocket.ts` atualizado para detectar saltos de sequência e disparar auto-reconciliação sem recarregar a página.
+
+### Fase 5: Motor Modular, State Machine & Paridade Online/Offline (PR 10, PR 11 & PR 12 — Frentes F & G)
+- **Calculadores Puros Compartilhados (`reward_calculator.go`)**:
+  - Fórmulas de XP (`CalculateKillXP`), Ouro (`CalculateKillGold`) e Level-Up (`ApplyExperienceGain`) 100% unificadas e determinísticas entre o motor online e o simulador de progresso offline (`offline.go`).
+- **State Machine de Expedição (`expedition_state_machine.go`)**:
+  - Máquina de estados formal com transições estritas (`StateCampResting`, `StateRecovering`, `StateExpeditionStarting`, `StateWaveSpawning`, `StateCombatActive`, `StateWaveCompleted`, `StateBossSpawning`, `StateExpeditionVictory`, `StateDefeated`), eliminando combinações inconsistentes de flags em memória.
+### Fase 6: Conteúdo Canônico Data-Driven, Template Keys & ContentRegistry Agregado (PR 13 & PR 14 — Frente C)
+- **Identidade Estável e Imutável (`TemplateKey`)**:
+  - Adicionado `TemplateKey` permanente a `Item` e `Key` a `LootTemplate` em `loot.go`, eliminando inferências por string no catálogo.
+  - `ItemTemplateRegistry` atualizado para indexação e busca dupla por chave normalizada e nome de exibição (`Get(keyOrName)`).
+- **Validador de Integridade do Catálogo (`content_registry.go`)**:
+  - Criação de `ContentRegistry` agregado unindo Regiões, Monstros, Itens, Recursos, Construções e Habilidades.
+  - Método autoritativo `ValidateIntegrity()` executado no startup e suíte automatizada `content_audit_test.go` garantindo zero referências quebradas, ausência de ciclos de desbloqueio em regiões e cobertura total de drops e recursos por monstro.
+
+### Fase 7: Modularização do Frontend & Decomposição de Monólitos (PR 15 & PR 16 — Frentes I & J)
+- **Decomposição dos Renderers de Biomas (`renderers/biomes/`)**:
+  - `BiomeRenderers.ts` (~1.264 linhas) decomposto em módulos de alta coesão:
+    - `canvasCache.ts`: Helper de offscreen canvas com cache de alta performance.
+    - `forest.ts`: Floresta dos Aprendizes e Acampamento Seguro.
+    - `swamp.ts`: Vila do Shereque e pântano temático.
+    - `sea.ts`: Vila do Chapolin e pátio da vila.
+    - `orcRuins.ts`: Ruínas Orcs e Castle Grayskull.
+    - `city.ts`: Esgotos Arcade e Planalto Central de Brasília.
+    - `castle.ts`: Escola de Rogartes e biblioteca gótica.
+    - `frozen.ts`: Santuário de Atenas e 12 Casas.
+    - `abyss.ts`: Caverna do Dragão e portal dimensional.
+- **Decomposição do Modal de Inventário (`TibiaBackpackModal.tsx`)**:
+  - Extraídos `BackpackCapacityBar.tsx` (peso, slots e atalhos rápidos de auto-venda/baú) e `BackpackFilterBar.tsx` (categorias, busca instantânea e filtros de raridade).
+  - Remoção de inferências por nome (`i.name.includes("Mochila")`) substituídas por verificação canônica de slot (`slot_type !== 'bag'`).
+
+### Fase 12: Auditoria Global de Performance, Zero Race Conditions & Fechamento do Plano V5 (PR 22)
+- **Conformidade de Performance**:
+  - 100% de aprovação na suíte de testes em Go com race detector ativo (`go test -race ./...`).
+  - Frontend validado com 0 erros de TypeScript e compilação de produção via Vite (`npm run build`).
+  - Todos os 22 PRs e todas as 12 Frentes do Plano Mestre V5 foram implementadas, testadas e documentadas com sucesso.
+
+---
+
+## [V3.0.0] - 2026-08-10 (Refatoração do Acampamento Visual, Manuais de Construção, Obras e Desmontagem V3)
+
+### Correção e Limpeza Visual do Cenário 2D (P0)
+- **Eliminação de Elementos Legados do Background**: Removida a cabana fixa, a fogueira estática e os suportes decorativos duplicados do fundo de `BiomeRenderers.ts`. O background preserva exclusivamente o céu estrelado noturno, a lua reluzente, as montanhas distantes e a grama do solo.
+- **Sistema de Coordenadas Ancoradas no Chão**: Estruturas posicionadas no centro da base inferior `(anchorX, groundY)` com ordenação de profundidade dinâmica por `sortY`.
+- **Redimensionamento da Cabana do Aventureiro**:
+  - Nível 1: 88x56px (tenda rústica com estacas e tecido).
+  - Nível 2: 110x76px (cabana de madeira maciça com telhado reforçado).
+  - Nível 3: 140x96px (chalé de dois volumes com chaminé, fumaça animada e vitral iluminado).
+- **Novo Sistema de Andaimes e Martelo Pixel Art (`ConstructionOverlayRenderer.ts` & `PixelHammerRenderer.ts`)**:
+  - Andaimes proporcionais ao footprint real de cada construção com tábuas transversais, esteios de amarração e poeira de faíscas.
+  - Martelo em pixel art puro desenhado no canvas via arcos e retângulos vetoriais, eliminando emojis de fontes do sistema.
+  - Renderização do nível atual do edifício por baixo da estrutura de obra, mantendo o acampamento visualmente vivo durante as construções.
+- **Modal Dedicado de Gestão do Acampamento (`CampManagementModal.tsx` & `CampButton.tsx`)**:
+  - Removido o painel fixo de construções que ocupava a coluna central do Dashboard, liberando o espaço visual para o Canvas 2D e o Log de Batalha em tempo real.
+  - Botão estilizado `🏕️ Gestão do Acampamento` integrado na coluna de equipamentos com contador de equipes de obras `[👷 Obras: X/Y]`.
+  - Abertura com 1 clique a qualquer momento (em descanso ou durante expedições) com suporte à tecla ESC e visual limpo.
+
+### Sistema de Manuais de Construção & Blueprints (P1)
+- **Manuais como Drop de Chefes (`ItemKindConstructionManual`)**:
+  - *Manual: Armazém de Recursos* (Drop do Urso Ranzinza na Floresta).
+  - *Manual: Cabana do Aventureiro* (Drop da Fiona no Pântano de Shereque).
+  - *Manual: Fonte Arcana* (Drop da Alma Negra nos Mares de Chapolin).
+  - *Manual: Bancada de Desmontagem* (Drop do Esqueleto nas Ruínas Orc).
+  - *Manual do Mestre de Obras* (Drop do Soberano Xandaum no Planalto Central).
+- **Tabela `character_building_blueprints`**: Persistência autoritativa de projetos descobertos pelo jogador. A Fogueira é liberada por padrão; as demais estruturas só aparecem no painel e na cena 2D após o estudo do respectivo manual.
+- **Ação `LEARN_BUILDING_BLUEPRINT`**: Consumo transacional do manual da mochila com aprendizado do projeto no banco de dados.
+
+### Rebalanceamento Econômico com Múltiplos Troféus e Prazos Realistas (P2)
+- **Troféus Múltiplos de Chefões**:
+  - Fogueira Nv 2 exige 5 Garras do Urso; Nv 3 exige 12 Crânios do Esqueleto.
+  - Armazém Nv 2 exige 8 Lâminas do Destruidor; Nv 3 exige 15 Martelos de Xandaum.
+  - Cabana Nv 2 exige 8 Tiaras da Fiona; Nv 3 exige 15 Martelos de Xandaum.
+  - Fonte Arcana Nv 2 exige 8 Brasões da Alma Negra; Nv 3 exige 15 Coroas do Santuário.
+  - Bancada Nv 2 exige 8 Brasões da Alma Negra; Nv 3 exige 18 Varinhas do Voldemorte.
+- **Durações Realistas de Obras**: Nível 1 (10-30 min), Nível 2 (2-6 h), Nível 3 (18-30 h).
+- **Equipes de Obras (`MaxConstructionSlots`)**: Limite de 1 obra ativa por padrão, expansível para 2 ao aprender o *Manual do Mestre de Obras*.
+
+### Desmonte em Lote Atômico com Risco e Modo Seguro (P3)
+- **Transação Totalmente Atômica**: `GetCharacterInventoryTx` e `SaveCharacterInventoryTx` compartilham a mesma transação `*sql.Tx` do acampamento e recursos, com lock `FOR UPDATE`.
+- **Cálculo Determinístico de Chances**:
+  - Nível 1: 65% base (50% a 70% conforme raridade). Lote máx: 5 itens.
+  - Nível 2: 80% base (72% a 85% conforme raridade). Lote máx: 15 itens.
+  - Nível 3: 92% base (84% a 97% conforme raridade). Lote máx: 50 itens.
+- **Modo Seguro (`SafeMode`)**: Desbloqueado na Bancada Nível 3, concede 100% de taxa de sucesso na reciclagem em lote.
+- **Interface `RollSource`**: Motor de RNG desacoplado no backend Go permitindo auditoria e testes unitários 100% determinísticos.
+
+## [Unreleased] - 2026-08-10 (Ajustes Cirúrgicos V2: Depósito de Recursos, Snapshot Autoritativo e Descarte Seguro)
+
+### Correção de Capacidade & Troféus de Boss (P0)
+- **Metadados Declarativos de Recursos**: Adicionadas propriedades `Category` (`material` / `trophy`), `CountsTowardStorage: bool` e `Discardable: bool` em `backend/pkg/game/resources.go` e `resource_registry.go`.
+- **Exclusão de Troféus do Armazém**: `GetStorageUsed` computa unicamente materiais armazenáveis. Troféus de chefe nunca ocupam espaço de armazenamento.
+- **Elevação da Capacidade Base**: Capacidade base do armazém elevada de 200 para **500 unidades** (`DefaultBaseResourceStorage = 500`).
+- **Nova Escala de Capacidade do Armazém**:
+  - Nível 1: 2.000 unidades (Custo: 60 Madeira, 30 Pedra, 100 Gold).
+  - Nível 2: 7.500 unidades (Custo: 140 Madeira, 80 Pedra, 30 Ferro, 450 Gold).
+  - Nível 3: 25.000 unidades (Custo: 250 Madeira, 150 Pedra, 80 Ferro, 1.400 Gold, Troféu do Destruidor).
+
+### Snapshot Autoritativo & Realtime sem Refresh (P0 & P1)
+- **Contrato `ResourceInventorySnapshot`**: Estrutura contendo `items`, `storage_used`, `storage_capacity` e `revision`, emitida autoritativamente em todas as mutações (`WELCOME_EVENT`, `RESOURCE_DROP`, `BUILDING_UPGRADE_STARTED`, `SALVAGE_COMPLETED`, `RESOURCE_DISCARDED`).
+- **Sincronização Atômica na Engine**: A engine Go substitui o cache em memória diretamente pelo resultado persistido no banco de dados, prevenindo qualquer dessincronização ou necessidade de recarregar a página.
+
+### Descarte Seguro & Desmonte Atômico "Tudo ou Nada" (P0 & P1)
+- **Ação `DISCARD_RESOURCE`**: Comando WebSocket permitindo descarte transacional de materiais selecionados pelo jogador com validação de saldo e integridade de revisão.
+- **Desmonte Atômico (`SalvageItemAtomically`)**: Transação `SERIALIZABLE` que calcula o rendimento e aborta com erro caso o armazém não tenha espaço livre para 100% dos materiais gerados, mantendo o equipamento intacto na mochila.
+
+### Novo Depósito de Recursos & UX Ergonômica (P2, P3 & P4)
+- **Remoção da `ResourceBar` Central**: Limpeza da coluna central do Dashboard, liberando espaço visual para a cena 2D e o log de combate.
+- **Botão `ResourceDepotButton`**: Integrado na grade de equipamentos clássica do Tibia (logo abaixo do botão da mochila) exibindo ocupação e porcentagem em tempo real.
+- **Modal `ResourceDepotModal`**: Exibe exclusivamente recursos possuídos (`quantity > 0`), com busca em tempo real, abas de categoria (Todos / Materiais / Troféus), filtro por raridade e diálogo `ResourceDiscardDialog`.
+- **Pré-requisitos de Construção**: Edifícios de níveis 2 e 3 agora exigem Armazém de nível correspondente (`RequiredBuildings`), devidamente validados no backend e exibidos no `BuildingUpgradeModal`.
+
+## [Unreleased] - 2026-08-09 (Sistema de Acampamento, Recursos, Construções & Gold Sink)
+
+### Sistema de Recursos & Troféus de Boss
+- **7 Recursos Naturais Declarativos**: `wood`, `stone`, `fiber`, `iron`, `arcane_essence`, `glacial_crystal`, `abyssal_ember` registrados em `backend/pkg/game/resource_registry.go`.
+- **9 Troféus Exclusivos de Boss**: Drop garantido (100%) dos chefões regionais para requisitos de melhorias avançadas.
+- **Tabela de Recursos por Monstro**: Mapeamento declarativo dos 39 monstros e chefões em `backend/pkg/game/resource_profiles.go`.
+- **Rolagem Autoritativa Independente**: Recursos coletados em combate em tempo real e simulação offline sem interferir na rolagem de equipamentos nem no peso (`cap`) do personagem.
+- **Persistência Transacional no Banco**: Tabelas `character_resources`, `character_camps` e `character_camp_buildings` criadas via migração `000002_camp_system.sql` e auto-provisionamento em `db.go`.
+
+### Sistema de Construções & Economia (Gold Sink)
+- **5 Construções do Acampamento (Níveis 1 a 3)**:
+  - 🔥 **Fogueira** (`center`): Aumenta a taxa de regeneração de HP no acampamento (+15%, +35%, +70%).
+  - 💧 **Fonte Arcana** (`north`): Aumenta a taxa de regeneração de MP no acampamento (+15%, +35%, +70%).
+  - ⛺ **Cabana do Aventureiro** (`west`): Acelera a regeneração de HP e MP global simultaneamente (+10%, +25%, +50%).
+  - 📦 **Armazém** (`east`): Expande a capacidade de armazenamento de materiais (500, 1.500, 5.000 unidades).
+  - ⚒️ **Bancada de Desmontagem** (`south`): Desbloqueia a reciclagem de equipamentos sobressalentes (+0%, +20%, +50% de eficiência).
+- **Consumo Obrigatório de Ouro da Conta (`gold_bank`)**: Todas as construções e níveis requerem ouro além de materiais, atuando como Gold Sink contínuo.
+- **Atualização Transacional com Locks**: `StartBuildingUpgrade` roda em `SERIALIZABLE` com `FOR UPDATE`, garantindo idempotência e consistência financeira.
+
+### Frontend & Renderização Canvas 2D a 60 FPS
+- **Barra de Recursos do Acampamento (`ResourceBar.tsx`)**: Exibição dos 7 recursos, troféus de boss e capacidade do armazém.
+- **Painel de Gestão do Acampamento (`CampPanel.tsx` & `BuildingCard.tsx`)**: Cards informativos com contagem regressiva de construção em tempo real e modal detalhado de confirmação (`BuildingUpgradeModal.tsx`).
+- **Modal de Desmontagem (`SalvageModal.tsx`)**: Seleção de itens da mochila com pré-visualização de rendimento calculada no backend.
+- **Cena 2D Modular do Acampamento (`CampSceneRenderer.ts`)**: Renderizadores dedicados para cada construção (`CampfireRenderer`, `ArcaneSpringRenderer`, `HutRenderer`, `WarehouseRenderer`, `WorkbenchRenderer`) com evolução visual por níveis e animações de fogo, água, cristais, fumaça e faíscas.
+- **Auditoria Automatizada (`tools/audit-camp-content.mjs`)**: Validação de 16 recursos, 39 perfis de monstros, 5 construções, 5 renderizadores e 5 slots.
 
 ## [Unreleased] - 2026-08-08 (Refatoração Modular V2 & Balanceamento)
 
@@ -112,3 +406,63 @@
 - Assunções do engine de que toda expedição possui exatamente cinco fases.
 - **Botão `Descartar Selecionados`** no inventário/mochila, centralizando o fluxo econômico na venda de itens (`Vender Selecionados` e `Vender Tudo`).
 
+---
+
+## 🚀 Ciclo Recente — Sistema de Skins, Kit Inicial, Baú de Achados & Estabilidade
+
+### Sistema Modular de Guarda-Roupa & Skins do Herói
+- **5 Skins Registradas Declarativamente (`SkinRegistry.ts`)**:
+  - 🌾 `peasant` (Camponês Aventureiro - Imagem 3): Camisa marfim de linho, colete preto carmim, culote ocre e botas pretas de cano alto. **Definida como skin padrão inicial de todo novo personagem**.
+  - 🎒 `wanderer` (Andarilho Mochileiro): Jaqueta vermelha, mochila de expedição com isolante térmico e cantil.
+  - ⚔️ `knight` (Cavaleiro Templário): Armadura de placas de aço, capa carmim com caimento harmonioso no solo e escudo cruzado.
+  - 🏹 `archer` (Patrulheiro dos Bosques): Túnica verde floresta, capuz de caça, aljava e arco recurvo.
+  - 🔮 `mage` (Arcanista Elemental): Robe azul-índigo, manto púrpura, chapéu pontudo e cajado arcano.
+- **Padronização Canônica de Sprites (`HeroRenderers.ts`)**:
+  - Todos os 5 heróis desenhados na grade 48×48px com linha de solo uniforme em `Y = 44` e sombra de solo em `(24, 44)`.
+  - Escalonamento nítido nearest-neighbor via `getOffscreenCanvas`, garantindo proporções perfeitas sem distorções ou heróis flutuando.
+- **Desacoplamento Visual vs Combate (`GameViewport.ts`)**:
+  - A animação e tipo de ataque (Melee, Ranged/Flecha, Magic/Orbe) é derivada exclusivamente da **Arma Empunhada** (`derived_stats.primary_archetype` / `mainhand.weapon_type`).
+- **Isolamento de Preferência por Personagem**:
+  - As escolhas cosméticas são salvas individualmente por ID de personagem (`atlas_active_skin_${characterId}`), sem vazar seleções entre diferentes personagens da mesma conta.
+- **Modal de Guarda-Roupa (`SkinSelectionModal.tsx`)**:
+  - Pré-visualização ao vivo em Canvas 2D animado, seleção instantânea e descrições temáticas.
+
+### Onboarding & Kit Inicial de Treinamento
+- Todo novo personagem criado no banco (`CreateCharacter` em `db.go`) recebe na mochila o kit completo para testar os 3 estilos de combate desde o primeiro minuto:
+  - ⚔️ *Espada do Aprendiz* (Melee)
+  - 🛡️ *Broquel de Madeira* (Escudo)
+  - 🏹 *Arco Curvo* (Distância) + 🎯 *Flechas de Madeira* (Munição)
+  - 🔮 *Varinha do Aprendiz* (Magia)
+
+### Estabilidade da Simulação Offline & Barra de XP
+- **Consumo de XP Offline (`offline.go`)**: Corrigido o loop de simulação offline (`simulatedExperience -= GetRequiredXPForLevel(simulatedLevel)`), eliminando o bug de subida exponencial de níveis e experiência negativa.
+- **Alinhamento do Cálculo de XP (`DashboardGrid.tsx`)**: Exibição da experiência relativa ao nível atual com valores formatados e porcentagem positiva.
+- **Auto-Higienização no Banco (`db.go`)**: Saneamento automático de personagens com atributos corrompidos durante o login.
+
+### Baú de Achados (Overflow Chest) & Venda
+- **Baú de Achados**: Capacidade para até 20 slots de itens protegidos com suporte a resgate e venda em lote (`SELL_OVERFLOW_CHEST_ALL`).
+- **Venda de Mochilas**: Remoção de restrições arbitrárias de interface, permitindo que mochilas sejam vendidas normalmente.
+
+### Acampamento & Desmonte
+- **Acúmulo de Efeitos na Bancada (`camp_bonus_calculator.go`)**: Desbloqueio de desmonte garantido a partir do Nível 1 da Bancada.
+- **Formatação de Recursos**: Formatação compacta para quantidades $\ge 1000$ (`1.4k`, `10k`, `1.4M`).
+# 2026-08-14 — Progressão, economia offline e assentamento (P0)
+
+## Capacidade de recursos
+
+- O Depósito Improvisado inicial passou de 500 para **10.000** unidades para suportar um ciclo longo de combate e coleta antes da descoberta do manual de Armazém.
+- O Armazém agora comporta **30.000 / 100.000 / 500.000** unidades nos níveis 1, 2 e 3.
+- Troféus continuam fora da capacidade, preservando itens de progressão sem bloquear recursos de produção.
+
+## Economia e progresso offline
+
+- A simulação offline agora projeta dano recebido, roubo de vida e regeneração. Uma onda fatal é atômica: não concede seus drops e envia o herói ao acampamento com 40% de HP.
+- Pacotes especiais de chefe offline foram limitados a um por hora, no máximo 12 por relatório. Chefes adicionais ainda contam como abate e concedem recompensa comum, mas não duplicam troféus/artefatos.
+- A chance de partes comuns de monstro caiu de 72% para 30%; partes de chefes passaram de 3–6 para 1–2. O objetivo é que partes sejam insumos, não enchimento de depósito.
+- Cargas seguras preservam `source_kind` e `source_key` após uma tentativa parcial de resgate. O frontend exibe os lotes separados por procedência.
+- A consulta de desbloqueio por troféu usa casts PostgreSQL explícitos, eliminando o erro `inconsistent types deduced for parameter`.
+
+## Assentamento e QA
+
+- Os pioneiros recebem nomes determinísticos por personagem e aparecem no Canvas do acampamento com visuais de pescador, extrator e cultivadora.
+- O ambiente Docker local oferece conta de QA protegida por papel `admin` e feature flag. O preset de testes libera conteýo e recursos usando as tabelas reais e é recusado em staging/produção.

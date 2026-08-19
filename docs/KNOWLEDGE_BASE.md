@@ -2,6 +2,54 @@
 
 Este documento serve como a **Fonte da Verdade (Single Source of Truth)** do projeto **Atlas MMORPG Idle**. Ele documenta em detalhes a arquitetura técnica, as regras de negócio, as mecânicas de combate, a estrutura do banco de dados, as tabelas de loot e a organização do código para orientar futuras implementações e guiar assistentes de IA.
 
+## 🏘️ Assentamento Vivo V1.2 (Sistema Especializado de Profissões e Artesanato)
+
+O personagem é o herói e proprietário do assentamento. Ele decide construções e permanece focado em combate; moradores persistentes com especialidades individuais assumem coleta e artesanato automático.
+
+| Responsabilidade | Autoridade |
+|---|---|
+| Construir e melhorar edifícios | Jogador |
+| Selecionar Ambições e metas de raridade | Jogador |
+| Escolher morador livre especializado e executar ordem | Servidor |
+| Reservar/consumir materiais e ouro | Transação PostgreSQL |
+| Coletar recursos brutos | Moradores Especialistas de Coleta |
+| Forjar equipamentos e processar materiais | Moradores Artesãos Especializados |
+| Guardar produção automática | Arsenal do assentamento |
+
+### Sistema de Profissões Especializadas (Coleta vs Artesanato)
+O jogo possui **12 profissões canônicas** divididas rigorosamente entre extração e manufatura:
+- **🌲 6 Profissões de Coleta (*Gathering*)**:
+  - 🪓 `lumberjack` (Lenhador): Madeira, resina e sementes em bosques.
+  - ⛏️ `miner` (Minerador): Minérios de ferro, carvão e pedras.
+  - 🎣 `fisher` (Pescador): Peixes, escamas e óleos aquáticos.
+  - 🌾 `farmer` (Agricultor): Trigo, fibras e sementes.
+  - 🐾 `tracker` (Rastreador): Couros crus, peles e carnes.
+  - 🌿 `herbalist` (Herbalista): Ervas medicinais e essências naturais.
+- **⚒️ 6 Profissões de Artesanato (*Crafting*)**:
+  - ⚔️ `blacksmith` (Ferreiro): Armas corpo a corpo (espadas, machados, clavas), escudos e fundição de lingotes.
+  - 💎 `jeweler` (Joalheiro): Anéis, amuletos, colares e lapidação de joias.
+  - 🧥 `leatherworker` (Coureiro / Sapateiro): Botas, sandálias, mochilas, bolsas e curtume.
+  - 🧵 `tailor` (Alfaiate): Armaduras (peitorais, robes, túnicas), calças, capacetes e tecelagem.
+  - 🪵 `woodworker` (Marceneiro): Arcos, varinhas mágicas, cajados, flechas, virotes e tábuas tratadas.
+  - 🧪 `alchemist` (Alquimista): Elixires, poções, pós e refinamentos arcanos.
+
+### Os 7 Pioneiros Iniciais (Dupla Profissão Garantida)
+Para assegurar que nenhum jogador fique bloqueado no início do jogo, os 7 pioneiros cobrem 100% das 6 coletas e 100% dos 6 artesanatos desde o nível 1:
+1. **Tonho Três-Machados**: `lumberjack` (Lenhador) + `blacksmith` (Ferreiro)
+2. **Jurema Puxa-Rede**: `fisher` (Pescadora) + `leatherworker` (Coureira / Sapateira)
+3. **Dona Cida do Chá Suspeito**: `farmer` (Agricultora) + `jeweler` (Joalheira)
+4. **Mestre Alencastro**: `miner` (Minerador) + `tailor` (Alfaiate)
+5. **Seu Barnabé das Vigas**: `tracker` (Rastreador) + `woodworker` (Marceneiro)
+6. **Aurora dos Elixires**: `herbalist` (Herbalista) + `alchemist` (Alquimista)
+7. **Dona Elena Pé-de-Trilha**: `fisher` (Pescadora) + `tracker` (Rastreadora) — Suporte de coleta rápida
+
+### Sistema de Raridade Procedimental de Novos Moradores (*Arrivals*)
+Quando a prosperidade e moradia atraem novos moradores, suas especialidades são sorteadas por tabela de raridade determinística:
+- 🟢 **Comum (65%)**: 1 Profissão única (Nv. 1).
+- 🔵 **Raro (25%)**: 2 Profissões combinadas (Nv. 1).
+- 🟣 **Épico (8%)**: 2 Profissões e inicia em **Nível 2**!
+- 🟡 **Lendário (2%)**: Grão-Mestre com 2 Profissões e inicia em **Nível 3**!
+
 ---
 
 ## 📌 1. Visão Geral do Projeto
@@ -38,7 +86,7 @@ atlas/
 │   │   │   │   ├── ExpeditionSelectionModal.tsx  # Modal expansível com Tiers e Loot Previews
 │   │   │   │   └── ExpeditionRegionSelector.tsx # Card de expedição ativa e barra de fases
 │   │   │   ├── Inventory/          # Grid de equipamentos estilo Tibia (11 slots)
-│   │   │   └── Onboarding/         # Modal de escolha da vocação inicial (Guerreiro, Arqueiro, Mago)
+│   │   │   └── Onboarding/         # Ajuda informativa dos estilos classless
 │   │   ├── game/
 │   │   │   └── PixelArtRenderer.ts # Renderizador de cenários por bioma e sprites Pixel Art 2D
 │   │   └── hooks/
@@ -205,6 +253,22 @@ O cliente WebSocket aceita os seguintes comandos estruturados no JSON de envio:
    - Adicionar o template em `lootTemplates` em [`loot.go`](file:///Users/filipevieira/Documents/atlas/backend/pkg/game/loot.go) e incluir nas tabelas dos monstros desejados em `GenerateLootForMonster`.
 3. **Novas Habilidades & Magias**:
    - Registrar a chave da skill no backend em `engine.go` e adicionar o `SkillBook` correspondente em `loot.go`.
+
+### Sistema classless e ajuda de estilos
+
+- Não existe seleção permanente de Guerreiro, Arqueiro ou Mago.
+- Todo novo personagem recebe na mochila espada, escudo, arco, munição e varinha.
+- O estilo ativo é derivado da arma equipada e dos atributos/maestrias utilizados.
+- `CombatStylesHelpModal.tsx` apenas explica as diferenças; não envia mutação ao servidor.
+- O comando legado `CHOOSE_STARTER_PACK` permanece reconhecido por compatibilidade, mas `starter_pack_claimed=true` impede duplicação de equipamentos.
+
+### Expedições de profissão
+
+- `START_GATHERING` recebe apenas a chave da expedição, duração permitida e `request_id`.
+- Uma coleta e uma caçada não podem permanecer ativas simultaneamente.
+- A coleta é idle: não exige movimentação manual no Canvas e continua pelo relógio autoritativo do servidor com o jogo fechado.
+- O frontend só habilita `Iniciar · duração` após receber `EconomyState` e o nível profissional confirmado.
+- Ausência de estado econômico é exibida como carregamento/erro sincronizável, nunca como profissão de nível insuficiente.
 ---
 
 ## ⚖️ 11. Sistema de Balanceamento de Equipamentos (REBALANCE V4)
@@ -243,7 +307,7 @@ Todo item possui:
 - `item_power`: métrica normalizada para comparação, preço e testes de regressão.
 - `balance_version`: versão do conjunto de regras que gerou os atributos.
 
-Ao carregar JSONB antigo, `RebalanceExistingItem` usa uma seed derivada do ID para migrar o item de forma determinística, preservando ID e raridade. A versão atual é `CurrentItemBalanceVersion = 2`.
+Ao carregar JSONB antigo, `RebalanceExistingItem` não gera outro item e não recalcula atributos. Ele acrescenta somente `source=legacy_drop`; ID, nome, raridade, stats, efeito, uso e valor permanecem intactos. A versão de balanceamento continua disponível como metadado para itens novos, mas nunca autoriza reroll de inventário persistido.
 
 Exemplo corrigido:
 
@@ -372,3 +436,165 @@ Para suportar inventários em larga escala, a mochila conta com:
 - **Busca por Nome em Tempo Real**: Campo de pesquisa dinâmico com botão de limpeza rápida.
 - **Seleção Inteligente para Venda**: O botão `Selecionar Todos` opera sobre os itens filtrados, facilitando a venda em lote por tipo ou raridade (ex: filtrar por "Comum" e vender todos os comuns em um único clique).
 
+---
+
+## 🏕️ 13. Sistema de Acampamento, Recursos & Construções (Camp Progression & Gold Sink)
+
+### Filosofia e Propósito do Sistema
+O Sistema de Acampamento introduz um ciclo completo de **Progressão Meta**, **Economia de Recursos** e **Utilidade Contínua para o Ouro (Gold Sink)**:
+1. **Recursos Coletados em Combate**: Ao derrotar monstros em tempo real ou no descanso offline, o jogador obtém materiais básicos e troféus de boss independentemente da rolagem de equipamentos.
+2. **Construção & Upgrades com Custos Múltiplos**: Toda melhoria de construção consome **Ouro da Conta (`gold_bank`)**, **Recursos Naturais** e, nos níveis superiores, **Troféus de Chefões**.
+3. **Efeitos Autoritativos no Backend Go**: Os bônus do acampamento afetam diretamente a regeneração de HP/MP, a capacidade do armazém e a taxa de recuperação ao desmontar itens.
+
+### Tabela Canônica dos 7 Recursos Básicos + 9 Troféus de Boss
+
+| Recurso | Chave (`key`) | Ícone | Raridade | Categoria | Ocupa Armazém? | Descartável? |
+|---|---|---|---|---|---|---|
+| 🪵 **Madeira** | `wood` | 🪵 | Comum | `material` | Sim (1 esp./un.) | Sim |
+| 🪨 **Pedra** | `stone` | 🪨 | Comum | `material` | Sim (1 esp./un.) | Sim |
+| 🌾 **Fibra** | `fiber` | 🌾 | Comum | `material` | Sim (1 esp./un.) | Sim |
+| ⛓️ **Ferro** | `iron` | ⛓️ | Incomum | `material` | Sim (1 esp./un.) | Sim |
+| 🔮 **Essência Arcana** | `arcane_essence` | 🔮 | Raro | `material` | Sim (1 esp./un.) | Sim |
+| ❄️ **Cristal Glacial** | `glacial_crystal` | ❄️ | Épico | `material` | Sim (1 esp./un.) | Sim |
+| 🔥 **Brasa Abissal** | `abyssal_ember` | 🔥 | Lendário | `material` | Sim (1 esp./un.) | Sim |
+| 🏆 **Troféus de Chefão (9)** | `trophy_*` | 🏆 | Mítico | `trophy` | **Não (Livre)** | **Não** |
+
+### As 5 Construções do Acampamento (Níveis 1 a 3)
+
+| Construção | Slot | Efeito Nível 1 | Efeito Nível 2 (Exige Armazém Nv. 1) | Efeito Nível 3 (Exige Armazém Nv. 2) |
+|---|---|---|---|---|
+| 🔥 **Fogueira** (`campfire`) | `center` | +25% Regen HP (100 Gold, 30 Madeira, 10 Pedra) | +50% Regen HP (350 Gold, 80 Madeira, 50 Pedra, 20 Fibra) | +85% Regen HP (1.000 Gold, 150 Madeira, 100 Pedra, 30 Ferro, 1 Troféu) |
+| 💧 **Fonte Arcana** (`arcane_spring`) | `north` | +25% Regen MP (150 Gold, 30 Pedra, 15 Essência) | +55% Regen MP (500 Gold, 80 Pedra, 50 Essência) | +100% Regen MP (1.500 Gold, 140 Pedra, 100 Essência, 10 Cristal) |
+| ⛺ **Cabana do Aventureiro** (`adventurer_hut`) | `west` | +10% Regen Geral (120 Gold, 50 Madeira, 25 Fibra) | +20% Regen Geral (400 Gold, 120 Madeira, 60 Fibra, 30 Pedra) | +35% Regen Geral (1.200 Gold, 250 Madeira, 100 Fibra, 50 Ferro) |
+| 📦 **Armazém** (`warehouse`) | `east` | Capacidade total de **30.000** materiais | Capacidade total de **100.000** materiais | Capacidade total de **500.000** materiais |
+| ⚒️ **Bancada de Desmontagem** (`workbench`) | `south` | Desbloqueia Reciclagem (200 Gold, 50 Madeira, 20 Pedra, 15 Ferro) | +15% Rendimento na Reciclagem (600 Gold, 120 Madeira, 60 Pedra, 50 Ferro) | +30% Rendimento na Reciclagem (2.000 Gold, 220 Madeira, 100 Pedra, 100 Ferro, 30 Essência) |
+
+*Nota: O acampamento inicial (Nv. 0) possui um **Depósito Improvisado de 10.000 unidades**. Os custos, pré-requisitos e tempos canônicos de cada melhoria ficam no `BuildingRegistry`.*
+
+### Depósito de Recursos & Gestão Autoritativa (V2)
+1. **Contrato de Snapshot Autoritativo (`ResourceInventorySnapshot`)**:
+   - Fornece `items`, `storage_used`, `storage_capacity` e `revision`.
+   - Atualizado instantaneamente em tempo real sem necessidade de recarregar a página.
+2. **Cálculo de Armazenamento Exclusivo para Materiais (`GetStorageUsed`)**:
+   - Troféus de Chefão nunca contam para a ocupação do armazém.
+3. **Descarte Seguro de Materiais (`DISCARD_RESOURCE`)**:
+   - Permite ao jogador liberar espaço no armazém descartando materiais excedentes através de diálogo seguro de confirmação.
+4. **Desmonte Atômico "Tudo ou Nada" (`SalvageItemAtomically`)**:
+   - Executado em transação `SERIALIZABLE`. Se o volume de materiais gerados exceder o espaço livre no armazém, o desmonte é rejeitado e o equipamento permanece intacto na mochila.
+5. **Modal Ergonômico de Depósito (`ResourceDepotModal`)**:
+   - Acessado pelo botão `ResourceDepotButton` no painel de equipamentos (abaixo da mochila).
+   - Renderiza exclusivamente itens possuídos (`quantity > 0`), com busca instantânea, abas por categoria e filtro por raridade.
+
+---
+
+## 🎭 10. Sistema Modular de Skins & Guarda-Roupa do Herói
+
+O sistema visual de heróis do Atlas é construído sobre uma arquitetura **100% cosmética e desacoplada do combate**, permitindo que o jogador personalize a aparência do seu aventureiro mantendo total fidelidade às armas empunhadas.
+
+### A. Grade Canônica de Sprites Pixel-Art (48×48px)
+- Todos os renderizadores em `HeroRenderers.ts` desenham nativamente numa grade retangular de **48×48 pixels**, com **linha de solo calibrada em `Y = 44`** e **sombra elíptica projetada em `(24, 44)`**.
+- A função de cache `getOffscreenCanvas(key, size, drawFn)` renderiza primeiro no canvas canônico 48x48 e efetua escalonamento por vizinho mais próximo (`nearest-neighbor`), garantindo nitidez e proporcionalidade em qualquer resolução (48px na arena, 96px ou 120px no modal).
+
+### B. Catálogo de Skins no `SkinRegistry.ts`
+
+| Skin ID | Nome Visual | Raridade | Descrição Temática | Status |
+|---|---|---|---|---|
+| `peasant` | 🌾 **Camponês Aventureiro** | **Comum** | Camisa de linho marfim com gola em V, colete preto com debrum carmim, culote ocre e botas pretas de cano alto. | **Skin Padrão Inicial de todo novo personagem** |
+| `wanderer` | 🎒 **Andarilho Mochileiro** | **Raro** | Jaqueta esportiva vermelha, calça jeans, botas de trilha e mochila cargueira com esteira e cantil. | Desbloqueada |
+| `knight` | ⚔️ **Cavaleiro Templário** | **Épico** | Armadura de placas de aço polido, elmo fechado, capa carmim com broche dourado e escudo cruzado. | Desbloqueada |
+| `archer` | 🏹 **Patrulheiro dos Bosques** | **Épico** | Túnica verde com bordado dourado, capuz de caça, aljava de flechas e arco longo recurvo. | Desbloqueada |
+| `mage` | 🔮 **Arcanista Elemental** | **Lendário** | Robe azul-índigo, manto púrpura, chapéu pontudo e cajado de madeira com cristal arcano azul. | Desbloqueada |
+
+### C. Regras de Isolamento e Desacoplamento de Combate
+1. **Armazenamento Isolado por Personagem (`atlas_active_skin_${characterId}`)**:
+   - Cada personagem da conta tem sua própria chave de armazenamento no `localStorage`.
+   - Novos personagens ou personagens sem skin personalizada iniciam automaticamente com a skin **Camponês Aventureiro** (`peasant`).
+2. **Desacoplamento de Ataque Visual (`GameViewport.ts`)**:
+   - A animação de ataque (golpe físico corpo a corpo, disparo de flecha ou esfera mágica) é determinada **estritamente pela arma empunhada** no slot `MainHand` (`derived_stats.primary_archetype` / `inventory.equipment.mainhand.weapon_type`), nunca pela skin cosmética.
+
+---
+
+## 🎒 11. Kit Inicial de Treinamento Completo (Onboarding)
+
+Ao criar um novo personagem em `CreateCharacter` (`db.go`), o aventureiro recebe diretamente na mochila um kit completo para experimentar os 3 estilos de combate desde o primeiro minuto:
+1. ⚔️ **Espada do Aprendiz** (`SlotMainHand`, Melee, Requer Nível 1)
+2. 🛡️ **Broquel de Madeira** (`SlotOffHand`, Escudo, Requer Nível 1)
+3. 🏹 **Arco Curvo** (`SlotMainHand`, 2 Mãos, Distância, Requer Nível 1)
+4. 🎯 **Flechas de Madeira** (`SlotAmmo`, Munição Inicial, Requer Nível 1)
+5. 🔮 **Varinha do Aprendiz** (`SlotMainHand`, Magia, Requer Nível 1)
+
+Todos os itens iniciais vêm devidamente identificados com a propriedade `SpecialEffect = "Arma Inicial"` / `"Escudo Inicial"` e podem ser equipados e trocados livremente pelo jogador.
+
+---
+
+## 📈 12. Mecânica de Experiência, Level-Up e Resgate Offline Seguro
+
+### A. Experiência Relativa ao Nível Atual
+- A experiência de cada personagem no Atlas é **relativa ao nível atual** (começa em `0` e é consumida ao atingir o montante necessário para o próximo nível).
+- **Fórmula do XP Requerido para o Nível $L$**:
+  $$\text{GetRequiredXPForLevel}(L) = \begin{cases} 250 & \text{se } L \le 1 \\ \lfloor 250 \times L^{1.95} \rfloor & \text{se } L > 1 \end{cases}$$
+- **Fórmula da Porcentagem Visual**:
+  $$\text{XP Percent} = \max\left(0, \min\left(100, \left\lfloor \frac{\text{XP Atual}}{\text{XP Próximo Nível}} \times 100 \right\rfloor \right)\right)$$
+
+### B. Consumo Rigoroso de XP em Simulações Offline (`offline.go`)
+- Durante o cálculo da progressão offline, ao acumular XP suficiente para avançar de nível, o loop de simulação **subtrai obrigatoriamente** o custo de XP do nível antes de incrementar o nível simulado:
+  ```go
+  for simulatedExperience >= GetRequiredXPForLevel(simulatedLevel) {
+      simulatedExperience -= GetRequiredXPForLevel(simulatedLevel)
+      simulatedLevel++
+  }
+  ```
+- Isso previne distorções no cálculo offline e assegura que os ganhos de XP e níveis sejam proporcionais ao tempo decorrido.
+
+### C. Auto-Higienização no Banco de Dados (`scanLockedCharacter`)
+- Ao carregar dados de personagens em `db.go`, se valores anômalos forem detectados (`experience < 0` ou `level > 100`), o servidor ajusta automaticamente o personagem para limites saudáveis e sincroniza com o banco PostgreSQL.
+
+---
+
+## 🧰 13. Baú de Achados (Overflow Chest), Venda em Lote & Regras de Progressão
+
+### A. Baú de Achados (20 Slots de Transbordo Seguro)
+- Armazena até **20 itens excedentes** encontrados durante expedições quando a mochila do jogador está cheia.
+- Suporta resgate individual para a mochila, venda unitária e **Venda em Lote de Todo o Baú (`SELL_OVERFLOW_CHEST_ALL`)**.
+- A tabela `character_overflow_chests` persiste os itens protegidos com isolamento transacional.
+
+### B. Venda Universal de Equipamentos
+- Equipamentos do tipo **Mochila** podem ser vendidos normalmente pelo jogador individualmente ou em lote, sem travas arbitrárias de interface.
+
+### C. Desbloqueio Progressivo de Fases por Derrota de Chefões (Boss Gatekeeper)
+- As fases de expedição de um determinado Tier só são liberadas para navegação após a derrota comprovada de todos os chefões dos biomas pertencentes ao Tier anterior.
+
+---
+
+## ⏳ 14. Motor de Simulação Reconciliada Offline (Deterministic Catch-Up & Auto-Retorno)
+
+### A. Arquitetura de Reconciliação por Snapshot e Timestamp Delta
+- Ao desconectar (fechar a aba ou logout), o backend salva um snapshot imutável com a hora de saída (`PeriodStart`), atributos, equipamentos, vida e região ativa.
+- Durante a ausência, **nenhum processo fica gastando CPU no servidor**.
+- Ao fazer login, o servidor calcula o delta de tempo decorrido e executa em menos de 5ms uma simulação matemática determinística alimentada por uma semente criptográfica baseada no ID do personagem e na hora de saída.
+
+### B. Ciclo de Auto-Retorno & Recuperação Escalonada na Fogueira (`offlineCampRecoverySeconds`)
+- Quando o herói sofre dano letal durante uma ausência offline com o auto-retorno habilitado:
+  1. A simulação não é abortada (`break` removido); o herói retorna ao acampamento.
+  2. O herói descansa na fogueira consumindo tempo do total offline, restaurando 100% de HP e Mana.
+  3. O tempo de descanso é escalonado dinamicamente pela Vida Máxima, Nível e Vitalidade (`math.Max(30.0, math.Min(180.0, float64(maxHealth)/hpRegenPerSec))`), variando de ~30s para iniciantes a ~2m30s para personagens de nível 50+.
+  4. A expedição reinicia na Fase 1 e **continua a farmar normalmente** durante todo o restante das horas ausentes.
+- **Ritmo de Combate e DPS Real**: A duração de combate contra cada monstro respeita o DPS físico real do personagem (`math.Max(1.0, float64(monsterHP)/dps) + 1.5s`).
+- **Regeneração Passiva Natural entre Fases**: Aplica recuperação out-of-combat entre uma fase e outra baseada na Vitalidade do aventureiro.
+
+---
+
+## 🎨 15. Renderização Visual Canvas 2D & Locomoção Procedural
+
+### A. Animações Procedurais de Combate e Braços dos Heróis
+- Cada golpe em combate anima proceduralmente o braço e a arma do herói de acordo com a arma equipada (arco, cajado, espada, machado, clava).
+- Animação de passada das pernas (`walkStep`) sincronizada com a velocidade de deslocamento no acampamento e nas expedições.
+
+### B. Redesenho dos Monstros da Floresta (Tier 1)
+- 🐺 **Lobo da Floresta (`forest_wolf`)**: Pelagem cinza-ardósia e peitoral marfim, olhos âmbar, ciclo de 4 patas independentes e cauda oscilante.
+- 👺 **Goblin Espreitador (`forest_goblin`)**: Pele verde-oliva, barriga saliente, orelhas pontudas, nariz bulboso, presas e lança de ponta de osso.
+- 🕷️ **Aranha Tecelã (`forest_spider`)**: Viúva-negra lustrosa com marcação de ampulheta vermelha no abdômen, quelíceras e 8 patas em onda senoidal (`spiderLegWave`).
+- 🐻 **Ursinho Zangado (`forest_boss_bear`)**: Chefe de 64px azul-celeste (Care Bear) com sobrancelhas de fúria, focinho de coração escuro, insígnia na barriga (nuvem de tempestade com chuva e coração rosa) e almofadas de pata nas mãos e pés.
+
+### C. Movimentação Contínua Suave de Monstros
+- A movimentação de monstros pelo grid foi convertida de saltos interpolados para avanço contínuo por delta-time (`moveSpeed * _dt`), eliminando caminhadas espaçadas e sincronizando os passos dos monstros (`walkDistance / 5.5`) de forma idêntica aos trabalhadores do acampamento.

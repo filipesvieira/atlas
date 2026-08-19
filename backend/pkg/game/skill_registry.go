@@ -108,10 +108,16 @@ func init() {
 		TargetType:        "single",
 		VisualKey:         "brutal_strike",
 		Execute: func(ctx *SkillContext) *SkillResult {
-			if len(ctx.Monsters) == 0 {
+			var target *Monster
+			for _, m := range ctx.Monsters {
+				if m.Health > 0 {
+					target = m
+					break
+				}
+			}
+			if target == nil {
 				return nil
 			}
-			target := ctx.Monsters[0]
 			dmg := int(float64(ctx.DerivedStats.TotalAttack) * 1.75)
 			if dmg < 1 {
 				dmg = 1
@@ -189,10 +195,16 @@ func init() {
 		TargetType:        "single",
 		VisualKey:         "sniper_shot",
 		Execute: func(ctx *SkillContext) *SkillResult {
-			if len(ctx.Monsters) == 0 {
+			var target *Monster
+			for _, m := range ctx.Monsters {
+				if m.Health > 0 {
+					target = m
+					break
+				}
+			}
+			if target == nil {
 				return nil
 			}
-			target := ctx.Monsters[0]
 			baseDmg := int(float64(ctx.DerivedStats.TotalAttack) * 1.60)
 			critDmg := int(float64(baseDmg) * 1.50)
 			if critDmg < 1 {
@@ -224,10 +236,16 @@ func init() {
 		TargetType:        "single",
 		VisualKey:         "fireball",
 		Execute: func(ctx *SkillContext) *SkillResult {
-			if len(ctx.Monsters) == 0 {
+			var target *Monster
+			for _, m := range ctx.Monsters {
+				if m.Health > 0 {
+					target = m
+					break
+				}
+			}
+			if target == nil {
 				return nil
 			}
-			target := ctx.Monsters[0]
 			magicDmg := 35 + int(float64(ctx.MagicMasteryLvl)*2.5) + (ctx.Character.Level / 3) + int(float64(ctx.DerivedStats.EffectiveINT)*0.6)
 			target.Health -= magicDmg
 			return &SkillResult{
@@ -254,10 +272,16 @@ func init() {
 		TargetType:        "single",
 		VisualKey:         "ice_shard",
 		Execute: func(ctx *SkillContext) *SkillResult {
-			if len(ctx.Monsters) == 0 {
+			var target *Monster
+			for _, m := range ctx.Monsters {
+				if m.Health > 0 {
+					target = m
+					break
+				}
+			}
+			if target == nil {
 				return nil
 			}
-			target := ctx.Monsters[0]
 			magicDmg := 25 + int(float64(ctx.MagicMasteryLvl)*2.0) + (ctx.Character.Level / 4) + int(float64(ctx.DerivedStats.EffectiveINT)*0.4)
 			target.Health -= magicDmg
 			return &SkillResult{

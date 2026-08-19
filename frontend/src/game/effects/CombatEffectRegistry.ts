@@ -1,5 +1,5 @@
 import { CombatEffectEvent, Position, VisualEffect } from './types';
-import { WhirlwindEffect, BrutalStrikeEffect } from './renderers/meleeEffects';
+import { WhirlwindEffect, BrutalStrikeEffect, BloodSplashEffect } from './renderers/meleeEffects';
 import { MultishotEffect, SniperShotEffect } from './renderers/rangedEffects';
 import { FireballEffect, IceShardEffect } from './renderers/magicEffects';
 import { DivineHealEffect } from './renderers/commonEffects';
@@ -10,50 +10,69 @@ export class CombatEffectRegistry {
   public spawnEffect(
     event: CombatEffectEvent,
     heroPos: Position,
-    monsterPositions: Map<string, Position>
+    monsterPositions: Map<string, Position>,
+    targetPosResolver?: (targetId?: string) => Position,
+    heroPosResolver?: () => Position
   ): void {
-    const targetPos = this.resolvePrimaryTargetPosition(event, monsterPositions, heroPos);
+    const firstTargetId = event.target_ids && event.target_ids.length > 0 ? event.target_ids[0] : undefined;
+    const dynamicTargetProvider = targetPosResolver
+      ? () => targetPosResolver(firstTargetId)
+      : () => this.resolvePrimaryTargetPosition(event, monsterPositions, heroPos);
+
+    const dynamicHeroProvider = heroPosResolver || (() => heroPos);
 
     switch (event.key) {
       case 'whirlwind':
-        this.activeEffects.push(new WhirlwindEffect(heroPos));
+        this.activeEffects.push(new WhirlwindEffect(dynamicHeroProvider));
         break;
 
       case 'brutal_strike':
-        this.activeEffects.push(new BrutalStrikeEffect(targetPos));
+        this.activeEffects.push(new BrutalStrikeEffect(dynamicTargetProvider));
+        break;
+
+      case 'blood_splash':
+        this.activeEffects.push(new BloodSplashEffect(dynamicTargetProvider));
         break;
 
       case 'multishot': {
-        const targetList: Position[] = [];
+        const targetProviders: Array<Position | (() => Position)> = [];
         if (event.target_ids && event.target_ids.length > 0) {
           for (const id of event.target_ids) {
-            const pos = monsterPositions.get(id);
-            if (pos) targetList.push(pos);
+            if (targetPosResolver) {
+              targetProviders.push(() => targetPosResolver(id));
+            } else {
+              const pos = monsterPositions.get(id);
+              if (pos) targetProviders.push(pos);
+            }
           }
         }
-        if (targetList.length === 0) {
-          targetList.push(targetPos);
+        if (targetProviders.length === 0) {
+          targetProviders.push(dynamicTargetProvider);
         }
-        this.activeEffects.push(new MultishotEffect(heroPos, targetList));
+        this.activeEffects.push(new MultishotEffect(heroPos, targetProviders));
         break;
       }
 
       case 'sniper_shot':
-        this.activeEffects.push(new SniperShotEffect(heroPos, targetPos));
+        this.activeEffects.push(new SniperShotEffect(heroPos, dynamicTargetProvider));
         break;
 
       case 'fireball':
-        this.activeEffects.push(new FireballEffect(heroPos, targetPos));
+        this.activeEffects.push(new FireballEffect(heroPos, dynamicTargetProvider));
         break;
 
       case 'ice_shard':
-        this.activeEffects.push(new IceShardEffect(heroPos, targetPos));
+        this.activeEffects.push(new IceShardEffect(heroPos, dynamicTargetProvider));
         break;
 
       case 'divine_heal':
         this.activeEffects.push(new DivineHealEffect(heroPos));
         break;
     }
+  }
+
+  public spawnBloodSplash(targetProvider: Position | (() => Position)): void {
+    this.activeEffects.push(new BloodSplashEffect(targetProvider));
   }
 
   public update(deltaMs: number): void {

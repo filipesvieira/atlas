@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ItemIcon, getCleanItemName, getItemAttack, getRarityStyle, BonusBadges, getSlotLabel } from './ItemIcon';
+import { ItemIcon, getCleanItemName, getItemAttack, getItemStatBadge, getRarityStyle, BonusBadges, getSlotLabel, getHandsBadge } from './ItemIcon';
 import type { DerivedStats } from '../../hooks/useGameSocket';
+import { BackpackCapacityBar } from './BackpackCapacityBar';
+import { BackpackFilterBar } from './BackpackFilterBar';
 
 export interface Item {
   id: string;
@@ -10,6 +12,7 @@ export interface Item {
   magic_attack?: number;
   defense: number;
   weight: number;
+  hands?: number;
   rarity: string;
   special_effect: string;
   required_level?: number;
@@ -24,6 +27,7 @@ export interface Item {
   mana_regen?: number;
   weapon_type?: string;
   slot_type?: string;
+  item_kind?: 'equipment' | 'skill_book' | 'construction_manual' | 'quest';
 }
 
 export interface EquipmentSlots {
@@ -47,15 +51,16 @@ interface TibiaBackpackModalProps {
   backpack?: Item[];
   equipment?: EquipmentSlots;
   equippedBag?: Item | null;
-  totalAttack?: number;
-  totalDefense?: number;
   totalWeight?: number;
   maxCapacity?: number;
   maxSlots?: number;
+  totalAttack?: number;
+  totalDefense?: number;
   onEquipItem?: (itemId: string, slot: string) => void;
   onUnequipItem?: (slot: string) => void;
   onDiscardItem?: (itemId: string) => void;
   onBulkSell?: (itemIds: string[]) => void;
+  onLearnBlueprint?: (itemId: string) => void;
 }
 
 const CATEGORIES = [
@@ -68,10 +73,65 @@ const CATEGORIES = [
   { id: 'boots', label: 'Botas', icon: '🥾' },
   { id: 'accessories', label: 'Acessórios', icon: '📿' },
   { id: 'bags', label: 'Mochilas', icon: '🎒' },
-  { id: 'ammos', label: 'Munições', icon: '🏹' },
+  { id: 'ammos', label: 'Munição', icon: '🏹' },
 ];
 
 const RARITIES = ['all', 'Comum', 'Incomum', 'Raro', 'Épico', 'Lendário', 'Mítico', 'Divino'];
+
+// Componente Top-Level para Slot Equipado (evita remounting a cada tick do WebSocket)
+interface ModalEquipSlotProps {
+  item?: Item | null;
+  placeholderIcon: string;
+  label: string;
+  slotKey: string;
+  onUnequip?: (slot: string) => void;
+  onMouseEnter?: (e: React.MouseEvent, item: Item) => void;
+  onMouseLeave?: () => void;
+}
+
+function ModalEquipSlot({
+  item,
+  placeholderIcon,
+  label,
+  slotKey,
+  onUnequip,
+  onMouseEnter,
+  onMouseLeave,
+}: ModalEquipSlotProps) {
+  const rarityStyle = item ? getRarityStyle(item.rarity) : { border: 'border-slate-800 bg-slate-950/80', text: 'text-slate-600' };
+  const statBadge = getItemStatBadge(item);
+
+  return (
+    <div
+      onClick={() => item && onUnequip && onUnequip(slotKey)}
+      onMouseEnter={(e) => item && onMouseEnter && onMouseEnter(e, item)}
+      onMouseLeave={onMouseLeave}
+      className={`w-11 h-11 rounded-lg border flex flex-col items-center justify-center relative cursor-pointer group transition-all ${rarityStyle.border}`}
+    >
+      {item ? (
+        <div className="flex flex-col items-center justify-center relative w-full h-full p-0.5">
+          <ItemIcon
+            name={item.name}
+            slotType={slotKey}
+            specialEffect={item.special_effect}
+            size="sm"
+            className={`${rarityStyle.text} group-hover:scale-110 transition-transform`}
+          />
+          {statBadge && (
+            <div className={`text-[7px] font-mono font-bold leading-none mt-0.5 ${statBadge.colorClass}`}>
+              {statBadge.text}
+            </div>
+          )}
+        </div>
+      ) : (
+        <span className="text-xs opacity-40 select-none">{placeholderIcon}</span>
+      )}
+      <span className="text-[7px] font-sans text-slate-500 absolute -bottom-1 bg-slate-900 px-0.5 rounded border border-slate-800 scale-90 truncate max-w-full">
+        {label}
+      </span>
+    </div>
+  );
+}
 
 export function TibiaBackpackModal({
   isOpen,
@@ -80,27 +140,24 @@ export function TibiaBackpackModal({
   derivedStats = null,
   backpack = [],
   equipment = {},
-  equippedBag = null,
   totalAttack = 15,
   totalDefense = 5,
-  totalWeight = 0,
   maxCapacity = 1500,
   maxSlots = 20,
   onEquipItem,
   onUnequipItem,
   onBulkSell,
+  onLearnBlueprint,
 }: TibiaBackpackModalProps) {
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [inspectedItem, setInspectedItem] = useState<Item | null>(null);
   const [hoveredItem, setHoveredItem] = useState<Item | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
 
-  // Estados de Filtro
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [rarityFilter, setRarityFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Resetar seleções e filtros ao abrir/fechar o modal
   useEffect(() => {
     setSelectedItemIds([]);
     setInspectedItem(null);
@@ -109,13 +166,10 @@ export function TibiaBackpackModal({
 
   const safeBackpack = Array.isArray(backpack) ? backpack : [];
   const safeEquipment = equipment || {};
+  const totalWeight = safeBackpack.reduce((acc, item) => acc + (item?.weight || 0), 0);
   const usedSlots = safeBackpack.length;
   const weightPercent = Math.min(100, Math.round((totalWeight / Math.max(1, maxCapacity)) * 100));
   const charLevel = character?.level || 1;
-
-  const activeSelectedIds = selectedItemIds.filter((id) =>
-    safeBackpack.some((item) => item.id === id)
-  );
 
   const getItemSlotType = (item: Item): string => {
     if (item.slot_type) return item.slot_type;
@@ -147,7 +201,6 @@ export function TibiaBackpackModal({
     return true;
   };
 
-  // Itens Filtrados
   const filteredBackpack = useMemo(() => {
     return safeBackpack.filter((item) => {
       if (!matchesCategory(item, categoryFilter)) return false;
@@ -163,7 +216,8 @@ export function TibiaBackpackModal({
     });
   }, [safeBackpack, categoryFilter, rarityFilter, searchQuery]);
 
-  // Contadores por Categoria
+  const hasActiveFilters = categoryFilter !== 'all' || rarityFilter !== 'all' || searchQuery.trim() !== '';
+
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { all: safeBackpack.length };
     for (const cat of CATEGORIES) {
@@ -173,8 +227,6 @@ export function TibiaBackpackModal({
     }
     return counts;
   }, [safeBackpack]);
-
-  const hasActiveFilters = categoryFilter !== 'all' || rarityFilter !== 'all' || searchQuery.trim() !== '';
 
   const clearFilters = () => {
     setCategoryFilter('all');
@@ -200,6 +252,10 @@ export function TibiaBackpackModal({
     }
   };
 
+  const activeSelectedIds = selectedItemIds.filter((id) =>
+    safeBackpack.some((item) => item.id === id)
+  );
+
   const handleSellSelected = () => {
     if (activeSelectedIds.length === 0 || !onBulkSell) return;
     onBulkSell(activeSelectedIds);
@@ -207,13 +263,12 @@ export function TibiaBackpackModal({
     setInspectedItem(null);
   };
 
-  const handleSellAllNonBags = () => {
+  const handleSellAll = () => {
     if (!onBulkSell || safeBackpack.length === 0) return;
-    const nonBagIds = safeBackpack
-      .filter((i) => !(i.name.toLowerCase().includes('mochila') || i.name.toLowerCase().includes('bolsa')))
-      .map((i) => i.id);
-    if (nonBagIds.length > 0) {
-      onBulkSell(nonBagIds);
+    const targetItems = hasActiveFilters ? filteredBackpack : safeBackpack;
+    const ids = targetItems.map((i) => i.id);
+    if (ids.length > 0) {
+      onBulkSell(ids);
       setSelectedItemIds([]);
       setInspectedItem(null);
     }
@@ -228,44 +283,6 @@ export function TibiaBackpackModal({
     });
   };
 
-  // Slot Equipado no Modal
-  const ModalEquipSlot = ({ item, label, slotKey }: { item?: Item | null; label: string; slotKey: string }) => {
-    const rarityStyle = item ? getRarityStyle(item.rarity) : { border: 'border-slate-800 bg-slate-950/80', text: 'text-slate-600' };
-    const atkVal = item ? getItemAttack(item) : 0;
-
-    return (
-      <div
-        onClick={() => item && onUnequipItem && onUnequipItem(slotKey)}
-        onMouseEnter={(e) => item && handleMouseEnterItem(e, item)}
-        onMouseLeave={() => setHoveredItem(null)}
-        className={`w-11 h-11 rounded-lg border flex flex-col items-center justify-center relative cursor-pointer group transition-all ${rarityStyle.border}`}
-      >
-        {item ? (
-          <div className="flex flex-col items-center justify-center relative w-full h-full p-0.5">
-            <ItemIcon
-              name={item.name}
-              slotType={slotKey}
-              specialEffect={item.special_effect}
-              size="sm"
-              className={`${rarityStyle.text} group-hover:scale-110 transition-transform`}
-            />
-            {(atkVal > 0 || (item.defense || 0) > 0) && (
-              <div className="text-[7px] font-mono text-emerald-400 font-bold leading-none mt-0.5">
-                +{atkVal > 0 ? `${atkVal}A` : `${item.defense}D`}
-              </div>
-            )}
-          </div>
-        ) : (
-          <span className="text-xs opacity-40 select-none">🛡️</span>
-        )}
-        <span className="text-[7px] font-sans text-slate-500 absolute -bottom-1 bg-slate-900 px-0.5 rounded border border-slate-800 scale-90 truncate max-w-full">
-          {label}
-        </span>
-      </div>
-    );
-  };
-
-  // Calcula a soma de bônus de equipamentos equipados
   const eqList = [
     safeEquipment.head, safeEquipment.chest, safeEquipment.legs, safeEquipment.boots,
     safeEquipment.mainhand, safeEquipment.offhand, safeEquipment.necklace, safeEquipment.ring,
@@ -300,17 +317,21 @@ export function TibiaBackpackModal({
   const regenFromInt = (totalInt / (totalInt + 300)) * 6.0;
   const totalManaRegen = derivedStats ? derivedStats.mana_regen_per_second : Math.round((1.5 + regenFromInt + eqBonus.manaRegen) * 10) / 10;
 
+  const isMagicArchetype = derivedStats?.primary_archetype === 'magic' || safeEquipment.mainhand?.weapon_type === 'wand' || (safeEquipment.mainhand?.magic_attack || 0) > 0;
+  const isDistanceArchetype = derivedStats?.primary_archetype === 'distance' || safeEquipment.mainhand?.weapon_type === 'bow';
+
   if (!isOpen) return null;
+
+  const equippedBag = safeEquipment.bag;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-3 sm:p-4 animate-in fade-in">
-      {/* Tooltip Overlay Fixo sem Cortes (fixed z-[100]) */}
       {hoveredItem && tooltipPos && (
         <div
-          className="fixed z-[100] w-52 p-3 bg-slate-900/95 border border-slate-700 rounded-xl shadow-2xl pointer-events-none text-left backdrop-blur-sm animate-in fade-in zoom-in-95"
+          className="fixed z-[100] flex flex-col w-56 p-3 text-left bg-slate-900/95 border border-slate-700 rounded-xl shadow-2xl pointer-events-none backdrop-blur-md animate-in fade-in zoom-in-95 font-sans"
           style={{
-            top: `${Math.max(16, tooltipPos.y - 140)}px`,
-            left: `${Math.min(window.innerWidth - 220, Math.max(16, tooltipPos.x - 104))}px`,
+            left: `${Math.min(window.innerWidth - 240, Math.max(10, tooltipPos.x - 110))}px`,
+            top: `${Math.max(10, tooltipPos.y - 190)}px`,
           }}
         >
           <div className="flex justify-between items-start gap-1">
@@ -326,7 +347,6 @@ export function TibiaBackpackModal({
             Slot: {getSlotLabel(getItemSlotType(hoveredItem))}
           </div>
 
-          {/* Requisito de Nível */}
           {hoveredItem.required_level && hoveredItem.required_level > 1 && (
             <div className={`text-[10px] font-mono font-bold mb-1.5 flex items-center gap-1 ${
               charLevel < hoveredItem.required_level ? 'text-rose-400' : 'text-emerald-400'
@@ -337,7 +357,11 @@ export function TibiaBackpackModal({
           )}
 
           <div className="flex justify-between text-[10px] font-mono mb-1">
-            <span className="text-rose-400 font-bold">Atk: +{getItemAttack(hoveredItem)}</span>
+            {hoveredItem.magic_attack ? (
+              <span className="text-cyan-300 font-bold">Magia: +{hoveredItem.magic_attack}</span>
+            ) : (
+              <span className="text-rose-400 font-bold">Atk: +{getItemAttack(hoveredItem)}</span>
+            )}
             <span className="text-sky-400 font-bold">Def: +{hoveredItem.defense || 0}</span>
             <span className="text-slate-400">{(hoveredItem.weight || 0).toFixed(1)} oz</span>
           </div>
@@ -352,33 +376,26 @@ export function TibiaBackpackModal({
         </div>
       )}
 
-      <div className="w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3.5 relative overflow-hidden max-h-[92vh] flex flex-col">
-        {/* Header */}
-        <div className="flex justify-between items-center border-b border-slate-800 pb-3 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-amber-500/20 border border-amber-500/30 rounded-xl text-amber-400">
-              <ItemIcon slotType="bag" size="lg" />
-            </div>
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col p-4 shadow-2xl gap-3 text-slate-100 overflow-hidden">
+        <div className="flex justify-between items-center border-b border-slate-800 pb-2 shrink-0">
+          <div className="flex items-center gap-3">
+            <span className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xl">
+              🎒
+            </span>
             <div>
               <h3 className="font-bold text-sm text-amber-400 flex items-center gap-2">
                 <span>🎒</span> Mochila & Inventário do Aventureiro
               </h3>
               <p className="text-[10px] text-slate-400 font-mono">
-                {equippedBag ? `Mochila Equipada: ${getCleanItemName(equippedBag.name)} (${equippedBag.rarity})` : 'Mochila Básica'}
+                {equippedBag ? `Mochila Equipada: ${getCleanItemName(equippedBag.name)}` : 'Mochila Básica'}
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-white px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-mono transition"
-          >
-            ✕ Fechar
-          </button>
+          <button onClick={onClose} className="text-slate-400 hover:text-white px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-mono transition font-bold">✕ Fechar</button>
         </div>
 
-        {/* Painel de Atributos do Aventureiro em Tempo Real */}
         {character && (
-          <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-xs shrink-0 flex flex-col gap-2 shadow-inner">
+          <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-xs shrink-0 flex flex-col gap-2">
             <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-800 pb-2">
               <div className="flex items-center gap-3">
                 <span className="text-amber-300 font-bold text-sm">{character.name || 'Herói'}</span>
@@ -386,13 +403,22 @@ export function TibiaBackpackModal({
                   Lv. {charLevel} ({character.vocation || 'Aprendiz'})
                 </span>
               </div>
-
               <div className="flex flex-wrap items-center gap-3 text-[11px]">
                 <span className="text-rose-400 font-semibold">❤️ HP: {character.health || 0}/{character.max_health || 0}</span>
                 <span className="text-sky-400 font-semibold">💙 MP: {character.mana || 0}/{character.max_mana || 0}</span>
-                <span className="text-amber-400 font-bold bg-amber-950/40 px-2 py-0.5 rounded border border-amber-800/40">
-                  ⚔️ Atk: {totalAttack}
-                </span>
+                {isMagicArchetype ? (
+                  <span className="text-cyan-300 font-bold bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/40" title="Poder Mágico / Ataque Arcano do Herói">
+                    🔮 Magia: {totalAttack}
+                  </span>
+                ) : isDistanceArchetype ? (
+                  <span className="text-emerald-300 font-bold bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/40" title="Ataque à Distância do Herói">
+                    🏹 Distância: {totalAttack}
+                  </span>
+                ) : (
+                  <span className="text-amber-400 font-bold bg-amber-950/40 px-2 py-0.5 rounded border border-amber-800/40" title="Ataque Físico do Herói">
+                    ⚔️ Atk: {totalAttack}
+                  </span>
+                )}
                 <span className="text-sky-300 font-bold bg-sky-950/40 px-2 py-0.5 rounded border border-sky-800/40">
                   🛡️ Def: {totalDefense}
                 </span>
@@ -426,72 +452,41 @@ export function TibiaBackpackModal({
           </div>
         )}
 
-        {/* Indicadores de Capacidade (Slots e Peso) */}
-        <div className="grid grid-cols-2 gap-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-mono text-xs shrink-0">
-          <div className="space-y-1">
-            <div className="flex justify-between text-[11px]">
-              <span className="text-slate-400">Slots Utilizados:</span>
-              <span className={`font-bold ${usedSlots >= maxSlots ? 'text-rose-400 animate-pulse' : 'text-amber-300'}`}>
-                {usedSlots} / {maxSlots}
-              </span>
-            </div>
-            <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
-              <div
-                className={`h-full transition-all duration-300 ${usedSlots >= maxSlots ? 'bg-rose-500' : 'bg-amber-500'}`}
-                style={{ width: `${Math.min(100, (usedSlots / maxSlots) * 100)}%` }}
-              ></div>
-            </div>
-          </div>
+        <BackpackCapacityBar
+          totalWeight={totalWeight}
+          maxCapacity={maxCapacity}
+          usedSlots={usedSlots}
+          maxSlots={maxSlots}
+          weightPercent={weightPercent}
+        />
 
-          <div className="space-y-1">
-            <div className="flex justify-between text-[11px]">
-              <span className="text-slate-400">Capacidade (Cap):</span>
-              <span className={`font-bold ${weightPercent >= 90 ? 'text-rose-400 animate-pulse' : 'text-emerald-400'}`}>
-                {totalWeight.toFixed(1)} / {maxCapacity.toFixed(1)} oz
-              </span>
-            </div>
-            <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
-              <div
-                className={`h-full transition-all duration-300 ${weightPercent >= 90 ? 'bg-rose-500' : 'bg-emerald-500'}`}
-                style={{ width: `${weightPercent}%` }}
-              ></div>
-            </div>
-          </div>
-        </div>
-
-        {/* Conteúdo Principal: Equipamentos + Mochila em Grid com Filtros */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 overflow-y-auto pr-1">
-          {/* Coluna 1: Equipamentos Atuais */}
           <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex flex-col items-center justify-center gap-2">
-            <h4 className="text-xs font-bold text-amber-400 border-b border-slate-800 w-full pb-1 text-center">
-              🛡️ Equipamentos
-            </h4>
+            <h4 className="text-xs font-bold text-amber-400 border-b border-slate-800 w-full pb-1 text-center">🛡️ Equipamentos</h4>
             <div className="flex flex-col gap-2 my-auto">
               <div className="flex gap-2">
-                <ModalEquipSlot item={safeEquipment.necklace} label="Colar" slotKey="necklace" />
-                <ModalEquipSlot item={safeEquipment.head} label="Elmo" slotKey="head" />
-                <ModalEquipSlot item={safeEquipment.bag} label="Mochila" slotKey="bag" />
+                <ModalEquipSlot item={safeEquipment.necklace} placeholderIcon="📿" label="Colar" slotKey="necklace" onUnequip={onUnequipItem} onMouseEnter={handleMouseEnterItem} onMouseLeave={() => setHoveredItem(null)} />
+                <ModalEquipSlot item={safeEquipment.head} placeholderIcon="👑" label="Elmo" slotKey="head" onUnequip={onUnequipItem} onMouseEnter={handleMouseEnterItem} onMouseLeave={() => setHoveredItem(null)} />
+                <ModalEquipSlot item={safeEquipment.bag} placeholderIcon="🎒" label="Mochila" slotKey="bag" onUnequip={onUnequipItem} onMouseEnter={handleMouseEnterItem} onMouseLeave={() => setHoveredItem(null)} />
               </div>
               <div className="flex gap-2">
-                <ModalEquipSlot item={safeEquipment.mainhand} label="Arma" slotKey="mainhand" />
-                <ModalEquipSlot item={safeEquipment.chest} label="Armadura" slotKey="chest" />
-                <ModalEquipSlot item={safeEquipment.offhand} label="Escudo" slotKey="offhand" />
+                <ModalEquipSlot item={safeEquipment.mainhand} placeholderIcon="⚔️" label="Arma" slotKey="mainhand" onUnequip={onUnequipItem} onMouseEnter={handleMouseEnterItem} onMouseLeave={() => setHoveredItem(null)} />
+                <ModalEquipSlot item={safeEquipment.chest} placeholderIcon="🥋" label="Armadura" slotKey="chest" onUnequip={onUnequipItem} onMouseEnter={handleMouseEnterItem} onMouseLeave={() => setHoveredItem(null)} />
+                <ModalEquipSlot item={safeEquipment.offhand} placeholderIcon="🛡️" label="Escudo" slotKey="offhand" onUnequip={onUnequipItem} onMouseEnter={handleMouseEnterItem} onMouseLeave={() => setHoveredItem(null)} />
               </div>
               <div className="flex gap-2">
-                <ModalEquipSlot item={safeEquipment.ring} label="Anel" slotKey="ring" />
-                <ModalEquipSlot item={safeEquipment.legs} label="Calça" slotKey="legs" />
-                <ModalEquipSlot item={safeEquipment.ammo} label="Munição" slotKey="ammo" />
+                <ModalEquipSlot item={safeEquipment.ring} placeholderIcon="💍" label="Anel" slotKey="ring" onUnequip={onUnequipItem} onMouseEnter={handleMouseEnterItem} onMouseLeave={() => setHoveredItem(null)} />
+                <ModalEquipSlot item={safeEquipment.legs} placeholderIcon="👖" label="Calça" slotKey="legs" onUnequip={onUnequipItem} onMouseEnter={handleMouseEnterItem} onMouseLeave={() => setHoveredItem(null)} />
+                <ModalEquipSlot item={safeEquipment.ammo} placeholderIcon="🏹" label="Munição" slotKey="ammo" onUnequip={onUnequipItem} onMouseEnter={handleMouseEnterItem} onMouseLeave={() => setHoveredItem(null)} />
               </div>
               <div className="flex gap-2 justify-center">
-                <ModalEquipSlot item={safeEquipment.boots} label="Bota" slotKey="boots" />
+                <ModalEquipSlot item={safeEquipment.boots} placeholderIcon="🥾" label="Bota" slotKey="boots" onUnequip={onUnequipItem} onMouseEnter={handleMouseEnterItem} onMouseLeave={() => setHoveredItem(null)} />
               </div>
             </div>
             <p className="text-[9px] text-slate-500 italic text-center">Clique em um item equipado para desequipar</p>
           </div>
 
-          {/* Colunas 2 e 3: Mochila (Filtros, Slots & Seleção) */}
           <div className="md:col-span-2 bg-slate-950 p-3 rounded-xl border border-slate-800 flex flex-col gap-2.5">
-            {/* Header da Mochila com Contagem e Botão Selecionar */}
             <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-800 pb-2">
               <div className="flex items-center gap-2">
                 <h4 className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
@@ -512,26 +507,6 @@ export function TibiaBackpackModal({
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Campo de Busca Rápida */}
-                <div className="relative">
-                  <span className="absolute left-2 top-1.5 text-[10px] text-slate-500 pointer-events-none">🔍</span>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar item..."
-                    className="bg-slate-900 border border-slate-800 rounded-lg pl-6 pr-6 py-1 text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/50 w-28 sm:w-36 transition"
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-1.5 top-1 text-slate-400 hover:text-white text-xs"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-
                 <button
                   onClick={handleSelectAllFiltered}
                   className="text-[10px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-mono border border-slate-700 transition"
@@ -541,55 +516,20 @@ export function TibiaBackpackModal({
               </div>
             </div>
 
-            {/* Barra de Filtros: Tipo de Equipamento (Categorias) */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[10px] font-mono scrollbar-thin scrollbar-thumb-slate-800">
-              <span className="text-slate-500 text-[9px] uppercase font-bold shrink-0 mr-0.5">Tipo:</span>
-              {CATEGORIES.map((cat) => {
-                const count = categoryCounts[cat.id] || 0;
-                const isActive = categoryFilter === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => setCategoryFilter(cat.id)}
-                    className={`px-2 py-0.5 rounded-md shrink-0 flex items-center gap-1 transition border ${
-                      isActive
-                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 font-bold shadow-sm'
-                        : 'bg-slate-900 text-slate-400 border-slate-800/80 hover:bg-slate-800 hover:text-slate-200'
-                    }`}
-                  >
-                    <span>{cat.icon}</span>
-                    <span>{cat.label}</span>
-                    <span className={`text-[9px] px-1 rounded ${isActive ? 'bg-amber-500/30 text-amber-200' : 'bg-slate-800 text-slate-500'}`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Barra de Filtros: Raridade */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[10px] font-mono scrollbar-thin scrollbar-thumb-slate-800">
-              <span className="text-slate-500 text-[9px] uppercase font-bold shrink-0 mr-0.5">Raridade:</span>
-              {RARITIES.map((r) => {
-                const isActive = rarityFilter === r;
-                const style = r !== 'all' ? getRarityStyle(r) : null;
-                return (
-                  <button
-                    key={r}
-                    onClick={() => setRarityFilter(r)}
-                    className={`px-2 py-0.5 rounded-md shrink-0 transition border ${
-                      isActive
-                        ? style
-                          ? `${style.badgeBg} ${style.badgeBorder} ${style.badgeText} font-bold shadow-sm ring-1 ring-amber-400/30`
-                          : 'bg-amber-500/20 text-amber-300 border-amber-500/50 font-bold'
-                        : 'bg-slate-900 text-slate-400 border-slate-800/80 hover:bg-slate-800 hover:text-slate-200'
-                    }`}
-                  >
-                    {r === 'all' ? 'Todas' : r}
-                  </button>
-                );
-              })}
-            </div>
+            {/* Barra Modular de Filtros (Categorias, Busca e Raridade) */}
+            <BackpackFilterBar
+              categories={CATEGORIES}
+              rarities={RARITIES}
+              categoryFilter={categoryFilter}
+              rarityFilter={rarityFilter}
+              searchQuery={searchQuery}
+              categoryCounts={categoryCounts}
+              hasActiveFilters={hasActiveFilters}
+              onSelectCategory={setCategoryFilter}
+              onSelectRarity={setRarityFilter}
+              onSearchChange={setSearchQuery}
+              onClearFilters={clearFilters}
+            />
 
             {/* Grid dos Slots Filtrados */}
             <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-56 overflow-y-auto pr-1">
@@ -598,7 +538,6 @@ export function TibiaBackpackModal({
                 const style = getRarityStyle(item.rarity);
                 const slotType = getItemSlotType(item);
                 const cleanName = getCleanItemName(item.name);
-                const atkVal = getItemAttack(item);
                 const isLevelLocked = item.required_level ? charLevel < item.required_level : false;
 
                 return (
@@ -645,8 +584,8 @@ export function TibiaBackpackModal({
                     </div>
 
                     <div className="flex justify-between items-end font-mono text-[9px] mt-1">
-                      <span className="text-amber-400 font-bold">
-                        {atkVal > 0 ? `+${atkVal}A` : (item.defense || 0) > 0 ? `+${item.defense}D` : ''}
+                      <span className={getItemStatBadge(item)?.colorClass || 'text-amber-400 font-bold'}>
+                        {getItemStatBadge(item)?.text || ''}
                       </span>
                       <span className="text-slate-400 font-normal text-[8px]">
                         {(item.weight || 0).toFixed(1)}oz
@@ -656,7 +595,6 @@ export function TibiaBackpackModal({
                 );
               })}
 
-              {/* Slots vazios para preenchimento visual se não houver filtros restritivos */}
               {!hasActiveFilters && filteredBackpack.length < maxSlots &&
                 Array.from({ length: maxSlots - filteredBackpack.length }).map((_, index) => (
                   <div
@@ -668,15 +606,12 @@ export function TibiaBackpackModal({
                 ))}
             </div>
 
-            {/* Mensagem quando nenhum item é encontrado pelos filtros */}
             {filteredBackpack.length === 0 && (
-              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-6 flex flex-col items-center justify-center text-center gap-2">
-                <span className="text-2xl">🔍</span>
-                <p className="text-xs text-slate-300 font-semibold">Nenhum item encontrado com os filtros aplicados.</p>
-                <p className="text-[11px] text-slate-500 font-mono">Tente mudar o tipo de equipamento, raridade ou termo de busca.</p>
+              <div className="flex flex-col items-center justify-center py-10 text-slate-500 font-mono text-xs">
+                <span>Nenhum item encontrado com os filtros atuais</span>
                 <button
                   onClick={clearFilters}
-                  className="mt-1 px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-mono transition"
+                  className="mt-2 text-amber-400 hover:text-amber-300 underline"
                 >
                   Resetar Filtros
                 </button>
@@ -685,75 +620,124 @@ export function TibiaBackpackModal({
           </div>
         </div>
 
-        {/* Detalhes / Ações Rápidas do Item Inspecionado */}
-        {inspectedItem && (
-          <div className="bg-slate-950 border border-amber-500/40 rounded-xl p-3 flex flex-wrap justify-between items-center gap-3 shrink-0 animate-in slide-in-from-bottom-2">
-            <div className="flex items-center gap-3">
-              <ItemIcon
-                name={inspectedItem.name}
-                slotType={getItemSlotType(inspectedItem)}
-                weaponType={inspectedItem.weapon_type}
-                specialEffect={inspectedItem.special_effect}
-                size="md"
-                className="text-amber-400"
-              />
-              <div>
-                <h5 className="font-bold text-xs text-amber-300 flex items-center gap-2">
-                  <span>{getCleanItemName(inspectedItem.name)}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${getRarityStyle(inspectedItem.rarity).badgeBg} ${getRarityStyle(inspectedItem.rarity).badgeBorder} ${getRarityStyle(inspectedItem.rarity).badgeText}`}>
-                    {inspectedItem.rarity}
-                  </span>
-                  {inspectedItem.required_level && inspectedItem.required_level > 1 && (
-                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
-                      charLevel < inspectedItem.required_level
-                        ? 'bg-rose-950 text-rose-300 border-rose-800'
-                        : 'bg-emerald-950 text-emerald-300 border-emerald-800'
-                    }`}>
-                      {charLevel < inspectedItem.required_level ? '🔒' : '✅'} Requer Lv. {inspectedItem.required_level}
+        {inspectedItem && (() => {
+          const inspectedSlot = getItemSlotType(inspectedItem);
+          const inspectedIsSkillBook = Boolean(inspectedItem.item_kind === 'skill_book' || inspectedSlot === 'skill_book' || inspectedItem.name.toLowerCase().includes('tome:') || inspectedItem.name.toLowerCase().includes('livro:'));
+          const inspectedIsConstructionManual = Boolean(inspectedItem.item_kind === 'construction_manual' || inspectedSlot === 'manual' || inspectedItem.name.toLowerCase().includes('projeto:'));
+
+          return (
+            <div className="bg-slate-950 border border-amber-500/40 rounded-xl p-3 flex flex-wrap justify-between items-center gap-3 shrink-0 animate-in slide-in-from-bottom-2">
+              <div className="flex items-center gap-3">
+                <ItemIcon
+                  name={inspectedItem.name}
+                  slotType={getItemSlotType(inspectedItem)}
+                  weaponType={inspectedItem.weapon_type}
+                  specialEffect={inspectedItem.special_effect}
+                  size="md"
+                  className="text-amber-400"
+                />
+                <div>
+                  <h5 className="font-bold text-xs text-amber-300 flex items-center gap-2">
+                    <span>{getCleanItemName(inspectedItem.name)}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${getRarityStyle(inspectedItem.rarity).badgeBg} ${getRarityStyle(inspectedItem.rarity).badgeBorder} ${getRarityStyle(inspectedItem.rarity).badgeText}`}>
+                      {inspectedItem.rarity}
                     </span>
-                  )}
-                </h5>
-                <div className="flex flex-wrap gap-3 text-[10px] font-mono text-slate-400 mt-0.5">
-                  <span>Atk: <strong className="text-rose-400">+{getItemAttack(inspectedItem)}</strong></span>
-                  <span>Def: <strong className="text-sky-400">+{inspectedItem.defense || 0}</strong></span>
-                  <span>Peso: <strong className="text-slate-300">{(inspectedItem.weight || 0).toFixed(1)} oz</strong></span>
-                  <span>Slot: <strong className="text-slate-300">{getSlotLabel(getItemSlotType(inspectedItem))}</strong></span>
+                    {inspectedItem.required_level && inspectedItem.required_level > 1 && (
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                        charLevel < inspectedItem.required_level
+                          ? 'bg-rose-950 text-rose-300 border-rose-800'
+                          : 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                      }`}>
+                        {charLevel < inspectedItem.required_level ? '🔒' : '✅'} Requer Lv. {inspectedItem.required_level}
+                      </span>
+                    )}
+                  </h5>
+                  <div className="flex flex-wrap gap-3 text-[10px] font-mono text-slate-400 mt-0.5">
+                    {inspectedItem.magic_attack ? (
+                      <span>Magia: <strong className="text-cyan-300">+{inspectedItem.magic_attack}</strong></span>
+                    ) : (
+                      <span>Atk: <strong className="text-rose-400">+{getItemAttack(inspectedItem)}</strong></span>
+                    )}
+                    <span>Def: <strong className="text-sky-400">+{inspectedItem.defense || 0}</strong></span>
+                    <span>Peso: <strong className="text-slate-300">{(inspectedItem.weight || 0).toFixed(1)} oz</strong></span>
+                    <span>Slot: <strong className="text-slate-300">{getSlotLabel(getItemSlotType(inspectedItem))}</strong></span>
+                  </div>
+                  {(() => {
+                    const handsBadge = getHandsBadge(inspectedItem);
+                    if (!handsBadge) return null;
+                    return (
+                      <div className={`text-[10px] font-mono px-2 py-0.5 rounded border mt-1 flex items-center justify-between gap-2 max-w-fit ${handsBadge.badgeClass}`}>
+                        <span className="font-bold">{handsBadge.icon} {handsBadge.label}</span>
+                        <span className="text-[9px] opacity-80">· {handsBadge.description}</span>
+                      </div>
+                    );
+                  })()}
+                  <BonusBadges item={inspectedItem} />
                 </div>
-                <BonusBadges item={inspectedItem} />
+              </div>
+
+              <div className="flex gap-2">
+                {inspectedIsConstructionManual ? (
+                  <button
+                    onClick={() => {
+                      onLearnBlueprint && onLearnBlueprint(inspectedItem.id);
+                      setInspectedItem(null);
+                    }}
+                    className="px-3.5 py-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold rounded-lg text-xs transition shadow flex items-center gap-1.5"
+                  >
+                    <span>📜</span> Estudar Projeto
+                  </button>
+                ) : inspectedIsSkillBook ? (
+                  <button
+                    disabled={inspectedItem.required_level ? charLevel < inspectedItem.required_level : false}
+                    onClick={() => {
+                      onEquipItem && onEquipItem(inspectedItem.id, 'skill_book');
+                      setInspectedItem(null);
+                    }}
+                    className={`px-3.5 py-1.5 font-bold rounded-lg text-xs transition shadow flex items-center gap-1.5 ${
+                      inspectedItem.required_level && charLevel < inspectedItem.required_level
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                        : 'bg-gradient-to-r from-sky-600 to-fuchsia-600 hover:from-sky-500 hover:to-fuchsia-500 text-white'
+                    }`}
+                    title={inspectedItem.required_level && charLevel < inspectedItem.required_level
+                      ? `Requer nível ${inspectedItem.required_level}. A arma equipada não interfere no aprendizado.`
+                      : 'Aprender permanentemente. Você pode estudar com qualquer arma; a arma compatível só será exigida para ativar e usar.'}
+                  >
+                    <span>📖</span> {inspectedItem.required_level && charLevel < inspectedItem.required_level ? `Requer Lv. ${inspectedItem.required_level}` : 'Aprender Habilidade'}
+                  </button>
+                ) : (
+                  <button
+                    disabled={inspectedItem.required_level ? charLevel < inspectedItem.required_level : false}
+                    onClick={() => {
+                      const slot = getItemSlotType(inspectedItem);
+                      onEquipItem && onEquipItem(inspectedItem.id, slot);
+                      setInspectedItem(null);
+                    }}
+                    className={`px-3 py-1.5 font-bold rounded-lg text-xs transition shadow ${
+                      inspectedItem.required_level && charLevel < inspectedItem.required_level
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                        : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                    }`}
+                    title={inspectedItem.required_level && charLevel < inspectedItem.required_level ? `Nível insuficiente (Requer Lv. ${inspectedItem.required_level})` : 'Equipar Item'}
+                  >
+                    {inspectedItem.required_level && charLevel < inspectedItem.required_level ? `🔒 Requer Lv. ${inspectedItem.required_level}` : 'Equipar Item'}
+                  </button>
+                )}
+                {onBulkSell && (
+                  <button
+                    onClick={() => {
+                      onBulkSell([inspectedItem.id]);
+                      setInspectedItem(null);
+                    }}
+                    className="px-3 py-1.5 bg-emerald-700/80 hover:bg-emerald-600 border border-emerald-600 text-white font-semibold rounded-lg text-xs transition flex items-center gap-1"
+                  >
+                    <span>💰</span> Vender Item
+                  </button>
+                )}
               </div>
             </div>
-
-            <div className="flex gap-2">
-              <button
-                disabled={inspectedItem.required_level ? charLevel < inspectedItem.required_level : false}
-                onClick={() => {
-                  const slot = getItemSlotType(inspectedItem);
-                  onEquipItem && onEquipItem(inspectedItem.id, slot);
-                  setInspectedItem(null);
-                }}
-                className={`px-3 py-1.5 font-bold rounded-lg text-xs transition shadow ${
-                  inspectedItem.required_level && charLevel < inspectedItem.required_level
-                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                    : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
-                }`}
-                title={inspectedItem.required_level && charLevel < inspectedItem.required_level ? `Nível insuficiente (Requer Lv. ${inspectedItem.required_level})` : 'Equipar Item'}
-              >
-                {inspectedItem.required_level && charLevel < inspectedItem.required_level ? `🔒 Requer Lv. ${inspectedItem.required_level}` : 'Equipar Item'}
-              </button>
-              {onBulkSell && (
-                <button
-                  onClick={() => {
-                    onBulkSell([inspectedItem.id]);
-                    setInspectedItem(null);
-                  }}
-                  className="px-3 py-1.5 bg-emerald-700/80 hover:bg-emerald-600 border border-emerald-600 text-white font-semibold rounded-lg text-xs transition flex items-center gap-1"
-                >
-                  <span>💰</span> Vender Item
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Barra de Ações em Lote (Bulk Actions) - Sem botão de descarte */}
         <div className="flex flex-wrap justify-between items-center border-t border-slate-800 pt-3 gap-2 shrink-0">
@@ -772,10 +756,11 @@ export function TibiaBackpackModal({
             )}
 
             <button
-              onClick={handleSellAllNonBags}
-              className="px-3 py-2 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg transition"
+              onClick={handleSellAll}
+              disabled={safeBackpack.length === 0}
+              className="px-3.5 py-2 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg transition disabled:opacity-50"
             >
-              <span>💰</span> Vender Tudo (Exceto Mochilas)
+              <span>💰</span> {hasActiveFilters ? `Vender Itens Filtrados (${filteredBackpack.length})` : `Vender Todos (${safeBackpack.length})`}
             </button>
           </div>
         </div>
@@ -783,4 +768,3 @@ export function TibiaBackpackModal({
     </div>
   );
 }
-

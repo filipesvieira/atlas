@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"strings"
 	"time"
@@ -24,37 +25,42 @@ type Account struct {
 }
 
 type Character struct {
-	ID                 string             `json:"id"`
-	AccountID          string             `json:"account_id"`
-	Name               string             `json:"name"`
-	Vocation           string             `json:"vocation"`
-	Origin             string             `json:"origin"`
-	Level              int                `json:"level"`
-	Experience         int64              `json:"experience"`
-	Health             int                `json:"health"`
-	MaxHealth          int                `json:"max_health"`
-	Mana               int                `json:"mana"`
-	MaxMana            int                `json:"max_mana"`
-	GoldBank           int64              `json:"gold_bank"`
-	STR                int                `json:"str"`
-	DEX                int                `json:"dex"`
-	INT                int                `json:"int_stat"`
-	VIT                int                `json:"vit"`
-	UnspentPoints      int                `json:"unspent_points"`
-	Masteries          game.MasteriesData `json:"masteries"`
-	LearnedSkills      []string           `json:"learned_skills"`
-	ActiveSkills       []string           `json:"active_skills"`
-	UnlockedRegions    []string           `json:"unlocked_regions"`
-	IsExpeditionActive bool               `json:"is_expedition_active"`
-	ActiveRegion       string             `json:"active_region"`
-	LastLogin          time.Time          `json:"last_login"`
-	LastLogout         time.Time          `json:"last_logout"`
-	OfflineClaimedAt   time.Time          `json:"offline_claimed_at"`
-	ActiveStance       string             `json:"active_stance"`
-	CurrentStage       int                `json:"current_stage"`
-	IsBossStage        bool               `json:"is_boss_stage"`
-	StateRevision      int64              `json:"state_revision"`
-	AutoResumeExpedition bool             `json:"auto_resume_expedition"`
+	ID                   string             `json:"id"`
+	AccountID            string             `json:"account_id"`
+	Name                 string             `json:"name"`
+	Vocation             string             `json:"vocation"`
+	Origin               string             `json:"origin"`
+	Level                int                `json:"level"`
+	Experience           int64              `json:"experience"`
+	Health               int                `json:"health"`
+	MaxHealth            int                `json:"max_health"`
+	Mana                 int                `json:"mana"`
+	MaxMana              int                `json:"max_mana"`
+	GoldBank             int64              `json:"gold_bank"`
+	STR                  int                `json:"str"`
+	DEX                  int                `json:"dex"`
+	INT                  int                `json:"int_stat"`
+	VIT                  int                `json:"vit"`
+	UnspentPoints        int                `json:"unspent_points"`
+	Masteries            game.MasteriesData `json:"masteries"`
+	LearnedSkills        []string           `json:"learned_skills"`
+	ActiveSkills         []string           `json:"active_skills"`
+	UnlockedRegions      []string           `json:"unlocked_regions"`
+	IsExpeditionActive   bool               `json:"is_expedition_active"`
+	ActiveRegion         string             `json:"active_region"`
+	LastLogin            time.Time          `json:"last_login"`
+	LastLogout           time.Time          `json:"last_logout"`
+	OfflineClaimedAt     time.Time          `json:"offline_claimed_at"`
+	ActiveStance         string             `json:"active_stance"`
+	CurrentStage         int                `json:"current_stage"`
+	IsBossStage          bool               `json:"is_boss_stage"`
+	StateRevision        int64              `json:"state_revision"`
+	ProgressionVersion   int                `json:"progression_version"`
+	LifetimeExperience   int64              `json:"lifetime_experience"`
+	HighestLevelEver     int                `json:"highest_level_ever"`
+	AutoResumeExpedition bool               `json:"auto_resume_expedition"`
+	StarterPackClaimed   bool               `json:"starter_pack_claimed"`
+	StarterPackKey       string             `json:"starter_pack_key,omitempty"`
 }
 
 type EquipmentSlots struct {
@@ -74,9 +80,56 @@ type Inventory struct {
 	Equipment EquipmentSlots `json:"equipment"`
 	Backpack  []game.Item    `json:"backpack"`
 	Cap       int            `json:"cap"`
+	Revision  int64          `json:"revision"`
+}
+
+func ConvertDBInvToGameInv(inv *Inventory) *game.InventoryData {
+	if inv == nil {
+		return &game.InventoryData{Cap: 1500}
+	}
+	return &game.InventoryData{
+		Equipment: game.EquipmentSlots(inv.Equipment),
+		Backpack:  inv.Backpack,
+		Cap:       inv.Cap,
+		Revision:  inv.Revision,
+	}
+}
+
+func ConvertGameInvToDBInv(inv *game.InventoryData) *Inventory {
+	if inv == nil {
+		return &Inventory{Cap: 1500}
+	}
+	return &Inventory{
+		Equipment: EquipmentSlots(inv.Equipment),
+		Backpack:  inv.Backpack,
+		Cap:       inv.Cap,
+		Revision:  inv.Revision,
+	}
 }
 
 var DB *sql.DB
+
+var (
+	ErrInvalidProgression  = errors.New("snapshot de progressão inválido; dados não foram alterados")
+	ErrProgressionConflict = errors.New("conflito de progressão: o banco possui um estado mais novo")
+	ErrInventoryConflict   = errors.New("conflito de inventário: o banco possui uma versão mais nova")
+)
+
+func validateProgressionSnapshot(c *Character) error {
+	if c == nil || c.Level < 1 || c.Experience < 0 || c.LifetimeExperience < 0 {
+		return ErrInvalidProgression
+	}
+	if c.HighestLevelEver == 0 {
+		c.HighestLevelEver = c.Level
+	}
+	if c.HighestLevelEver < c.Level {
+		return ErrInvalidProgression
+	}
+	if c.ProgressionVersion < 1 || (c.Level < game.MaxCharacterLevel && c.Experience >= game.GetRequiredXPForLevel(c.Level)) {
+		return fmt.Errorf("%w: personagem requer revisão da migração de XP", ErrInvalidProgression)
+	}
+	return nil
+}
 
 func InitDB(connStr string) (*sql.DB, error) {
 	var err error
@@ -90,48 +143,21 @@ func InitDB(connStr string) (*sql.DB, error) {
 	DB.SetConnMaxLifetime(5 * time.Minute)
 
 	if err := DB.Ping(); err != nil {
-		log.Printf("Aviso: Banco de dados indisponível no ping imediato: %v", err)
+		return nil, fmt.Errorf("banco de dados indisponível: %w", err)
+	}
+	if err := RunMigrations(DB); err != nil {
+		return nil, err
+	}
+	if err := ClassifyLegacyProgression(DB); err != nil {
+		return nil, err
 	}
 
-	// Migrations dinâmicas
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS origin VARCHAR(30) DEFAULT 'wanderer';`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS masteries JSONB DEFAULT '{}'::jsonb;`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS learned_skills JSONB DEFAULT '[]'::jsonb;`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS active_skills JSONB DEFAULT '[]'::jsonb;`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS unlocked_regions JSONB DEFAULT '["forest", "shereque", "chapolin"]'::jsonb;`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS is_expedition_active BOOLEAN DEFAULT false;`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS active_region VARCHAR(50) DEFAULT 'forest';`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS str INT DEFAULT 5;`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS dex INT DEFAULT 5;`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS int_stat INT DEFAULT 5;`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS vit INT DEFAULT 5;`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS unspent_points INT DEFAULT 0;`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS active_stance VARCHAR(20) DEFAULT 'balanced';`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS current_stage INT DEFAULT 1;`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS is_boss_stage BOOLEAN DEFAULT false;`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS auto_resume_expedition BOOLEAN NOT NULL DEFAULT false;`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS offline_claimed_at TIMESTAMP WITH TIME ZONE;`)
-	_, _ = DB.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS state_revision BIGINT DEFAULT 0;`)
-	// O last_logout legado era contaminado por saves comuns; usar NOW() evita
-	// reapresentar janelas históricas incorretas na primeira implantação.
-	_, _ = DB.Exec(`UPDATE characters SET offline_claimed_at=NOW() WHERE offline_claimed_at IS NULL;`)
-	_, _ = DB.Exec(`ALTER TABLE expedition_logs ADD COLUMN IF NOT EXISTS report_key VARCHAR(64);`)
-	_, _ = DB.Exec(`DROP INDEX IF EXISTS expedition_logs_report_key_uidx;`)
-	_, _ = DB.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS expedition_logs_report_key_uidx ON expedition_logs(report_key);`)
-	_, _ = DB.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS character_inventories_character_id_uidx ON character_inventories(character_id);`)
-	_, _ = DB.Exec(`ALTER TABLE expedition_logs ADD COLUMN IF NOT EXISTS period_start TIMESTAMP WITH TIME ZONE;`)
-	_, _ = DB.Exec(`ALTER TABLE expedition_logs ADD COLUMN IF NOT EXISTS period_end TIMESTAMP WITH TIME ZONE;`)
-	_, _ = DB.Exec(`ALTER TABLE expedition_logs ADD COLUMN IF NOT EXISTS region_id VARCHAR(50);`)
-	_, _ = DB.Exec(`ALTER TABLE expedition_logs ADD COLUMN IF NOT EXISTS region_name VARCHAR(120);`)
-	_, _ = DB.Exec(`ALTER TABLE expedition_logs ADD COLUMN IF NOT EXISTS level_before INT;`)
-	_, _ = DB.Exec(`ALTER TABLE expedition_logs ADD COLUMN IF NOT EXISTS level_after INT;`)
-	_, _ = DB.Exec(`ALTER TABLE expedition_logs ADD COLUMN IF NOT EXISTS kills INT DEFAULT 0;`)
-	_, _ = DB.Exec(`ALTER TABLE expedition_logs ADD COLUMN IF NOT EXISTS efficiency DOUBLE PRECISION DEFAULT 0;`)
-	_, _ = DB.Exec(`ALTER TABLE expedition_logs ADD COLUMN IF NOT EXISTS state_revision BIGINT DEFAULT 0;`)
-	_, _ = DB.Exec(`ALTER TABLE expedition_logs ADD COLUMN IF NOT EXISTS report_payload JSONB DEFAULT '{}'::jsonb;`)
-	_, _ = DB.Exec(`ALTER TABLE characters DROP CONSTRAINT IF EXISTS characters_vocation_check;`)
+	// O schema é alterado exclusivamente pelas migrations embutidas. Qualquer
+	// incompatibilidade interrompe o startup em vez de ser ignorada.
 
-	BootstrapStaticData(DB)
+	if err := BootstrapStaticData(DB); err != nil {
+		return nil, err
+	}
 	LoadCache()
 
 	return DB, nil
@@ -161,31 +187,59 @@ func CreateCharacter(accountID, name, vocation, origin string) (*Character, erro
 	if vocation == "" {
 		vocation = "Aprendiz"
 	}
+	tx, err := DB.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
 	query := `
-		INSERT INTO characters (account_id, name, vocation, origin, level, experience, health, max_health, mana, max_mana, gold_bank, str, dex, int_stat, vit, unspent_points, masteries, learned_skills, active_skills)
-		VALUES ($1, $2, $3, $4, 1, 0, 225, 225, 115, 115, 100, 5, 5, 5, 5, 0, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb)
-		RETURNING id, account_id, name, vocation, origin, level, experience, health, max_health, mana, max_mana, gold_bank, COALESCE(str, 5), COALESCE(dex, 5), COALESCE(int_stat, 5), COALESCE(vit, 5), COALESCE(unspent_points, 0), COALESCE(masteries, '{}'::jsonb), COALESCE(learned_skills, '[]'::jsonb), COALESCE(active_skills, '[]'::jsonb), last_login, last_logout
+		INSERT INTO characters (account_id, name, vocation, origin, level, experience, health, max_health, mana, max_mana, gold_bank, str, dex, int_stat, vit, unspent_points, masteries, learned_skills, active_skills, unlocked_regions, starter_pack_claimed, starter_pack_key, progression_version, lifetime_experience, highest_level_ever)
+		VALUES ($1, $2, $3, $4, 1, 0, 225, 225, 115, 115, 100, 5, 5, 5, 5, 0, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, true, 'classless_all', 1, 0, 1)
+		RETURNING id, account_id, name, vocation, origin, level, experience, health, max_health, mana, max_mana, gold_bank, COALESCE(str, 5), COALESCE(dex, 5), COALESCE(int_stat, 5), COALESCE(vit, 5), COALESCE(unspent_points, 0), COALESCE(masteries, '{}'::jsonb), COALESCE(learned_skills, '[]'::jsonb), COALESCE(active_skills, '[]'::jsonb), last_login, last_logout, COALESCE(starter_pack_claimed, false), COALESCE(starter_pack_key, '')
 	`
 	char := &Character{}
 	var masteriesRaw, skillsRaw, activeRaw string
-	err := DB.QueryRow(query, accountID, name, vocation, origin).Scan(
+	err = tx.QueryRow(query, accountID, name, vocation, origin).Scan(
 		&char.ID, &char.AccountID, &char.Name, &char.Vocation, &char.Origin,
 		&char.Level, &char.Experience, &char.Health, &char.MaxHealth,
 		&char.Mana, &char.MaxMana, &char.GoldBank, &char.STR, &char.DEX, &char.INT, &char.VIT, &char.UnspentPoints,
 		&masteriesRaw, &skillsRaw, &activeRaw, &char.LastLogin, &char.LastLogout,
+		&char.StarterPackClaimed, &char.StarterPackKey,
 	)
 	if err != nil {
 		return nil, err
 	}
-	_ = json.Unmarshal([]byte(masteriesRaw), &char.Masteries)
-	_ = json.Unmarshal([]byte(skillsRaw), &char.LearnedSkills)
-	_ = json.Unmarshal([]byte(activeRaw), &char.ActiveSkills)
+	if err := json.Unmarshal([]byte(masteriesRaw), &char.Masteries); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(skillsRaw), &char.LearnedSkills); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(activeRaw), &char.ActiveSkills); err != nil {
+		return nil, err
+	}
+	char.UnlockedRegions = []string{"forest", "shereque", "chapolin"}
+	char.ActiveRegion = "forest"
+	char.ActiveStance = "balanced"
+	char.CurrentStage = 1
+	char.ProgressionVersion = 1
+	char.LifetimeExperience = 0
+	char.HighestLevelEver = 1
+	char.StateRevision = 0
 
 	// Todos os starters vêm dos mesmos templates usados pelo loot.
 	defaultEquip := EquipmentSlots{}
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	starterSword := game.GenerateItemFromTemplate("Espada do Aprendiz", "Comum", rng)
 	starterShield := game.GenerateItemFromTemplate("Broquel de Madeira", "Comum", rng)
+	starterBow := game.GenerateItemFromTemplate("Arco Curvo", "Comum", rng)
+	starterArrows := game.GenerateItemFromTemplate("Flechas de Madeira", "Comum", rng)
+	starterWand := game.GenerateItemFromTemplate("Varinha do Aprendiz", "Comum", rng)
+	for _, starter := range []*game.Item{starterSword, starterShield, starterBow, starterArrows, starterWand} {
+		if starter != nil {
+			starter.Source = game.ItemSourceStarter
+		}
+	}
 	defaultBackpack := []game.Item{}
 	if starterSword != nil {
 		starterSword.SpecialEffect = "Arma Inicial"
@@ -195,13 +249,29 @@ func CreateCharacter(accountID, name, vocation, origin string) (*Character, erro
 		starterShield.SpecialEffect = "Escudo Inicial"
 		defaultBackpack = append(defaultBackpack, *starterShield)
 	}
+	if starterBow != nil {
+		starterBow.SpecialEffect = "Arma Inicial"
+		defaultBackpack = append(defaultBackpack, *starterBow)
+	}
+	if starterArrows != nil {
+		starterArrows.SpecialEffect = "Munição Inicial"
+		defaultBackpack = append(defaultBackpack, *starterArrows)
+	}
+	if starterWand != nil {
+		starterWand.SpecialEffect = "Arma Inicial"
+		defaultBackpack = append(defaultBackpack, *starterWand)
+	}
 
 	equipJSON, _ := json.Marshal(defaultEquip)
 	backpackJSON, _ := json.Marshal(defaultBackpack)
 
 	invQuery := `INSERT INTO character_inventories (character_id, equipment, backpack) VALUES ($1, $2, $3)`
-	_, _ = DB.Exec(invQuery, char.ID, string(equipJSON), string(backpackJSON))
-
+	if _, err := tx.Exec(invQuery, char.ID, string(equipJSON), string(backpackJSON)); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	return char, nil
 }
 
@@ -227,8 +297,16 @@ func GetCharacterByID(id string) (*Character, error) {
 }
 
 func GetCharacterInventory(charID string) (*Inventory, error) {
-	query := `SELECT equipment, backpack FROM character_inventories WHERE character_id = $1`
+	query := `SELECT equipment, backpack, revision FROM character_inventories WHERE character_id = $1`
 	return scanInventory(DB.QueryRow(query, charID))
+}
+
+func GetCharacterInventoryTx(tx *sql.Tx, charID string, forUpdate bool) (*Inventory, error) {
+	query := `SELECT equipment, backpack, revision FROM character_inventories WHERE character_id = $1`
+	if forUpdate {
+		query += ` FOR UPDATE`
+	}
+	return scanInventory(tx.QueryRow(query, charID))
 }
 
 type rowScanner interface {
@@ -237,16 +315,20 @@ type rowScanner interface {
 
 func scanInventory(row rowScanner) (*Inventory, error) {
 	var equipRaw, backpackRaw string
-	err := row.Scan(&equipRaw, &backpackRaw)
 	inv := &Inventory{Equipment: EquipmentSlots{}, Backpack: []game.Item{}, Cap: 1500}
+	err := row.Scan(&equipRaw, &backpackRaw, &inv.Revision)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return inv, nil
 		}
 		return nil, err
 	}
-	_ = json.Unmarshal([]byte(equipRaw), &inv.Equipment)
-	_ = json.Unmarshal([]byte(backpackRaw), &inv.Backpack)
+	if err := json.Unmarshal([]byte(equipRaw), &inv.Equipment); err != nil {
+		return nil, fmt.Errorf("equipamento persistido corrompido: %w", err)
+	}
+	if err := json.Unmarshal([]byte(backpackRaw), &inv.Backpack); err != nil {
+		return nil, fmt.Errorf("mochila persistida corrompida: %w", err)
+	}
 	if inv.Backpack == nil {
 		inv.Backpack = []game.Item{}
 	}
@@ -265,38 +347,182 @@ func scanInventory(row rowScanner) (*Inventory, error) {
 }
 
 func SaveCharacterInventory(charID string, inv *Inventory) error {
+	if inv == nil {
+		return errors.New("inventário nulo")
+	}
 	equipJSON, _ := json.Marshal(inv.Equipment)
 	backpackJSON, _ := json.Marshal(inv.Backpack)
 	query := `
-		INSERT INTO character_inventories (character_id, equipment, backpack, updated_at)
-		VALUES ($1, $2, $3, NOW())
+		INSERT INTO character_inventories (character_id, equipment, backpack, revision, updated_at)
+		VALUES ($1, $2, $3, 1, NOW())
 		ON CONFLICT (character_id) DO UPDATE
-		SET equipment = EXCLUDED.equipment, backpack = EXCLUDED.backpack, updated_at = NOW()
+		SET equipment = EXCLUDED.equipment, backpack = EXCLUDED.backpack,
+			revision = character_inventories.revision + 1, updated_at = NOW()
+		WHERE character_inventories.revision = $4
+		RETURNING revision
 	`
-	_, err := DB.Exec(query, charID, string(equipJSON), string(backpackJSON))
+	err := DB.QueryRow(query, charID, string(equipJSON), string(backpackJSON), inv.Revision).Scan(&inv.Revision)
+	if err == sql.ErrNoRows {
+		game.IncrementTelemetry("inventory_conflict_total")
+		return ErrInventoryConflict
+	}
+	return err
+}
+
+func SaveCharacterInventoryTx(tx *sql.Tx, charID string, inv *Inventory) error {
+	if inv == nil {
+		return errors.New("inventário nulo")
+	}
+	equipJSON, _ := json.Marshal(inv.Equipment)
+	backpackJSON, _ := json.Marshal(inv.Backpack)
+	query := `
+		INSERT INTO character_inventories (character_id, equipment, backpack, revision, updated_at)
+		VALUES ($1, $2, $3, 1, NOW())
+		ON CONFLICT (character_id) DO UPDATE
+		SET equipment = EXCLUDED.equipment, backpack = EXCLUDED.backpack,
+			revision = character_inventories.revision + 1, updated_at = NOW()
+		WHERE character_inventories.revision = $4
+		RETURNING revision
+	`
+	err := tx.QueryRow(query, charID, string(equipJSON), string(backpackJSON), inv.Revision).Scan(&inv.Revision)
+	if err == sql.ErrNoRows {
+		game.IncrementTelemetry("inventory_conflict_total")
+		return ErrInventoryConflict
+	}
 	return err
 }
 
 // UpdateCharacterState salva o estado vivo, mas deliberadamente NÃO altera
 // last_logout/offline_claimed_at. Timestamps offline só mudam em transições de conexão.
 func UpdateCharacterState(c *Character) error {
+	if err := validateProgressionSnapshot(c); err != nil {
+		return err
+	}
+	tx, err := DB.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	masteriesJSON, _ := json.Marshal(c.Masteries)
 	skillsJSON, _ := json.Marshal(c.LearnedSkills)
 	activeJSON, _ := json.Marshal(c.ActiveSkills)
 	unlockedJSON, _ := json.Marshal(c.UnlockedRegions)
 	query := `
+		UPDATE characters AS target
+		SET vocation=$2, level=$3, experience=$4, health=$5, max_health=$6,
+			mana=$7, max_mana=$8, gold_bank=$9, str=$10, dex=$11,
+			int_stat=$12, vit=$13, unspent_points=$14, masteries=$15,
+			learned_skills=$16, active_skills=$17, unlocked_regions=$18,
+			is_expedition_active=$19, active_region=$20, active_stance=$21,
+			current_stage=$22, is_boss_stage=$23,
+			state_revision=COALESCE(target.state_revision,0)+1,
+			auto_resume_expedition=$25, starter_pack_claimed=$26, starter_pack_key=$27,
+			progression_version=$28, lifetime_experience=GREATEST(lifetime_experience,$29),
+			highest_level_ever=GREATEST(highest_level_ever,$30,$3)
+		FROM (SELECT id,level AS previous_level,experience AS previous_experience,lifetime_experience AS previous_lifetime FROM characters WHERE id=$1) AS previous
+		WHERE target.id=$1 AND previous.id=target.id
+		  AND COALESCE(target.state_revision,0)=$24
+		  AND (target.level < $3 OR (target.level = $3 AND target.experience <= $4))
+		RETURNING target.state_revision,previous.previous_level,previous.previous_experience,previous.previous_lifetime
+	`
+	var previousLevel int
+	var previousExperience int64
+	var previousLifetime int64
+	var nextRevision int64
+	err = tx.QueryRow(query, c.ID, c.Vocation, c.Level, c.Experience, c.Health, c.MaxHealth, c.Mana, c.MaxMana, c.GoldBank, c.STR, c.DEX, c.INT, c.VIT, c.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, c.IsExpeditionActive, c.ActiveRegion, c.ActiveStance, c.CurrentStage, c.IsBossStage, c.StateRevision, c.AutoResumeExpedition, c.StarterPackClaimed, c.StarterPackKey, c.ProgressionVersion, c.LifetimeExperience, c.HighestLevelEver).Scan(&nextRevision, &previousLevel, &previousExperience, &previousLifetime)
+	if err == sql.ErrNoRows {
+		game.IncrementTelemetry("progression_conflict_total")
+		return ErrProgressionConflict
+	}
+	if err != nil {
+		return err
+	}
+	if c.Level > previousLevel || (c.Level == previousLevel && c.Experience > previousExperience) {
+		xpDelta := c.LifetimeExperience - previousLifetime
+		if xpDelta < 0 {
+			xpDelta = 0
+		}
+		if _, err := tx.Exec(`INSERT INTO character_progression_events(character_id,event_key,source_kind,level_before,level_after,experience_before,experience_after,xp_delta,state_revision) VALUES($1,$2,'online_session',$3,$4,$5,$6,$7,$8) ON CONFLICT(character_id,event_key) DO NOTHING`, c.ID, fmt.Sprintf("online:%d", nextRevision), previousLevel, c.Level, previousExperience, c.Experience, xpDelta, nextRevision); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	c.StateRevision = nextRevision
+	return nil
+}
+
+// SaveCharacterAndInventoryAtomic persiste o estado do personagem e seu inventário
+// em uma única transação atômica, evitando divergência entre ouro e itens.
+func SaveCharacterAndInventoryAtomic(c *Character, inv *Inventory) error {
+	if c == nil || inv == nil {
+		return errors.New("personagem ou inventário nulo")
+	}
+	if err := validateProgressionSnapshot(c); err != nil {
+		return err
+	}
+	tx, err := DB.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	masteriesJSON, _ := json.Marshal(c.Masteries)
+	skillsJSON, _ := json.Marshal(c.LearnedSkills)
+	activeJSON, _ := json.Marshal(c.ActiveSkills)
+	unlockedJSON, _ := json.Marshal(c.UnlockedRegions)
+	queryChar := `
 		UPDATE characters
 		SET vocation=$2, level=$3, experience=$4, health=$5, max_health=$6,
 			mana=$7, max_mana=$8, gold_bank=$9, str=$10, dex=$11,
 			int_stat=$12, vit=$13, unspent_points=$14, masteries=$15,
 			learned_skills=$16, active_skills=$17, unlocked_regions=$18,
 			is_expedition_active=$19, active_region=$20, active_stance=$21,
-			current_stage=$22, is_boss_stage=$23, state_revision=$24,
-			auto_resume_expedition=$25
-		WHERE id=$1
+			current_stage=$22, is_boss_stage=$23,
+			state_revision=COALESCE(state_revision,0)+1,
+			auto_resume_expedition=$25, starter_pack_claimed=$26, starter_pack_key=$27,
+			progression_version=$28, lifetime_experience=GREATEST(lifetime_experience,$29),
+			highest_level_ever=GREATEST(highest_level_ever,$30,$3)
+		WHERE id=$1 AND COALESCE(state_revision,0)=$24
+		  AND (level < $3 OR (level = $3 AND experience <= $4))
+		RETURNING state_revision
 	`
-	_, err := DB.Exec(query, c.ID, c.Vocation, c.Level, c.Experience, c.Health, c.MaxHealth, c.Mana, c.MaxMana, c.GoldBank, c.STR, c.DEX, c.INT, c.VIT, c.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, c.IsExpeditionActive, c.ActiveRegion, c.ActiveStance, c.CurrentStage, c.IsBossStage, c.StateRevision, c.AutoResumeExpedition)
-	return err
+	var nextRevision int64
+	if err := tx.QueryRow(queryChar, c.ID, c.Vocation, c.Level, c.Experience, c.Health, c.MaxHealth, c.Mana, c.MaxMana, c.GoldBank, c.STR, c.DEX, c.INT, c.VIT, c.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, c.IsExpeditionActive, c.ActiveRegion, c.ActiveStance, c.CurrentStage, c.IsBossStage, c.StateRevision, c.AutoResumeExpedition, c.StarterPackClaimed, c.StarterPackKey, c.ProgressionVersion, c.LifetimeExperience, c.HighestLevelEver).Scan(&nextRevision); err != nil {
+		if err == sql.ErrNoRows {
+			game.IncrementTelemetry("progression_conflict_total")
+			return ErrProgressionConflict
+		}
+		return err
+	}
+
+	equipJSON, _ := json.Marshal(inv.Equipment)
+	backpackJSON, _ := json.Marshal(inv.Backpack)
+	queryInv := `
+		INSERT INTO character_inventories (character_id, equipment, backpack, revision, updated_at)
+		VALUES ($1, $2, $3, 1, NOW())
+		ON CONFLICT (character_id) DO UPDATE
+		SET equipment = EXCLUDED.equipment, backpack = EXCLUDED.backpack,
+			revision = character_inventories.revision + 1, updated_at = NOW()
+		WHERE character_inventories.revision = $4
+		RETURNING revision
+	`
+	var nextInventoryRevision int64
+	if err := tx.QueryRow(queryInv, c.ID, string(equipJSON), string(backpackJSON), inv.Revision).Scan(&nextInventoryRevision); err != nil {
+		if err == sql.ErrNoRows {
+			game.IncrementTelemetry("inventory_conflict_total")
+			return ErrInventoryConflict
+		}
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	c.StateRevision = nextRevision
+	inv.Revision = nextInventoryRevision
+	return nil
 }
 
 // SetCharacterOffline salva personagem, inventário e a fronteira offline na
@@ -305,6 +531,9 @@ func UpdateCharacterState(c *Character) error {
 func SetCharacterOffline(c *Character, inv *Inventory) error {
 	if c == nil || inv == nil {
 		return errors.New("snapshot offline incompleto")
+	}
+	if err := validateProgressionSnapshot(c); err != nil {
+		return err
 	}
 	tx, err := DB.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
@@ -324,27 +553,52 @@ func SetCharacterOffline(c *Character, inv *Inventory) error {
 			learned_skills=$16, active_skills=$17, unlocked_regions=$18,
 			is_expedition_active=$19, active_region=$20, active_stance=$21,
 			current_stage=$22, is_boss_stage=$23,
-			state_revision=GREATEST(COALESCE(state_revision,0),$24)+1,
+			state_revision=COALESCE(state_revision,0)+1,
 			auto_resume_expedition=$25,
+			progression_version=$26,
+			lifetime_experience=GREATEST(lifetime_experience,$27),
+			highest_level_ever=GREATEST(highest_level_ever,$28,$3),
 			last_logout=NOW(), offline_claimed_at=NOW()
-		WHERE id=$1
+		WHERE id=$1 AND COALESCE(state_revision,0)=$24
+		  AND (level < $3 OR (level = $3 AND experience <= $4))
 		RETURNING last_logout, offline_claimed_at, state_revision
 	`
-	if err := tx.QueryRow(query, c.ID, c.Vocation, c.Level, c.Experience, c.Health, c.MaxHealth, c.Mana, c.MaxMana, c.GoldBank, c.STR, c.DEX, c.INT, c.VIT, c.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, c.IsExpeditionActive, c.ActiveRegion, c.ActiveStance, c.CurrentStage, c.IsBossStage, c.StateRevision, c.AutoResumeExpedition).Scan(&c.LastLogout, &c.OfflineClaimedAt, &c.StateRevision); err != nil {
+	var nextLogout, nextOfflineClaim time.Time
+	var nextRevision int64
+	if err := tx.QueryRow(query, c.ID, c.Vocation, c.Level, c.Experience, c.Health, c.MaxHealth, c.Mana, c.MaxMana, c.GoldBank, c.STR, c.DEX, c.INT, c.VIT, c.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, c.IsExpeditionActive, c.ActiveRegion, c.ActiveStance, c.CurrentStage, c.IsBossStage, c.StateRevision, c.AutoResumeExpedition, c.ProgressionVersion, c.LifetimeExperience, c.HighestLevelEver).Scan(&nextLogout, &nextOfflineClaim, &nextRevision); err != nil {
+		if err == sql.ErrNoRows {
+			game.IncrementTelemetry("progression_conflict_total")
+			return ErrProgressionConflict
+		}
 		return err
 	}
 
 	equipJSON, _ := json.Marshal(inv.Equipment)
 	backpackJSON, _ := json.Marshal(inv.Backpack)
-	if _, err := tx.Exec(`
-		INSERT INTO character_inventories(character_id,equipment,backpack,updated_at)
-		VALUES($1,$2,$3,NOW())
+	var nextInventoryRevision int64
+	if err := tx.QueryRow(`
+		INSERT INTO character_inventories(character_id,equipment,backpack,revision,updated_at)
+		VALUES($1,$2,$3,1,NOW())
 		ON CONFLICT(character_id) DO UPDATE
-		SET equipment=EXCLUDED.equipment,backpack=EXCLUDED.backpack,updated_at=NOW()
-	`, c.ID, string(equipJSON), string(backpackJSON)); err != nil {
+		SET equipment=EXCLUDED.equipment,backpack=EXCLUDED.backpack,
+			revision=character_inventories.revision+1,updated_at=NOW()
+		WHERE character_inventories.revision=$4
+		RETURNING revision
+	`, c.ID, string(equipJSON), string(backpackJSON), inv.Revision).Scan(&nextInventoryRevision); err != nil {
+		if err == sql.ErrNoRows {
+			game.IncrementTelemetry("inventory_conflict_total")
+			return ErrInventoryConflict
+		}
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	c.LastLogout = nextLogout
+	c.OfflineClaimedAt = nextOfflineClaim
+	c.StateRevision = nextRevision
+	inv.Revision = nextInventoryRevision
+	return nil
 }
 
 func SetCharacterOnline(charID string) error {
@@ -361,9 +615,19 @@ func RecordExpeditionLog(charID string, result game.OfflineResult) error {
 		 report_key, period_start, period_end, region_id, region_name,
 		 level_before, level_after, kills, efficiency, state_revision, report_payload)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-		ON CONFLICT (report_key) DO NOTHING
+		ON CONFLICT (report_key) WHERE report_key IS NOT NULL DO NOTHING
 	`, charID, result.MinutesOffline, result.XPGained, result.GoldGained, string(itemsJSON), result.ReportID, result.PeriodStart, result.PeriodEnd, result.RegionID, result.RegionName, result.LevelBefore, result.LevelAfter, result.Kills, result.Efficiency, result.StateRevision, string(reportJSON))
-	return err
+	if err != nil {
+		_, _ = DB.Exec(`
+			INSERT INTO expedition_logs
+			(character_id, minutes_offline, xp_gained, gold_gained, items_found,
+			 report_key, period_start, period_end, region_id, region_name,
+			 level_before, level_after, kills, efficiency, state_revision, report_payload)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			ON CONFLICT DO NOTHING
+		`, charID, result.MinutesOffline, result.XPGained, result.GoldGained, string(itemsJSON), result.ReportID, result.PeriodStart, result.PeriodEnd, result.RegionID, result.RegionName, result.LevelBefore, result.LevelAfter, result.Kills, result.Efficiency, result.StateRevision, string(reportJSON))
+	}
+	return nil
 }
 
 type OfflineClaimResponse struct {
@@ -373,7 +637,7 @@ type OfflineClaimResponse struct {
 }
 
 func characterToGame(c *Character) *game.CharacterData {
-	return &game.CharacterData{
+	result := &game.CharacterData{
 		ID: c.ID, AccountID: c.AccountID, Name: c.Name, Vocation: c.Vocation, Origin: c.Origin,
 		Level: c.Level, Experience: c.Experience, Health: c.Health, MaxHealth: c.MaxHealth,
 		Mana: c.Mana, MaxMana: c.MaxMana, GoldBank: c.GoldBank, STR: c.STR, DEX: c.DEX,
@@ -382,11 +646,16 @@ func characterToGame(c *Character) *game.CharacterData {
 		IsExpeditionActive: c.IsExpeditionActive, ActiveRegion: c.ActiveRegion, ActiveStance: c.ActiveStance,
 		CurrentStage: c.CurrentStage, IsBossStage: c.IsBossStage, StateRevision: c.StateRevision,
 		LastLogin: c.LastLogin, LastLogout: c.LastLogout, AutoResumeExpedition: c.AutoResumeExpedition,
+		StarterPackClaimed: c.StarterPackClaimed, StarterPackKey: c.StarterPackKey,
+		ProgressionVersion: c.ProgressionVersion, LifetimeExperience: c.LifetimeExperience,
+		HighestLevelEver: c.HighestLevelEver,
 	}
+	game.RefreshProgressionView(result)
+	return result
 }
 
 func inventoryToGame(inv *Inventory) *game.InventoryData {
-	return &game.InventoryData{Equipment: game.EquipmentSlots(inv.Equipment), Backpack: inv.Backpack, Cap: inv.Cap}
+	return &game.InventoryData{Equipment: game.EquipmentSlots(inv.Equipment), Backpack: inv.Backpack, Cap: inv.Cap, Revision: inv.Revision}
 }
 
 func scanLockedCharacter(row rowScanner) (*Character, error) {
@@ -399,22 +668,35 @@ func scanLockedCharacter(row rowScanner) (*Character, error) {
 		&masteriesRaw, &skillsRaw, &activeRaw, &unlockedRaw,
 		&c.IsExpeditionActive, &c.ActiveRegion, &c.ActiveStance, &c.CurrentStage,
 		&c.IsBossStage, &c.LastLogin, &c.LastLogout, &c.OfflineClaimedAt, &c.StateRevision,
-		&c.AutoResumeExpedition,
+		&c.AutoResumeExpedition, &c.StarterPackClaimed, &c.StarterPackKey,
+		&c.ProgressionVersion, &c.LifetimeExperience, &c.HighestLevelEver,
 	)
 	if err != nil {
 		return nil, err
 	}
-	_ = json.Unmarshal([]byte(masteriesRaw), &c.Masteries)
-	_ = json.Unmarshal([]byte(skillsRaw), &c.LearnedSkills)
-	_ = json.Unmarshal([]byte(activeRaw), &c.ActiveSkills)
-	_ = json.Unmarshal([]byte(unlockedRaw), &c.UnlockedRegions)
+	if err := json.Unmarshal([]byte(masteriesRaw), &c.Masteries); err != nil {
+		return nil, fmt.Errorf("maestrias persistidas corrompidas: %w", err)
+	}
+	if err := json.Unmarshal([]byte(skillsRaw), &c.LearnedSkills); err != nil {
+		return nil, fmt.Errorf("habilidades persistidas corrompidas: %w", err)
+	}
+	if err := json.Unmarshal([]byte(activeRaw), &c.ActiveSkills); err != nil {
+		return nil, fmt.Errorf("habilidades ativas persistidas corrompidas: %w", err)
+	}
+	if err := json.Unmarshal([]byte(unlockedRaw), &c.UnlockedRegions); err != nil {
+		return nil, fmt.Errorf("regiões persistidas corrompidas: %w", err)
+	}
 	if c.LearnedSkills == nil {
 		c.LearnedSkills = []string{}
 	}
 	if len(c.UnlockedRegions) == 0 {
-		c.UnlockedRegions = []string{"forest", "shereque", "chapolin"}
+		c.UnlockedRegions = []string{}
+	}
+	if err := validateProgressionSnapshot(c); err != nil {
+		return nil, err
 	}
 	return c, nil
+
 }
 
 const characterSnapshotColumns = `
@@ -423,12 +705,15 @@ const characterSnapshotColumns = `
 	COALESCE(str,5), COALESCE(dex,5), COALESCE(int_stat,5), COALESCE(vit,5),
 	COALESCE(unspent_points,0), COALESCE(masteries,'{}'::jsonb),
 	COALESCE(learned_skills,'[]'::jsonb), COALESCE(active_skills,'[]'::jsonb),
-	COALESCE(unlocked_regions,'["forest","shereque","chapolin"]'::jsonb),
+	COALESCE(unlocked_regions,'[]'::jsonb),
 	COALESCE(is_expedition_active,false), COALESCE(active_region,'forest'),
 	COALESCE(active_stance,'balanced'), COALESCE(current_stage,1),
 	COALESCE(is_boss_stage,false), last_login, last_logout,
 	COALESCE(offline_claimed_at,last_logout), COALESCE(state_revision,0),
-	COALESCE(auto_resume_expedition,false)`
+	COALESCE(auto_resume_expedition,false),
+	COALESCE(starter_pack_claimed,false), COALESCE(starter_pack_key,''),
+	COALESCE(progression_version,0), COALESCE(lifetime_experience,experience),
+	GREATEST(COALESCE(highest_level_ever,level),level)`
 
 // ClaimOfflineProgress é a única porta de entrada para aplicar progresso offline.
 // SELECT FOR UPDATE + cursor offline_claimed_at tornam o claim idempotente e impedem
@@ -465,7 +750,14 @@ func claimOfflineProgressOnce(accountID, charID string, now time.Time) (*Offline
 	if err != nil {
 		return nil, err
 	}
-	inventory, err := scanInventory(tx.QueryRow(`SELECT equipment, backpack FROM character_inventories WHERE character_id=$1 FOR UPDATE`, charID))
+	if leased, leaseErr := HasActiveCharacterSessionLeaseTx(tx, charID); leaseErr != nil {
+		return nil, leaseErr
+	} else if leased {
+		return nil, fmt.Errorf("não é possível reconciliar progresso offline enquanto há uma sessão ativa")
+	}
+	levelBeforeClaim := character.Level
+	experienceBeforeClaim := character.Experience
+	inventory, err := scanInventory(tx.QueryRow(`SELECT equipment, backpack, revision FROM character_inventories WHERE character_id=$1 FOR UPDATE`, charID))
 	if err != nil {
 		return nil, err
 	}
@@ -476,11 +768,14 @@ func claimOfflineProgressOnce(accountID, charID string, now time.Time) (*Offline
 	}
 	gameChar := characterToGame(character)
 	gameInv := inventoryToGame(inventory)
+	autoSellSettings, _ := GetCharacterAutoSellSettings(charID)
+
 	result := game.CalculateOfflineProgress(game.OfflineSimulationInput{
 		Character: gameChar, Inventory: gameInv, IsExpeditionActive: character.IsExpeditionActive,
 		ActiveRegion: character.ActiveRegion, ActiveStance: character.ActiveStance,
 		CurrentStage: character.CurrentStage, IsBossStage: character.IsBossStage,
 		PeriodStart: start, PeriodEnd: now, StateRevision: character.StateRevision,
+		AutoSellSettings: autoSellSettings,
 	})
 
 	if result.MinutesOffline >= game.MinimumOfflineMinutes {
@@ -488,8 +783,10 @@ func claimOfflineProgressOnce(accountID, charID string, now time.Time) (*Offline
 		character.GoldBank += result.GoldGained
 		character.CurrentStage = result.FinalStage
 		character.IsBossStage = result.IsBossStageAfter
-		if result.WavesCompleted > 0 {
-			character.StateRevision += int64(result.WavesCompleted)
+		if result.Defeated {
+			character.IsExpeditionActive = false
+			character.CurrentStage = 1
+			character.IsBossStage = false
 		}
 		for _, unlockedID := range result.RegionsUnlocked {
 			alreadyUnlocked := false
@@ -503,14 +800,16 @@ func claimOfflineProgressOnce(accountID, charID string, now time.Time) (*Offline
 				character.UnlockedRegions = append(character.UnlockedRegions, unlockedID)
 			}
 		}
-		for character.Experience >= game.GetRequiredXPForLevel(character.Level) {
-			character.Level++
-			character.UnspentPoints += 3
+		if result.XPGained > 0 {
+			game.ApplyExperienceGain(gameChar, result.XPGained)
+			character.Level = gameChar.Level
+			character.Experience = gameChar.Experience
+			character.LifetimeExperience = gameChar.LifetimeExperience
+			character.HighestLevelEver = gameChar.HighestLevelEver
+			character.ProgressionVersion = gameChar.ProgressionVersion
+			character.UnspentPoints = gameChar.UnspentPoints
 		}
 		result.LevelAfter = character.Level
-		gameChar.Level = character.Level
-		gameChar.Experience = character.Experience
-		gameChar.UnspentPoints = character.UnspentPoints
 		game.EnsureUnlockedRegionsForLevel(gameChar)
 		character.UnlockedRegions = gameChar.UnlockedRegions
 
@@ -521,6 +820,9 @@ func claimOfflineProgressOnce(accountID, charID string, now time.Time) (*Offline
 			if len(gameInv.Backpack) < session.GetMaxSlotCapacity() && session.GetTotalWeight()+item.Weight <= session.GetMaxWeightCapacity() {
 				gameInv.Backpack = append(gameInv.Backpack, item)
 				accepted = append(accepted, item)
+			} else if game.IsOverflowProtectedItem(item, autoSellSettings) {
+				result.ItemsPending = append(result.ItemsPending, item)
+				game.IncrementTelemetry("inventory_overflow_total{source=offline_protected_drop}")
 			} else {
 				converted = append(converted, item)
 				convertedValue := item.ValueGold / 2
@@ -530,16 +832,60 @@ func claimOfflineProgressOnce(accountID, charID string, now time.Time) (*Offline
 				result.ConvertedGold += convertedValue
 			}
 		}
+		for _, item := range append([]game.Item(nil), result.ItemsPending...) {
+			// Itens já encaminhados acima aparecem na mesma lista. ON CONFLICT
+			// garante idempotência pelo ID do item.
+			if err := queuePendingItemTx(tx, charID, item, "offline_protected_drop", result.ReportID); err != nil {
+				return nil, err
+			}
+		}
 		result.ItemsFound = accepted
 		result.ItemsConverted = converted
 		result.GoldGained += result.ConvertedGold
 		character.GoldBank += result.ConvertedGold
 		inventory.Backpack = gameInv.Backpack
 
+		// Persistir recursos e troféus coletados na mesma transação atômica
+		allOfflineResources := append([]game.ResourceAmount{}, result.ResourcesFound...)
+		allOfflineResources = append(allOfflineResources, result.BossTrophies...)
+		if len(allOfflineResources) > 0 {
+			var campCap int64 = game.DefaultBaseResourceStorage
+			var whLevel int
+			if err := tx.QueryRow(`SELECT level FROM character_camp_buildings WHERE character_id = $1 AND slot_key = 'east'`, charID).Scan(&whLevel); err != nil && err != sql.ErrNoRows {
+				return nil, err
+			}
+			if whLevel > 0 {
+				if bDef, ok := game.GetBuildingDefinition("warehouse"); ok && whLevel <= len(bDef.Levels) {
+					for _, eff := range bDef.Levels[whLevel-1].Effects {
+						if eff.Key == "resource_storage" && int64(eff.Value) > campCap {
+							campCap = int64(eff.Value)
+						}
+					}
+				}
+			}
+			mutRes, err := AddCharacterResourcesTx(tx, charID, allOfflineResources, campCap)
+			if err != nil {
+				return nil, err
+			}
+			if err := recordResourceLedgerTx(tx, charID, result.ReportID, "offline_monster_drop", character.ActiveRegion, mutRes.Accepted); err != nil {
+				return nil, err
+			}
+			if err := storePendingResourcesTx(tx, charID, "offline_monster_drop", result.ReportID, mutRes.Overflow); err != nil {
+				return nil, err
+			}
+			result.ResourcesFound = mutRes.Accepted
+		}
+
 		_, _ = session.CalculateStats()
 		character.MaxHealth = gameChar.MaxHealth
 		character.MaxMana = gameChar.MaxMana
-		if character.Level > result.LevelBefore {
+		if result.Defeated {
+			character.Health = result.HealthAfter
+			if character.Health < 1 {
+				character.Health = int(math.Max(1, math.Floor(float64(character.MaxHealth)*0.40)))
+			}
+			gameChar.Health = character.Health
+		} else if character.Level > result.LevelBefore {
 			character.Health = character.MaxHealth
 			character.Mana = character.MaxMana
 		} else {
@@ -554,18 +900,40 @@ func claimOfflineProgressOnce(accountID, charID string, now time.Time) (*Offline
 
 	character.LastLogin = now
 	character.OfflineClaimedAt = now
+	// Uma aplicação offline confirmada representa uma única nova versão do
+	// agregado, independentemente da quantidade de ondas simuladas.
+	character.StateRevision++
+	result.StateRevision = character.StateRevision
 	masteriesJSON, _ := json.Marshal(character.Masteries)
 	skillsJSON, _ := json.Marshal(character.LearnedSkills)
 	activeJSON, _ := json.Marshal(character.ActiveSkills)
 	unlockedJSON, _ := json.Marshal(character.UnlockedRegions)
-	_, err = tx.Exec(`UPDATE characters SET vocation=$2,level=$3,experience=$4,health=$5,max_health=$6,mana=$7,max_mana=$8,gold_bank=$9,str=$10,dex=$11,int_stat=$12,vit=$13,unspent_points=$14,masteries=$15,learned_skills=$16,active_skills=$17,unlocked_regions=$18,is_expedition_active=$19,active_region=$20,active_stance=$21,current_stage=$22,is_boss_stage=$23,state_revision=$24,auto_resume_expedition=$25,last_login=$26,offline_claimed_at=$27 WHERE id=$1`, character.ID, character.Vocation, character.Level, character.Experience, character.Health, character.MaxHealth, character.Mana, character.MaxMana, character.GoldBank, character.STR, character.DEX, character.INT, character.VIT, character.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, character.IsExpeditionActive, character.ActiveRegion, character.ActiveStance, character.CurrentStage, character.IsBossStage, character.StateRevision, character.AutoResumeExpedition, now, now)
+	updateResult, err := tx.Exec(`UPDATE characters SET vocation=$2,level=$3,experience=$4,health=$5,max_health=$6,mana=$7,max_mana=$8,gold_bank=$9,str=$10,dex=$11,int_stat=$12,vit=$13,unspent_points=$14,masteries=$15,learned_skills=$16,active_skills=$17,unlocked_regions=$18,is_expedition_active=$19,active_region=$20,active_stance=$21,current_stage=$22,is_boss_stage=$23,state_revision=$24,auto_resume_expedition=$25,last_login=$26,offline_claimed_at=$27,progression_version=$28,lifetime_experience=GREATEST(lifetime_experience,$29),highest_level_ever=GREATEST(highest_level_ever,$30,$3) WHERE id=$1 AND (level < $3 OR (level=$3 AND experience <= $4))`, character.ID, character.Vocation, character.Level, character.Experience, character.Health, character.MaxHealth, character.Mana, character.MaxMana, character.GoldBank, character.STR, character.DEX, character.INT, character.VIT, character.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, character.IsExpeditionActive, character.ActiveRegion, character.ActiveStance, character.CurrentStage, character.IsBossStage, character.StateRevision, character.AutoResumeExpedition, now, now, character.ProgressionVersion, character.LifetimeExperience, character.HighestLevelEver)
 	if err != nil {
 		return nil, err
+	}
+	if affected, rowsErr := updateResult.RowsAffected(); rowsErr != nil || affected != 1 {
+		game.IncrementTelemetry("progression_conflict_total")
+		return nil, ErrProgressionConflict
+	}
+	if result.XPGained > 0 {
+		metadataJSON, _ := json.Marshal(map[string]any{"report_id": result.ReportID, "minutes_offline": result.MinutesOffline, "region_id": result.RegionID})
+		if _, err := tx.Exec(`
+			INSERT INTO character_progression_events(character_id,event_key,source_kind,source_key,level_before,level_after,experience_before,experience_after,xp_delta,state_revision,metadata)
+			VALUES($1,$2,'offline_expedition',$3,$4,$5,$6,$7,$8,$9,$10)
+			ON CONFLICT(character_id,event_key) DO NOTHING`, charID, "offline:"+result.ReportID, result.RegionID, levelBeforeClaim, character.Level, experienceBeforeClaim, character.Experience, result.XPGained, character.StateRevision, string(metadataJSON)); err != nil {
+			if _, fallbackErr := tx.Exec(`
+				INSERT INTO character_progression_events(character_id,event_key,source_kind,source_key,level_before,level_after,experience_before,experience_after,xp_delta,state_revision,metadata)
+				VALUES($1,$2,'offline_expedition',$3,$4,$5,$6,$7,$8,$9,$10)
+				ON CONFLICT DO NOTHING`, charID, "offline:"+result.ReportID, result.RegionID, levelBeforeClaim, character.Level, experienceBeforeClaim, character.Experience, result.XPGained, character.StateRevision, string(metadataJSON)); fallbackErr != nil {
+				log.Printf("Aviso ao registrar evento de progressão: %v", fallbackErr)
+			}
+		}
 	}
 
 	equipJSON, _ := json.Marshal(inventory.Equipment)
 	backpackJSON, _ := json.Marshal(inventory.Backpack)
-	_, err = tx.Exec(`INSERT INTO character_inventories(character_id,equipment,backpack,updated_at) VALUES($1,$2,$3,NOW()) ON CONFLICT(character_id) DO UPDATE SET equipment=EXCLUDED.equipment,backpack=EXCLUDED.backpack,updated_at=NOW()`, charID, string(equipJSON), string(backpackJSON))
+	err = tx.QueryRow(`INSERT INTO character_inventories(character_id,equipment,backpack,revision,updated_at) VALUES($1,$2,$3,1,NOW()) ON CONFLICT(character_id) DO UPDATE SET equipment=EXCLUDED.equipment,backpack=EXCLUDED.backpack,revision=character_inventories.revision+1,updated_at=NOW() RETURNING revision`, charID, string(equipJSON), string(backpackJSON)).Scan(&inventory.Revision)
 	if err != nil {
 		return nil, err
 	}
@@ -573,13 +941,203 @@ func claimOfflineProgressOnce(accountID, charID string, now time.Time) (*Offline
 	if result.MinutesOffline >= game.MinimumOfflineMinutes {
 		itemsJSON, _ := json.Marshal(result.ItemsFound)
 		reportJSON, _ := json.Marshal(result)
-		_, err = tx.Exec(`INSERT INTO expedition_logs(character_id,minutes_offline,xp_gained,gold_gained,items_found,report_key,period_start,period_end,region_id,region_name,level_before,level_after,kills,efficiency,state_revision,report_payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT(report_key) DO NOTHING`, charID, result.MinutesOffline, result.XPGained, result.GoldGained, string(itemsJSON), result.ReportID, result.PeriodStart, result.PeriodEnd, result.RegionID, result.RegionName, result.LevelBefore, result.LevelAfter, result.Kills, result.Efficiency, result.StateRevision, string(reportJSON))
+		_, err = tx.Exec(`INSERT INTO expedition_logs(character_id,minutes_offline,xp_gained,gold_gained,items_found,report_key,period_start,period_end,region_id,region_name,level_before,level_after,kills,efficiency,state_revision,report_payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT (report_key) WHERE report_key IS NOT NULL DO NOTHING`, charID, result.MinutesOffline, result.XPGained, result.GoldGained, string(itemsJSON), result.ReportID, result.PeriodStart, result.PeriodEnd, result.RegionID, result.RegionName, result.LevelBefore, result.LevelAfter, result.Kills, result.Efficiency, result.StateRevision, string(reportJSON))
 		if err != nil {
-			return nil, err
+			_, _ = tx.Exec(`INSERT INTO expedition_logs(character_id,minutes_offline,xp_gained,gold_gained,items_found,report_key,period_start,period_end,region_id,region_name,level_before,level_after,kills,efficiency,state_revision,report_payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT DO NOTHING`, charID, result.MinutesOffline, result.XPGained, result.GoldGained, string(itemsJSON), result.ReportID, result.PeriodStart, result.PeriodEnd, result.RegionID, result.RegionName, result.LevelBefore, result.LevelAfter, result.Kills, result.Efficiency, result.StateRevision, string(reportJSON))
 		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return &OfflineClaimResponse{Report: result, Character: character, Inventory: inventory}, nil
+}
+
+// GetCharacterDiscoveredLoot retorna a lista de nomes/chaves de itens descobertos pelo personagem.
+func GetCharacterDiscoveredLoot(charID string) ([]string, error) {
+	rows, err := DB.Query(`SELECT item_template_key, COALESCE(first_region_key, '') FROM character_loot_discoveries WHERE character_id = $1 ORDER BY first_discovered_at ASC`, charID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []string
+	seen := make(map[string]bool)
+	for rows.Next() {
+		var key, reg string
+		if err := rows.Scan(&key, &reg); err == nil {
+			if reg != "" {
+				rKey := reg + ":" + key
+				if !seen[rKey] {
+					seen[rKey] = true
+					items = append(items, rKey)
+				}
+			}
+			if !seen[key] {
+				seen[key] = true
+				items = append(items, key)
+			}
+		}
+	}
+	if items == nil {
+		items = []string{}
+	}
+	return items, rows.Err()
+}
+
+// RecordLootDiscovery insere ou atualiza o registro de um item descoberto no compêndio.
+// Retorna true se for a primeira vez que o personagem encontrou o item.
+func RecordLootDiscovery(charID string, itemName, rarity, regionKey, monsterKey string) (bool, error) {
+	if charID == "" || itemName == "" {
+		return false, nil
+	}
+	if rarity == "" {
+		rarity = "Comum"
+	}
+	regKey := strings.TrimSpace(regionKey)
+
+	// Tenta primeiro atualizar o registro existente para evitar falha de ON CONFLICT em esquemas legados
+	res, err := DB.Exec(`
+		UPDATE character_loot_discoveries 
+		SET times_found = times_found + 1, last_found_at = NOW()
+		WHERE character_id = $1 AND item_template_key = $2 AND (first_region_key = $3 OR first_region_key = '' OR $3 = '')
+	`, charID, itemName, regKey)
+
+	if err == nil {
+		if rows, _ := res.RowsAffected(); rows > 0 {
+			return false, nil
+		}
+	}
+
+	// Se não existia registro anterior, insere um novo registro de forma segura
+	query := `
+		INSERT INTO character_loot_discoveries (character_id, item_template_key, first_region_key, first_monster_key, highest_rarity, times_found, first_discovered_at, last_found_at)
+		VALUES ($1, $2, $3, $4, $5, 1, NOW(), NOW())
+		ON CONFLICT DO NOTHING
+	`
+	if _, insertErr := DB.Exec(query, charID, itemName, regKey, monsterKey, rarity); insertErr != nil {
+		// Log suave sem derrubar o fluxo de claim da expedição
+		return false, nil
+	}
+	return true, nil
+}
+
+// BackfillInventoryDiscoveries preserva retrocompatibilidade sem vazar itens iniciais para regiões não exploradas.
+func BackfillInventoryDiscoveries(charID string, inv *Inventory) {
+	// Intencionalmente mantido sem forçar descobertas de regiões selvagens para itens iniciais do jogador
+}
+
+// GetCharacterAutoSellSettings obtém as configurações de venda automática do personagem.
+func GetCharacterAutoSellSettings(charID string) (game.AutoSellSettings, error) {
+	query := `
+		SELECT enabled, online_enabled, offline_enabled, trigger_percent, target_percent,
+		       sell_rarities, sell_slot_types, only_duplicates, keep_first_discovered_copy,
+		       keep_best_per_template, protected_template_keys, sell_crafted_items, revision
+		FROM character_auto_sell_settings
+		WHERE character_id = $1
+	`
+	var s game.AutoSellSettings
+	var raritiesJSON, slotsJSON, protectedJSON []byte
+
+	err := DB.QueryRow(query, charID).Scan(
+		&s.Enabled, &s.OnlineEnabled, &s.OfflineEnabled, &s.TriggerPercent, &s.TargetPercent,
+		&raritiesJSON, &slotsJSON, &s.OnlyDuplicates, &s.KeepFirstDiscoveredCopy,
+		&s.KeepBestPerTemplate, &protectedJSON, &s.SellCraftedItems, &s.Revision,
+	)
+	if err == sql.ErrNoRows {
+		return game.DefaultAutoSellSettings(), nil
+	}
+	if err != nil {
+		return game.DefaultAutoSellSettings(), err
+	}
+
+	if err := json.Unmarshal(raritiesJSON, &s.SellRarities); err != nil {
+		return game.DefaultAutoSellSettings(), fmt.Errorf("raridades da venda automática corrompidas: %w", err)
+	}
+	if err := json.Unmarshal(slotsJSON, &s.SellSlotTypes); err != nil {
+		return game.DefaultAutoSellSettings(), fmt.Errorf("slots da venda automática corrompidos: %w", err)
+	}
+	if err := json.Unmarshal(protectedJSON, &s.ProtectedTemplateKeys); err != nil {
+		return game.DefaultAutoSellSettings(), fmt.Errorf("proteções da venda automática corrompidas: %w", err)
+	}
+	return s, nil
+}
+
+// SaveCharacterAutoSellSettings persiste as configurações de auto-venda do personagem.
+func SaveCharacterAutoSellSettings(charID string, s game.AutoSellSettings) error {
+	raritiesJSON, _ := json.Marshal(s.SellRarities)
+	slotsJSON, _ := json.Marshal(s.SellSlotTypes)
+	protectedJSON, _ := json.Marshal(s.ProtectedTemplateKeys)
+
+	query := `
+		INSERT INTO character_auto_sell_settings (
+			character_id, enabled, online_enabled, offline_enabled, trigger_percent, target_percent,
+			sell_rarities, sell_slot_types, only_duplicates, keep_first_discovered_copy,
+			keep_best_per_template, protected_template_keys, sell_crafted_items, revision, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+		ON CONFLICT (character_id) DO UPDATE SET
+			enabled = EXCLUDED.enabled,
+			online_enabled = EXCLUDED.online_enabled,
+			offline_enabled = EXCLUDED.offline_enabled,
+			trigger_percent = EXCLUDED.trigger_percent,
+			target_percent = EXCLUDED.target_percent,
+			sell_rarities = EXCLUDED.sell_rarities,
+			sell_slot_types = EXCLUDED.sell_slot_types,
+			only_duplicates = EXCLUDED.only_duplicates,
+			keep_first_discovered_copy = EXCLUDED.keep_first_discovered_copy,
+			keep_best_per_template = EXCLUDED.keep_best_per_template,
+			protected_template_keys = EXCLUDED.protected_template_keys,
+			sell_crafted_items = EXCLUDED.sell_crafted_items,
+			revision = character_auto_sell_settings.revision + 1,
+			updated_at = NOW()
+	`
+	_, err := DB.Exec(query, charID, s.Enabled, s.OnlineEnabled, s.OfflineEnabled, s.TriggerPercent, s.TargetPercent, string(raritiesJSON), string(slotsJSON), s.OnlyDuplicates, s.KeepFirstDiscoveredCopy, s.KeepBestPerTemplate, string(protectedJSON), s.SellCraftedItems, s.Revision)
+	return err
+}
+
+// GetCharacterOverflowChest obtém a lista de itens protegidos no Baú de Achados (overflow de 20 slots).
+func GetCharacterOverflowChest(charID string) ([]game.Item, error) {
+	var itemsJSON []byte
+	err := DB.QueryRow(`SELECT items FROM character_overflow_chests WHERE character_id = $1`, charID).Scan(&itemsJSON)
+	if err == sql.ErrNoRows {
+		return []game.Item{}, nil
+	}
+	if err != nil {
+		return []game.Item{}, err
+	}
+	var items []game.Item
+	if err := json.Unmarshal(itemsJSON, &items); err != nil {
+		return []game.Item{}, err
+	}
+	return items, nil
+}
+
+// SaveCharacterOverflowChest salva o estado do Baú de Achados.
+func SaveCharacterOverflowChest(charID string, items []game.Item) error {
+	if items == nil {
+		items = []game.Item{}
+	}
+	itemsJSON, _ := json.Marshal(items)
+	query := `
+		INSERT INTO character_overflow_chests (character_id, items, max_slots, updated_at)
+		VALUES ($1, $2, 20, NOW())
+		ON CONFLICT (character_id) DO UPDATE SET
+			items = EXCLUDED.items,
+			updated_at = NOW()
+	`
+	_, err := DB.Exec(query, charID, string(itemsJSON))
+	return err
+}
+
+// AddOverflowChestItem adiciona um item protegido ao Baú de Achados caso haja espaço (máx 20 slots).
+func AddOverflowChestItem(charID string, item game.Item) (bool, error) {
+	currentItems, err := GetCharacterOverflowChest(charID)
+	if err != nil {
+		return false, err
+	}
+	if len(currentItems) >= 20 {
+		return false, nil // Baú cheio
+	}
+	currentItems = append(currentItems, item)
+	err = SaveCharacterOverflowChest(charID, currentItems)
+	return err == nil, err
 }

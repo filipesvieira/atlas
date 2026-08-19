@@ -1,0 +1,55 @@
+import { CampBuildingSlotConfig } from './types';
+
+/** Layout modular fixo dos 5 slots de construção na arena do acampamento (500x260px) */
+export const CampLayoutSlots: Record<string, CampBuildingSlotConfig> = {
+  west: {
+    slotKey: 'west',
+    buildingKey: 'adventurer_hut',
+    anchorX: 85,
+    groundY: 196,
+    maxWidth: 150,
+    maxHeight: 110,
+    sortY: 196,
+    baseScale: 1.0,
+  },
+  north: {
+    slotKey: 'north',
+    buildingKey: 'arcane_spring',
+    anchorX: 320,
+    groundY: 177,
+    maxWidth: 80,
+    maxHeight: 80,
+    sortY: 177,
+    baseScale: 1.0,
+  },
+  east: {
+    slotKey: 'east',
+    buildingKey: 'warehouse',
+    anchorX: 420,
+    groundY: 202,
+    maxWidth: 120,
+    maxHeight: 95,
+    sortY: 202,
+    baseScale: 1.0,
+  },
+  center: {
+    slotKey: 'center',
+    buildingKey: 'campfire',
+    anchorX: 235,
+    groundY: 213,
+    maxWidth: 70,
+    maxHeight: 60,
+    sortY: 213,
+    baseScale: 1.0,
+  },
+  south: {
+    slotKey: 'south',
+    buildingKey: 'workbench',
+    anchorX: 340,
+    groundY: 226,
+    maxWidth: 80,
+    maxHeight: 60,
+    sortY: 226,
+    baseScale: 1.0,
+  },
+};

@@ -17,6 +17,7 @@ interface OfflineSummaryData {
   is_boss_stage_after: boolean;
   waves_completed: number;
   bosses_defeated: number;
+  bosses_rewarded?: number;
   expeditions_completed: number;
   regions_unlocked?: string[];
   kills: number;
@@ -27,8 +28,11 @@ interface OfflineSummaryData {
   drops_auto_converted?: number;
   level_before: number;
   level_after: number;
+  health_after?: number;
+  defeated?: boolean;
   stopped_reason?: string;
   items_found: OfflineItem[];
+	items_pending?: OfflineItem[];
   items_converted?: OfflineItem[];
 }
 
@@ -66,6 +70,7 @@ export function OfflineSummaryModal({ data, onClose }: OfflineSummaryModalProps)
           <div><span className="text-slate-500">Ondas concluídas:</span> <span className="text-slate-300">{data.waves_completed}</span></div>
           <div><span className="text-slate-500">Abates:</span> <span className="text-rose-300 font-bold">{data.kills}</span></div>
           <div><span className="text-slate-500">Chefes derrotados:</span> <span className="text-purple-300 font-bold">{data.bosses_defeated}</span></div>
+          <div><span className="text-slate-500">Chefes premiados:</span> <span className="text-amber-300 font-bold">{data.bosses_rewarded ?? data.bosses_defeated}</span></div>
           <div><span className="text-slate-500">Expedições completas:</span> <span className="text-amber-300 font-bold">{data.expeditions_completed}</span></div>
           <div><span className="text-slate-500">Eficiência:</span> <span className="text-cyan-300 font-bold">{efficiency}%</span></div>
         </div>
@@ -83,11 +88,15 @@ export function OfflineSummaryModal({ data, onClose }: OfflineSummaryModalProps)
           </div>
         )}
 
-        {data.stopped_reason && (
+        {data.defeated ? (
+          <div className="mb-4 rounded-lg border border-rose-500/40 bg-rose-950/40 p-3 text-xs text-rose-100">
+            ☠️ O herói foi derrotado durante a simulação. A onda incompleta não concedeu recompensas, a expedição voltou para a fase 1 e o herói retornou ao acampamento com {data.health_after ?? 0} HP.
+          </div>
+        ) : data.stopped_reason ? (
           <div className="mb-4 rounded-lg border border-rose-500/30 bg-rose-950/30 p-3 text-xs text-rose-200">
             A eficiência foi limitada por: <strong>{data.stopped_reason.replace(/_/g, ' ')}</strong>.
           </div>
-        )}
+        ) : null}
 
         {data.items_found?.length > 0 && (
           <div className="mb-4">
@@ -103,6 +112,12 @@ export function OfflineSummaryModal({ data, onClose }: OfflineSummaryModalProps)
           </div>
         )}
 
+		{(data.items_pending?.length ?? 0) > 0 && (
+			<div className="mb-4 rounded border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-200">
+				📦 {data.items_pending!.length} item(ns) protegido(s) foram enviados à carga segura. Resgate-os na Oficina depois de liberar espaço na mochila.
+			</div>
+		)}
+
         {(data.items_converted?.length ?? 0) > 0 && (
           <p className="mb-2 text-xs text-slate-400">
             {data.items_converted!.length} item(ns) excedentes foram convertidos automaticamente em ouro por falta de peso ou slots.
@@ -115,7 +130,7 @@ export function OfflineSummaryModal({ data, onClose }: OfflineSummaryModalProps)
         )}
 
         <button onClick={onClose} className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl transition shadow-lg">
-          Continuar Expedição
+          {data.defeated ? 'Voltar ao Acampamento' : 'Continuar Expedição'}
         </button>
       </div>
     </div>

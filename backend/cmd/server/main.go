@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
-	"os"
+	"runtime"
+	"strings"
 	"time"
 
+	"github.com/atlas/backend/internal/config"
 	"github.com/atlas/backend/internal/db"
 	"github.com/atlas/backend/pkg/game"
 	"github.com/go-chi/chi/v5"
@@ -18,11 +21,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var jwtSecret = []byte("atlas_super_secret_jwt_key_2026")
+var appConfig *config.Config
+var serverStartTime = time.Now()
 
 type Claims struct {
 	AccountID string `json:"account_id"`
 	Email     string `json:"email"`
+	Role      string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -42,18 +47,44 @@ type CreateCharacterRequest struct {
 	Origin   string `json:"origin"`
 }
 
-func main() {
-	// Inicialização do Banco PostgreSQL
-	dbHost := getEnv("DB_HOST", "localhost")
-	dbPort := getEnv("DB_PORT", "5432")
-	dbUser := getEnv("DB_USER", "atlas")
-	dbPass := getEnv("DB_PASSWORD", "atlas_password")
-	dbName := getEnv("DB_NAME", "atlas_db")
+type DeveloperPresetRequest struct {
+	CharacterID string `json:"character_id"`
+}
 
-	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", dbHost, dbPort, dbUser, dbPass, dbName)
-	log.Printf("Conectando ao PostgreSQL em %s:%s...", dbHost, dbPort)
-	if _, err := db.InitDB(connStr); err != nil {
-		log.Printf("Aviso PostgreSQL: %v", err)
+func main() {
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatalf("Erro fatal de configuração: %v", err)
+	}
+	appConfig = cfg
+
+	log.Printf("Iniciando Atlas Server [%s] na porta :%s...", cfg.Environment, cfg.Port)
+
+	// Validação de Integridade do Catálogo no Startup
+	if violations := game.GlobalContentRegistry.ValidateIntegrity(); len(violations) > 0 {
+		for _, v := range violations {
+			log.Printf("⚠️ Violação de catálogo: %s", v)
+		}
+		log.Fatalf("Erro fatal: Catálogo de conteúdo possui %d violações", len(violations))
+	} else {
+		log.Printf("✅ Catálogo de conteúdo validado com 100%% de integridade (%d regiões, %d monstros, %d itens)",
+			len(game.GlobalContentRegistry.Regions),
+			len(game.GlobalContentRegistry.Monsters.List()),
+			len(game.GlobalContentRegistry.Items.List()),
+		)
+	}
+
+	log.Printf("Conectando ao PostgreSQL...")
+	if _, err := db.InitDB(cfg.DatabaseURL); err != nil {
+		// O jogo não pode operar com persistência parcial: migrations, leases,
+		// claims e ledgers são parte das garantias econômicas também em dev.
+		log.Fatalf("Erro fatal ao inicializar PostgreSQL: %v", err)
+	}
+	if cfg.DevToolsEnabled {
+		if err := bootstrapDeveloperAdmin(cfg.DevAdminEmail, cfg.DevAdminPassword); err != nil {
+			log.Fatalf("Erro fatal ao preparar administrador de testes: %v", err)
+		}
+		log.Printf("🧪 Ferramentas de QA habilitadas para %s", cfg.DevAdminEmail)
 	}
 
 	r := chi.NewRouter()
@@ -63,7 +94,7 @@ func main() {
 	r.Use(middleware.Timeout(60 * time.Second))
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"https://*", "http://*"},
+		AllowedOrigins:   cfg.AllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
@@ -71,7 +102,9 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	r.Get("/api/v1/health", HandleHealth)
+	r.Get("/health/live", HandleHealthLive)
+	r.Get("/health/ready", HandleHealthReady)
+	r.Get("/api/v1/health", HandleHealthReady)
 	r.Get("/api/v1/game/catalog", HandleGameCatalog)
 	r.Post("/api/v1/auth/register", HandleRegister)
 	r.Post("/api/v1/auth/login", HandleLogin)
@@ -86,11 +119,13 @@ func main() {
 		r.Post("/api/v1/characters", HandleCreateCharacter)
 		r.Post("/api/v1/expedition/claim", HandleClaimOfflineProgress)
 		r.Get("/api/v1/admin/telemetry", AdminMiddleware(HandleAdminTelemetry))
+		if cfg.DevToolsEnabled {
+			r.Post("/api/v1/admin/test-preset", AdminMiddleware(HandleDeveloperPreset))
+		}
 	})
 
-	port := getEnv("PORT", "8080")
-	log.Printf("Project Atlas Backend em Go ativo na porta :%s [Consumo ~20MB RAM]\n", port)
-	if err := http.ListenAndServe(":"+port, r); err != nil {
+	log.Printf("Project Atlas Backend em Go ativo na porta :%s [Consumo ~20MB RAM]\n", cfg.Port)
+	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
 		log.Fatalf("Erro no servidor: %v", err)
 	}
 }
@@ -99,21 +134,41 @@ func HandleGameCatalog(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, game.BuildGameCatalog())
 }
 
-func HandleHealth(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, http.StatusOK, map[string]string{
-		"status":    "healthy",
+func HandleHealthLive(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"status":    "alive",
 		"service":   "project-atlas-backend",
 		"timestamp": time.Now().Format(time.RFC3339),
 	})
 }
 
+func HandleHealthReady(w http.ResponseWriter, r *http.Request) {
+	if db.DB == nil {
+		jsonError(w, http.StatusServiceUnavailable, "Banco de dados não inicializado")
+		return
+	}
+	if err := db.DB.PingContext(r.Context()); err != nil {
+		jsonError(w, http.StatusServiceUnavailable, "Banco de dados indisponível")
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"status":    "ready",
+		"service":   "project-atlas-backend",
+		"database":  "connected",
+		"timestamp": time.Now().Format(time.RFC3339),
+	})
+}
+
 func HandleRegister(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // Max 1MB
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Email == "" || req.Password == "" {
 		jsonError(w, http.StatusBadRequest, "Email e senha são obrigatórios")
 		return
 	}
 
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Erro ao criptografar senha")
@@ -126,7 +181,11 @@ func HandleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenStr, _ := generateJWT(acc.ID, acc.Email)
+	tokenStr, err := generateJWT(acc.ID, acc.Email, acc.Role)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "Erro ao gerar token de autenticação")
+		return
+	}
 	jsonResponse(w, http.StatusCreated, map[string]any{
 		"message": "Conta criada com sucesso",
 		"token":   tokenStr,
@@ -135,12 +194,14 @@ func HandleRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleLogin(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // Max 1MB
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Email == "" || req.Password == "" {
 		jsonError(w, http.StatusBadRequest, "Email e senha são obrigatórios")
 		return
 	}
 
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	acc, err := db.GetAccountByEmail(req.Email)
 	if err != nil {
 		jsonError(w, http.StatusUnauthorized, "Email ou senha incorretos")
@@ -152,7 +213,7 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenStr, err := generateJWT(acc.ID, acc.Email)
+	tokenStr, err := generateJWT(acc.ID, acc.Email, acc.Role)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Erro ao gerar token")
 		return
@@ -179,6 +240,7 @@ func HandleGetCharacters(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleCreateCharacter(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // Max 1MB
 	claims := r.Context().Value("claims").(*Claims)
 	var req CreateCharacterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
@@ -186,9 +248,9 @@ func HandleCreateCharacter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Vocation == "" {
-		req.Vocation = "knight"
-	}
+	// O Atlas é classless: o cliente não escolhe uma classe permanente na
+	// criação. O estilo atual passa a ser determinado pela arma equipada.
+	req.Vocation = "Aprendiz"
 	if req.Origin == "" {
 		req.Origin = "wanderer"
 	}
@@ -218,8 +280,6 @@ func HandleClaimOfflineProgress(w http.ResponseWriter, r *http.Request) {
 	_, sessionAlreadyActive := activeSessions[charID]
 	sessionsMu.Unlock()
 	if sessionAlreadyActive {
-		// Se a sessão anterior ainda está desconectando e gravando o snapshot,
-		// aguarda alguns milissegundos para concluir a liberação com segurança.
 		for attempt := 0; attempt < 10; attempt++ {
 			time.Sleep(50 * time.Millisecond)
 			sessionsMu.Lock()
@@ -249,22 +309,172 @@ func HandleAdminTelemetry(w http.ResponseWriter, r *http.Request) {
 	sessionsMu.Lock()
 	activeCount := len(activeSessions)
 	sessionsMu.Unlock()
+
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	ramMb := float64(m.Alloc) / 1024.0 / 1024.0
+
+	uptimeHours := time.Since(serverStartTime).Hours()
+
+	dbStatus := "connected"
+	if db.DB != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		if err := db.DB.PingContext(ctx); err != nil {
+			dbStatus = "error: " + err.Error()
+		}
+		cancel()
+	} else {
+		dbStatus = "disconnected"
+	}
+
 	telemetry := map[string]any{
-		"ram_usage_mb":    22.4,
-		"uptime_hours":    142,
-		"active_ccu":      activeCount,
-		"db_status":       "connected",
-		"redis_status":    "connected",
-		"active_sessions": activeCount,
+		"ram_usage_mb":     ramMb,
+		"uptime_hours":     uptimeHours,
+		"active_ccu":       activeCount,
+		"db_status":        dbStatus,
+		"active_sessions":  activeCount,
+		"economy_counters": game.TelemetrySnapshot(),
 	}
 	jsonResponse(w, http.StatusOK, telemetry)
+}
+
+func bootstrapDeveloperAdmin(email, password string) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	var accID string
+	err = db.DB.QueryRow(`
+		INSERT INTO accounts(email,password_hash,role)
+		VALUES($1,$2,'admin')
+		ON CONFLICT(email) DO UPDATE SET password_hash=EXCLUDED.password_hash,role='admin'
+		RETURNING id`, email, string(hash)).Scan(&accID)
+	if err != nil {
+		return err
+	}
+
+	// 1. Desbloquear todas as magias e habilidades nos personagens da conta admin de testes
+	allSkillsJSON := `["whirlwind","multishot","brutal_strike","sniper_shot","fireball","ice_shard","divine_heal"]`
+	_, _ = db.DB.Exec(`
+		UPDATE characters
+		SET learned_skills=$1::jsonb
+		WHERE account_id=$2`, allSkillsJSON, accID)
+
+	// 2. Garantir que os personagens da conta possuam varinha e cajado para testar projéteis
+	rows, err := db.DB.Query(`SELECT id FROM characters WHERE account_id=$1`, accID)
+	if err == nil {
+		defer rows.Close()
+		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+		for rows.Next() {
+			var charID string
+			if err := rows.Scan(&charID); err == nil {
+				inv, err := db.GetCharacterInventory(charID)
+				if err == nil && inv != nil {
+					hasWand := false
+					hasStaff := false
+					hasBow := false
+					hasAmmo := false
+					checkItem := func(name string) {
+						nameLower := strings.ToLower(name)
+						if strings.Contains(nameLower, "varinha") || strings.Contains(nameLower, "wand") {
+							hasWand = true
+						}
+						if strings.Contains(nameLower, "cajado") || strings.Contains(nameLower, "staff") || strings.Contains(nameLower, "cetro") {
+							hasStaff = true
+						}
+						if strings.Contains(nameLower, "arco") || strings.Contains(nameLower, "bow") || strings.Contains(nameLower, "besta") {
+							hasBow = true
+						}
+						if strings.Contains(nameLower, "flecha") || strings.Contains(nameLower, "arrow") || strings.Contains(nameLower, "virote") {
+							hasAmmo = true
+						}
+					}
+					for _, item := range inv.Backpack {
+						checkItem(item.Name)
+					}
+					if inv.Equipment.MainHand != nil {
+						checkItem(inv.Equipment.MainHand.Name)
+					}
+					if inv.Equipment.Ammo != nil {
+						checkItem(inv.Equipment.Ammo.Name)
+					}
+
+					changed := false
+					if !hasWand {
+						if wand := game.GenerateItemFromTemplate("Varinha das Relíquias", "Raro", rng); wand != nil {
+							wand.SpecialEffect = "Arma Mágica de Teste (Varinha)"
+							inv.Backpack = append(inv.Backpack, *wand)
+							changed = true
+						}
+					}
+					if !hasStaff {
+						if staff := game.GenerateItemFromTemplate("Cajado Rúnico", "Raro", rng); staff != nil {
+							staff.SpecialEffect = "Arma Mágica de Teste (Cajado)"
+							inv.Backpack = append(inv.Backpack, *staff)
+							changed = true
+						}
+					}
+					if !hasBow {
+						if bow := game.GenerateItemFromTemplate("Arco Longo", "Raro", rng); bow != nil {
+							bow.SpecialEffect = "Arma de Distância de Teste (Arco)"
+							inv.Backpack = append(inv.Backpack, *bow)
+							changed = true
+						}
+					}
+					if !hasAmmo {
+						if ammo := game.GenerateItemFromTemplate("Flechas de Aço", "Raro", rng); ammo != nil {
+							ammo.SpecialEffect = "Munição de Teste (Flechas)"
+							inv.Backpack = append(inv.Backpack, *ammo)
+							changed = true
+						}
+					}
+					if changed {
+						_ = db.SaveCharacterInventory(charID, inv)
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func HandleDeveloperPreset(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var req DeveloperPresetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.CharacterID) == "" {
+		jsonError(w, http.StatusBadRequest, "character_id é obrigatório")
+		return
+	}
+	claims := r.Context().Value("claims").(*Claims)
+	var ownsCharacter bool
+	if err := db.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM characters WHERE id=$1 AND account_id=$2)`, req.CharacterID, claims.AccountID).Scan(&ownsCharacter); err != nil || !ownsCharacter {
+		jsonError(w, http.StatusForbidden, "o preset de QA só pode alterar personagens da própria conta")
+		return
+	}
+
+	sessionsMu.Lock()
+	_, sessionActive := activeSessions[req.CharacterID]
+	sessionsMu.Unlock()
+	if sessionActive {
+		jsonError(w, http.StatusConflict, "saia do mundo antes de aplicar o preset de QA")
+		return
+	}
+
+	result, err := db.ApplyDeveloperPreset(req.CharacterID, time.Now().UTC())
+	if err != nil {
+		log.Printf("erro ao aplicar preset de QA em %s: %v", req.CharacterID, err)
+		jsonError(w, http.StatusInternalServerError, "não foi possível preparar o personagem de testes")
+		return
+	}
+	jsonResponse(w, http.StatusOK, result)
 }
 
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		tokenStr := ""
-		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		if len(authHeader) > 7 && strings.EqualFold(authHeader[:7], "Bearer ") {
 			tokenStr = authHeader[7:]
 		} else {
 			tokenStr = r.URL.Query().Get("token")
@@ -276,9 +486,19 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		}
 
 		claims := &Claims{}
-		tkn, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-			return jwtSecret, nil
-		})
+		tkn, err := jwt.ParseWithClaims(
+			tokenStr,
+			claims,
+			func(token *jwt.Token) (interface{}, error) {
+				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, fmt.Errorf("algoritmo de assinatura inesperado: %v", token.Header["alg"])
+				}
+				return appConfig.JWTSecret, nil
+			},
+			jwt.WithValidMethods([]string{"HS256"}),
+			jwt.WithIssuer("atlas-server"),
+			jwt.WithAudience("atlas-client"),
+		)
 
 		if err != nil || !tkn.Valid {
 			jsonError(w, http.StatusUnauthorized, "Token JWT inválido ou expirado")
@@ -293,22 +513,35 @@ func AuthMiddleware(next http.Handler) http.Handler {
 
 func AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := r.Context().Value("claims").(*Claims)
+		if !ok || claims.Role != "admin" {
+			jsonError(w, http.StatusForbidden, "Acesso restrito a administradores do sistema")
+			return
+		}
 		next.ServeHTTP(w, r)
 	}
 }
 
-func generateJWT(accID, email string) (string, error) {
+func generateJWT(accID, email, role string) (string, error) {
+	if role == "" {
+		role = "player"
+	}
 	expirationTime := time.Now().Add(24 * time.Hour)
 	claims := &Claims{
 		AccountID: accID,
 		Email:     email,
+		Role:      role,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "atlas-server",
+			Subject:   accID,
+			Audience:  jwt.ClaimStrings{"atlas-client"},
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtSecret)
+	return token.SignedString(appConfig.JWTSecret)
 }
 
 func jsonResponse(w http.ResponseWriter, code int, payload any) {
@@ -319,11 +552,4 @@ func jsonResponse(w http.ResponseWriter, code int, payload any) {
 
 func jsonError(w http.ResponseWriter, code int, message string) {
 	jsonResponse(w, code, map[string]string{"error": message})
-}
-
-func getEnv(key, defaultVal string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	return defaultVal
 }

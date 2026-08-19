@@ -120,6 +120,9 @@ export function SkillBar({
           <span>Habilidades Aprendidas ({safeLearnedSkills.length})</span>
           <span className="text-amber-400/80 font-normal">Ativas: {safeActiveSkills.length}/2</span>
         </div>
+        <p className="rounded border border-sky-900/60 bg-sky-950/25 px-2 py-1.5 text-[9px] leading-relaxed text-sky-200/80">
+          📖 Livros podem ser estudados com qualquer equipamento. A arma compatível é exigida somente para ativar e usar a habilidade.
+        </p>
 
         {safeLearnedSkills.length > 0 ? (
           <div className="grid grid-cols-2 gap-2">
@@ -139,14 +142,15 @@ export function SkillBar({
 
               const isActive = safeActiveSkills.includes(skillKey);
               const isAllowedForCurrentWeapon = skill.allowed_archetypes.includes(primaryArchetype);
+              const canToggle = isActive || isAllowedForCurrentWeapon;
               const cdTicks = skillCooldowns[skillKey] || 0;
               const cdSecondsRemaining = cdTicks > 0 ? (cdTicks * 0.75).toFixed(1) : null;
 
               return (
                 <div
                   key={skillKey}
-                  title={`${skill.description}\nTempo de Recarga: ${skill.cooldown_seconds || 2.25}s\nArquétipos: ${skill.allowed_archetypes.join(', ')}`}
-                  onClick={() => onToggleSkill && onToggleSkill(skillKey)}
+                  title={`${skill.description}\nAprendida permanentemente: sim\nTempo de Recarga: ${skill.cooldown_seconds || 2.25}s\nArquétipos compatíveis: ${skill.allowed_archetypes.join(', ')}${isAllowedForCurrentWeapon ? '\n✅ Pode ser ativada com a arma atual.' : '\n🔒 Equipe uma arma compatível para ativar. O aprendizado não será perdido.'}`}
+                  onClick={() => canToggle && onToggleSkill && onToggleSkill(skillKey)}
                   className={`p-2 bg-slate-950 border transition rounded-lg flex items-center gap-2 relative select-none overflow-hidden ${
                     isActive
                       ? 'border-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.35)] ring-1 ring-amber-500/50'
@@ -172,6 +176,7 @@ export function SkillBar({
                   <span className="text-base flex-shrink-0">{skill.icon}</span>
                   <div className="truncate min-w-0 flex-1">
                     <div className="text-[11px] font-bold text-amber-300 truncate">{skill.name}</div>
+                    {!isAllowedForCurrentWeapon && !isActive && <div className="truncate text-[8px] text-slate-500">Aprendida · arma atual incompatível</div>}
                     <div className="flex items-center justify-between text-[9px] font-mono">
                       <span className="text-sky-400">{skill.mana_cost} MP</span>
                       <span className="text-slate-400 text-[8px]">{formatArchetype(skill.allowed_archetypes)}</span>

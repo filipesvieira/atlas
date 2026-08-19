@@ -2,43 +2,16 @@ package db
 
 import (
 	"database/sql"
-	"log"
+	"fmt"
 )
 
-func BootstrapStaticData(db *sql.DB) {
-	createTablesQuery := `
-	CREATE TABLE IF NOT EXISTS base_items (
-		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-		name VARCHAR(255) NOT NULL,
-		slot VARCHAR(50) NOT NULL,
-		base_atk INT NOT NULL DEFAULT 0,
-		base_def INT NOT NULL DEFAULT 0,
-		base_weight FLOAT NOT NULL DEFAULT 1.0,
-		tier INT NOT NULL DEFAULT 1,
-		special_effect VARCHAR(255)
-	);
-
-	CREATE TABLE IF NOT EXISTS base_monsters (
-		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-		name VARCHAR(255) NOT NULL,
-		base_health INT NOT NULL,
-		base_attack INT NOT NULL,
-		min_level INT NOT NULL DEFAULT 1,
-		max_level INT NOT NULL DEFAULT 999,
-		region_id VARCHAR(100) NOT NULL
-	);
-	`
-	_, err := db.Exec(createTablesQuery)
-	if err != nil {
-		log.Printf("Erro ao criar tabelas base: %v", err)
-		return
+func BootstrapStaticData(db *sql.DB) error {
+	var itemCount int
+	if err := db.QueryRow("SELECT COUNT(*) FROM base_items").Scan(&itemCount); err != nil {
+		return fmt.Errorf("contando itens base: %w", err)
 	}
 
-	var itemCount int
-	db.QueryRow("SELECT COUNT(*) FROM base_items").Scan(&itemCount)
-
 	if itemCount == 0 {
-		log.Println("Populando banco com base_items...")
 		populateItemsQuery := `
 		INSERT INTO base_items (name, slot, base_atk, base_def, base_weight, tier) VALUES
 		('Espada de Aço', 'mainhand', 14, 2, 35.5, 1),
@@ -86,34 +59,41 @@ func BootstrapStaticData(db *sql.DB) {
 		('Livro: Bola de Fogo', 'skill_book', 0, 0, 22.0, 1),
 		('Livro: Cura Divina', 'skill_book', 0, 0, 20.0, 1);
 		`
-		db.Exec(populateItemsQuery)
+		if _, err := db.Exec(populateItemsQuery); err != nil {
+			return fmt.Errorf("populando itens base: %w", err)
+		}
 	}
 
-	// Limpa e repopula para garantir alinhamento com as regiões do frontend
-	_, _ = db.Exec("DELETE FROM base_monsters")
-	log.Println("Populando banco com base_monsters por região...")
-	populateMonstersQuery := `
-	INSERT INTO base_monsters (name, base_health, base_attack, min_level, max_level, region_id) VALUES
-	('Goblin', 40, 8, 1, 99, 'forest'),
-	('Lobo Selvagem', 60, 12, 1, 99, 'forest'),
-	('Aranha Gigante', 75, 14, 1, 99, 'forest'),
-
-	('Orc Guerreiro', 150, 18, 1, 99, 'orcruins'),
-	('Troll das Cavernas', 200, 22, 1, 99, 'orcruins'),
-	('Orc Mago', 130, 26, 1, 99, 'orcruins'),
-	('Bandido dos Ermos', 120, 20, 1, 99, 'orcruins'),
-
-	('Esqueleto Guerreiro', 280, 32, 1, 99, 'frozen'),
-	('Zumbi Congelado', 350, 28, 1, 99, 'frozen'),
-	('Golem de Gelo', 500, 38, 1, 99, 'frozen'),
-	('Espectro do Gelo', 240, 45, 1, 99, 'frozen'),
-
-	('Necromante Sombrio', 450, 55, 1, 999, 'abyss'),
-	('Vampiro Ancestral', 650, 70, 1, 999, 'abyss'),
-	('Escorpião Infernal', 550, 60, 1, 999, 'abyss'),
-	('Dragão Vermelho', 1200, 110, 1, 999, 'abyss');
-	`
-	if _, err := db.Exec(populateMonstersQuery); err != nil {
-		log.Printf("Erro ao popular base_monsters: %v", err)
+	var monsterCount int
+	if err := db.QueryRow("SELECT COUNT(*) FROM base_monsters").Scan(&monsterCount); err != nil {
+		return fmt.Errorf("contando monstros base: %w", err)
 	}
+
+	if monsterCount == 0 {
+		populateMonstersQuery := `
+		INSERT INTO base_monsters (name, base_health, base_attack, min_level, max_level, region_id) VALUES
+		('Goblin', 40, 8, 1, 99, 'forest'),
+		('Lobo Selvagem', 60, 12, 1, 99, 'forest'),
+		('Aranha Gigante', 75, 14, 1, 99, 'forest'),
+
+		('Orc Guerreiro', 150, 18, 1, 99, 'orcruins'),
+		('Troll das Cavernas', 200, 22, 1, 99, 'orcruins'),
+		('Orc Mago', 130, 26, 1, 99, 'orcruins'),
+		('Bandido dos Ermos', 120, 20, 1, 99, 'orcruins'),
+
+		('Esqueleto Guerreiro', 280, 32, 1, 99, 'frozen'),
+		('Zumbi Congelado', 350, 28, 1, 99, 'frozen'),
+		('Golem de Gelo', 500, 38, 1, 99, 'frozen'),
+		('Espectro do Gelo', 240, 45, 1, 99, 'frozen'),
+
+		('Necromante Sombrio', 450, 55, 1, 999, 'abyss'),
+		('Vampiro Ancestral', 650, 70, 1, 999, 'abyss'),
+		('Escorpião Infernal', 550, 60, 1, 999, 'abyss'),
+		('Dragão Vermelho', 1200, 110, 1, 999, 'abyss');
+		`
+		if _, err := db.Exec(populateMonstersQuery); err != nil {
+			return fmt.Errorf("populando monstros base: %w", err)
+		}
+	}
+	return nil
 }

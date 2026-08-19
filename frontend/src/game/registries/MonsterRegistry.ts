@@ -8,7 +8,19 @@ import {
 } from '../renderers/monsters';
 import { Registry, normalizeRegistryKey } from './Registry';
 
-export type MonsterRenderer = (ctx: CanvasRenderingContext2D, size: number) => void;
+export interface MonsterRenderOptions {
+  time?: number;
+  walkStep?: number;
+  isMoving?: boolean;
+  hitFlash?: boolean;
+  state?: string;
+}
+
+export type MonsterRenderer = (
+  ctx: CanvasRenderingContext2D,
+  size: number,
+  options?: MonsterRenderOptions
+) => void;
 
 export interface MonsterVisualDefinition {
   key: string;
@@ -19,14 +31,19 @@ export interface MonsterVisualDefinition {
 }
 
 class MonsterVisualRegistry extends Registry<MonsterVisualDefinition> {
-  public render(ctx: CanvasRenderingContext2D, visualKey: string, size: number): void {
+  public render(
+    ctx: CanvasRenderingContext2D,
+    visualKey: string,
+    size: number,
+    options?: MonsterRenderOptions
+  ): void {
     const normalizedKey = normalizeRegistryKey(visualKey);
     const definition = this.get(normalizedKey);
     if (!definition) {
       drawMissingMonster(ctx, size, normalizedKey || 'unknown');
       return;
     }
-    definition.render(ctx, size);
+    definition.render(ctx, size, options);
   }
 
   public getProjectile(visualKey: string): { color: string; type: 'fireball' | 'arrow' | 'slash' } {

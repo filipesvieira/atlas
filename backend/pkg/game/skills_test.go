@@ -55,6 +55,42 @@ func TestSkillRegistry_ArchetypeFiltering(t *testing.T) {
 	}
 }
 
+func TestSkillBookLearningDoesNotRequireCompatibleWeapon(t *testing.T) {
+	book := GenerateItemFromTemplate("Manual: Tiro Quádruplo", "Raro", rand.New(rand.NewSource(42)))
+	if book == nil {
+		t.Fatal("livro de Tiro Quádruplo não foi gerado pelo catálogo")
+	}
+	character := &CharacterData{
+		ID:           "skill-learning-test",
+		Name:         "Aprendiz Livre",
+		Level:        10,
+		Health:       100,
+		MaxHealth:    100,
+		Mana:         100,
+		MaxMana:      100,
+		LearnedSkills: []string{},
+		ActiveSkills:  []string{},
+	}
+	inventory := &InventoryData{
+		Equipment: EquipmentSlots{MainHand: &Item{ID: "test-sword", Name: "Espada de Teste", WeaponType: WeaponTypeSword, SlotType: string(SlotMainHand)}},
+		Backpack:  []Item{*book},
+		Cap:       1500,
+	}
+	session := NewGameSession(character, inventory, nil, nil, nil, nil)
+
+	session.EquipItem(book.ID, string(SlotSkillBook))
+
+	if len(character.LearnedSkills) != 1 || character.LearnedSkills[0] != "multishot" {
+		t.Fatalf("habilidade de distância deveria ser aprendida com espada equipada: %+v", character.LearnedSkills)
+	}
+	if len(character.ActiveSkills) != 0 {
+		t.Fatalf("habilidade incompatível pode ser aprendida, mas não deve ser autoativada: %+v", character.ActiveSkills)
+	}
+	if len(inventory.Backpack) != 0 {
+		t.Fatalf("livro estudado deveria ser consumido; restaram %d itens", len(inventory.Backpack))
+	}
+}
+
 func TestSkillRegistry_SniperShotGuaranteedCrit(t *testing.T) {
 	def, exists := GetSkillDefinition("sniper_shot")
 	if !exists {

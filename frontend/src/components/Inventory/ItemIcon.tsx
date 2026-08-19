@@ -282,6 +282,54 @@ export function getItemAttack(item?: { attack?: number; physical_attack?: number
   return (item.physical_attack || 0) + (item.magic_attack || 0);
 }
 
+export interface ItemStatBadgeInfo {
+  text: string;
+  type: 'magic' | 'physical' | 'defense' | 'none';
+  colorClass: string;
+}
+
+export function getItemStatBadge(item?: {
+  attack?: number;
+  physical_attack?: number;
+  magic_attack?: number;
+  defense?: number;
+  weapon_type?: string;
+} | null): ItemStatBadgeInfo | null {
+  if (!item) return null;
+  const magicAtk = item.magic_attack || 0;
+  const physAtk = item.physical_attack || 0;
+  const rawAtk = item.attack || 0;
+  const def = item.defense || 0;
+
+  if (magicAtk > 0 || (rawAtk > 0 && item.weapon_type === 'wand')) {
+    const val = magicAtk > 0 ? magicAtk : rawAtk;
+    return {
+      text: `+${val}M`,
+      type: 'magic',
+      colorClass: 'text-cyan-300',
+    };
+  }
+
+  if (physAtk > 0 || rawAtk > 0) {
+    const val = physAtk > 0 ? physAtk : rawAtk;
+    return {
+      text: `+${val}A`,
+      type: 'physical',
+      colorClass: 'text-emerald-400',
+    };
+  }
+
+  if (def > 0) {
+    return {
+      text: `+${def}D`,
+      type: 'defense',
+      colorClass: 'text-sky-400',
+    };
+  }
+
+  return null;
+}
+
 export function getRarityStyle(rarity?: string) {
   switch (rarity) {
     case 'Incomum':
@@ -404,3 +452,29 @@ export function getSlotLabel(slotKey: string): string {
   return map[slotKey] || slotKey;
 }
 
+export function getHandsBadge(item?: any) {
+  if (!item) return null;
+  const isWeapon = item.slot_type === 'mainhand' || Boolean(item.weapon_type) || (item.attack || 0) > 0 || (item.physical_attack || 0) > 0 || (item.magic_attack || 0) > 0;
+  if (!isWeapon && item.hands !== 2) return null;
+  if (item.hands === 2) {
+    return {
+      hands: 2,
+      label: 'Duas Mãos (2H)',
+      shortLabel: '2H',
+      icon: '⚔️⚔️',
+      description: 'Ocupa ambas as mãos (desequipa o escudo)',
+      badgeClass: 'bg-amber-950/90 text-amber-300 border-amber-600/80',
+    };
+  }
+  if (item.hands === 1) {
+    return {
+      hands: 1,
+      label: 'Uma Mão (1H)',
+      shortLabel: '1H',
+      icon: '🗡️',
+      description: 'Permite o uso de escudo na mão secundária',
+      badgeClass: 'bg-slate-900/90 text-slate-300 border-slate-700',
+    };
+  }
+  return null;
+}

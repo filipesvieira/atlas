@@ -61,3 +61,91 @@ func TestBuildOfflineWaveRespectsFixedLevels(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckRegionAvailability_Rules(t *testing.T) {
+	forest := ExpeditionRegions["forest"]
+	shereque := ExpeditionRegions["shereque"]
+	chapolin := ExpeditionRegions["chapolin"]
+	orcruins := ExpeditionRegions["orcruins"]
+	rogartes := ExpeditionRegions["rogartes"]
+	abyss := ExpeditionRegions["abyss"]
+
+	// 1. Tier 1 — acess\u00edvel por n\u00edvel (RequiresUnlockFrom == "" e RequiresTierComplete == false)
+	avail := CheckRegionAvailability(1, []string{}, forest)
+	if !avail.Available {
+		t.Errorf("Floresta deveria estar dispon\u00edvel no n\u00edvel 1 sem boss derrotados, motivo: %s", avail.Reason)
+	}
+	avail = CheckRegionAvailability(1, []string{}, shereque)
+	if !avail.Available {
+		t.Errorf("Shereque deveria estar dispon\u00edvel no n\u00edvel 1, motivo: %s", avail.Reason)
+	}
+	avail = CheckRegionAvailability(1, []string{}, chapolin)
+	if !avail.Available {
+		t.Errorf("Chapolin deveria estar dispon\u00edvel no n\u00edvel 1, motivo: %s", avail.Reason)
+	}
+
+	// 2. Tier 2 (RequiresTierComplete): bloqueado sem nenhum boss do Tier 1 derrotado
+	avail = CheckRegionAvailability(orcruins.MinLevel, []string{}, orcruins)
+	if avail.Available {
+		t.Errorf("Orcruins N\u00c3O deveria estar dispon\u00edvel sem nenhum boss do Tier 1 derrotado")
+	}
+	if avail.DefeatedInTier != 0 || avail.TotalInTier != 3 {
+		t.Errorf("Esperado DefeatedInTier=0, TotalInTier=3; obtido %d/%d", avail.DefeatedInTier, avail.TotalInTier)
+	}
+
+	// 3. Tier 2 — bloqueado com apenas 1 de 3 chefes derrotados
+	avail = CheckRegionAvailability(orcruins.MinLevel, []string{"forest"}, orcruins)
+	if avail.Available {
+		t.Errorf("Orcruins N\u00c3O deveria estar dispon\u00edvel com apenas 1/3 do Tier 1 derrotado")
+	}
+	if avail.DefeatedInTier != 1 {
+		t.Errorf("Esperado DefeatedInTier=1; obtido %d", avail.DefeatedInTier)
+	}
+
+	// 4. Tier 2 — bloqueado com 2 de 3 chefes derrotados
+	avail = CheckRegionAvailability(orcruins.MinLevel, []string{"forest", "shereque"}, orcruins)
+	if avail.Available {
+		t.Errorf("Orcruins N\u00c3O deveria estar dispon\u00edvel com 2/3 do Tier 1 derrotado")
+	}
+	if avail.DefeatedInTier != 2 {
+		t.Errorf("Esperado DefeatedInTier=2; obtido %d", avail.DefeatedInTier)
+	}
+
+	// 5. Tier 2 — desbloqueado com TODOS os 3 chefes do Tier 1 derrotados
+	allTier1Defeated := []string{"forest", "shereque", "chapolin"}
+	avail = CheckRegionAvailability(orcruins.MinLevel, allTier1Defeated, orcruins)
+	if !avail.Available {
+		t.Errorf("Orcruins DEVERIA estar dispon\u00edvel com todos os Tier 1 derrotados. Motivo: %s", avail.Reason)
+	}
+
+	// 6. Tier 3 (Rogartes): bloqueado sem todos os chefes do Tier 2 derrotados
+	avail = CheckRegionAvailability(rogartes.MinLevel, []string{"forest", "shereque", "chapolin", "orcruins"}, rogartes)
+	if avail.Available {
+		t.Errorf("Rogartes N\u00c3O deveria estar dispon\u00edvel sem todos os Tier 2 derrotados")
+	}
+
+	// 7. Tier 3 — desbloqueado com todos os Tier 2 derrotados
+	allTier2Defeated := []string{"forest", "shereque", "chapolin", "orcruins", "esgotos", "planalto"}
+	avail = CheckRegionAvailability(rogartes.MinLevel, allTier2Defeated, rogartes)
+	if !avail.Available {
+		t.Errorf("Rogartes DEVERIA estar dispon\u00edvel com todos os Tier 2 derrotados. Motivo: %s", avail.Reason)
+	}
+
+	// 8. Abyss (Tier 5): bloqueado para n\u00edvel baixo (mesmo com todas as regi\u00f5es anteriores)
+	avail = CheckRegionAvailability(10, []string{"forest", "shereque", "chapolin", "orcruins", "esgotos", "planalto", "rogartes", "frozen"}, abyss)
+	if avail.Available {
+		t.Errorf("Abyss N\u00c3O deveria estar dispon\u00edvel para n\u00edvel 10 (Requer Lv %d)", abyss.MinLevel)
+	}
+
+	// 9. Data-driven: GetRegionsByTier deve retornar exatamente 3 regi\u00f5es no Tier 1
+	tier1Regions := GetRegionsByTier(1)
+	if len(tier1Regions) != 3 {
+		t.Errorf("Tier 1 deveria ter 3 regi\u00f5es, encontrado %d", len(tier1Regions))
+	}
+
+	// 10. GetRegionsByTier deve retornar 3 regi\u00f5es no Tier 2
+	tier2Regions := GetRegionsByTier(2)
+	if len(tier2Regions) != 3 {
+		t.Errorf("Tier 2 deveria ter 3 regi\u00f5es, encontrado %d", len(tier2Regions))
+	}
+}

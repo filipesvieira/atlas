@@ -1,6 +1,10 @@
 package game
 
-import "math/rand"
+import (
+	"fmt"
+	"math/rand"
+	"sort"
+)
 
 const (
 	DefaultExpeditionRegionID  = "forest"
@@ -8,21 +12,148 @@ const (
 )
 
 type ExpeditionRegion struct {
-	ID                 string    `json:"id"`
-	BiomeKey           string    `json:"biome_key"`
-	Name               string    `json:"name"`
-	Tier               int       `json:"tier"`
-	Order              int       `json:"order"`
-	MinLevel           int       `json:"min_level"`
-	MaxLevel           int       `json:"max_level"`
-	Description        string    `json:"description"`
-	Icon               string    `json:"icon"`
-	MaxStages          int       `json:"max_stages"`
-	RequiresUnlockFrom string    `json:"requires_unlock_from,omitempty"`
-	DropsPreview       []string  `json:"drops_preview"`
-	Monsters           []Monster `json:"monsters"`
-	Boss               Monster   `json:"boss"`
-	IsSecret           bool      `json:"is_secret"`
+	ID                 string `json:"id"`
+	BiomeKey           string `json:"biome_key"`
+	Name               string `json:"name"`
+	Tier               int    `json:"tier"`
+	Order              int    `json:"order"`
+	MinLevel           int    `json:"min_level"`
+	MaxLevel           int    `json:"max_level"`
+	Description        string `json:"description"`
+	Icon               string `json:"icon"`
+	MaxStages          int    `json:"max_stages"`
+	RequiresUnlockFrom string `json:"requires_unlock_from,omitempty"`
+	// RequiresTierComplete indica que, para acessar esta região, TODOS os chefes
+	// do Tier anterior devem ter sido derrotados. Escalável: basta adicionar novas
+	// regiões ao tier e o sistema detecta automaticamente, sem hardcode.
+	RequiresTierComplete bool      `json:"requires_tier_complete,omitempty"`
+	DropsPreview         []string  `json:"drops_preview"`
+	Monsters             []Monster `json:"monsters"`
+	Boss                 Monster   `json:"boss"`
+	IsSecret             bool      `json:"is_secret"`
+}
+
+// RegionAvailability representa a decisão autoritativa de disponibilidade de uma expedição.
+type RegionAvailability struct {
+	Available          bool   `json:"available"`
+	Reason             string `json:"reason,omitempty"`
+	RequiredLevel      int    `json:"required_level"`
+	RequiresUnlockFrom string `json:"requires_unlock_from,omitempty"`
+	// Campos de progresso de tier (populados quando RequiresTierComplete bloqueia)
+	DefeatedInTier int `json:"defeated_in_tier,omitempty"`
+	TotalInTier    int `json:"total_in_tier,omitempty"`
+	BlockedByTier  int `json:"blocked_by_tier,omitempty"`
+}
+
+// GetRegionsByTier retorna todas as regiões de um tier específico, ordenadas por Order.
+// Totalmente data-driven: basta adicionar novas regiões em ExpeditionRegions e elas
+// são automaticamente incluídas na validação de tier, sem nenhuma outra mudança.
+func GetRegionsByTier(tier int) []ExpeditionRegion {
+	var result []ExpeditionRegion
+	for _, reg := range ExpeditionRegions {
+		if reg.Tier == tier {
+			result = append(result, reg)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Order < result[j].Order
+	})
+	return result
+}
+
+// CheckRegionAvailability valida a regra única e autoritativa de acesso a uma região.
+// Suporta dois modos de bloqueio:
+//  1. RequiresTierComplete=true: exige que TODOS os chefes do Tier anterior estejam
+//     em defeatedBosses (região cuja boss foi derrotado → seu ID entra em UnlockedRegions).
+//     Escalável para N tiers: basta marcar a região com RequiresTierComplete=true.
+//  2. RequiresUnlockFrom=<id>: encadeamento 1-para-1 dentro do mesmo tier (caso legado/especial).
+func CheckRegionAvailability(charLevel int, defeatedBosses []string, region ExpeditionRegion) RegionAvailability {
+	// ── Caso 1: Região de Tier N (requer todos os chefes do Tier N-1 derrotados) ──────────
+	if region.RequiresTierComplete && region.Tier > 1 {
+		prevTierRegions := GetRegionsByTier(region.Tier - 1)
+		defeatedSet := make(map[string]bool, len(defeatedBosses))
+		for _, id := range defeatedBosses {
+			defeatedSet[id] = true
+		}
+		defeatedCount := 0
+		for _, prevReg := range prevTierRegions {
+			if defeatedSet[prevReg.ID] {
+				defeatedCount++
+			}
+		}
+		totalPrev := len(prevTierRegions)
+		if defeatedCount < totalPrev {
+			msg := fmt.Sprintf(
+				"Derrote todos os Chefes do Tier %d para avançar (%d/%d derrotados)",
+				region.Tier-1, defeatedCount, totalPrev,
+			)
+			return RegionAvailability{
+				Available:      false,
+				Reason:         msg,
+				RequiredLevel:  region.MinLevel,
+				DefeatedInTier: defeatedCount,
+				TotalInTier:    totalPrev,
+				BlockedByTier:  region.Tier - 1,
+			}
+		}
+		// Todos os chefes do tier anterior derrotados — verificar nível mínimo
+		if charLevel < region.MinLevel {
+			return RegionAvailability{
+				Available:     false,
+				Reason:        fmt.Sprintf("Requer Nível %d", region.MinLevel),
+				RequiredLevel: region.MinLevel,
+			}
+		}
+		return RegionAvailability{Available: true, RequiredLevel: region.MinLevel}
+	}
+
+	// ── Caso 2: Região sem pré-requisito de chefe (acessível por nível) ─────────────────
+	if region.RequiresUnlockFrom == "" {
+		if charLevel < region.MinLevel {
+			return RegionAvailability{
+				Available:     false,
+				Reason:        fmt.Sprintf("Requer Nível %d", region.MinLevel),
+				RequiredLevel: region.MinLevel,
+			}
+		}
+		return RegionAvailability{Available: true, RequiredLevel: region.MinLevel}
+	}
+
+	// ── Caso 3: Encadeamento 1-para-1 legado (RequiresUnlockFrom não vazio) ──────────────
+	// Mantido para suporte a regiões secretas ou pré-requisitos especiais dentro do tier.
+	defeatedSet := make(map[string]bool, len(defeatedBosses))
+	for _, id := range defeatedBosses {
+		defeatedSet[id] = true
+	}
+	if !defeatedSet[region.ID] {
+		preReqRegion, exists := ExpeditionRegions[region.RequiresUnlockFrom]
+		preReqName := region.RequiresUnlockFrom
+		if exists {
+			preReqName = preReqRegion.Name
+		}
+		if charLevel < region.MinLevel {
+			return RegionAvailability{
+				Available:          false,
+				Reason:             fmt.Sprintf("Derrote o Chefe de %s e alcance o Nível %d", preReqName, region.MinLevel),
+				RequiredLevel:      region.MinLevel,
+				RequiresUnlockFrom: region.RequiresUnlockFrom,
+			}
+		}
+		return RegionAvailability{
+			Available:          false,
+			Reason:             fmt.Sprintf("Derrote o Chefe de %s para desbloquear esta região", preReqName),
+			RequiredLevel:      region.MinLevel,
+			RequiresUnlockFrom: region.RequiresUnlockFrom,
+		}
+	}
+	if charLevel < region.MinLevel {
+		return RegionAvailability{
+			Available:     false,
+			Reason:        fmt.Sprintf("Requer Nível %d", region.MinLevel),
+			RequiredLevel: region.MinLevel,
+		}
+	}
+	return RegionAvailability{Available: true, RequiredLevel: region.MinLevel}
 }
 
 var ExpeditionRegions = map[string]ExpeditionRegion{
@@ -39,7 +170,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🌲",
 		MaxStages:          5,
 		RequiresUnlockFrom: "",
-		DropsPreview:       []string{"Espada do Aprendiz", "Arco Curvo", "Varinha do Aprendiz", "Capacete de Couro", "Pequena Bolsa", "Amuleto do Lobo"},
+		DropsPreview:       []string{"Espada do Aprendiz", "Arco Curvo", "Capacete de Couro", "Broquel de Madeira", "Amuleto do Lobo", "Manual: Armazém de Recursos"},
 		Monsters: []Monster{
 			{Key: "forest_goblin", VisualKey: "forest_goblin", Name: "Goblin Salteador", Level: 1, Health: 60, MaxHealth: 60, Attack: 7, AttackType: AttackTypeMelee},
 			{Key: "forest_wolf", VisualKey: "forest_wolf", Name: "Lobo Selvagem", Level: 3, Health: 90, MaxHealth: 90, Attack: 11, AttackType: AttackTypeMelee},
@@ -59,7 +190,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🍞",
 		MaxStages:          5,
 		RequiresUnlockFrom: "",
-		DropsPreview:       []string{"Clava de Madeira", "Machadinha de Madeira", "Broquel de Madeira", "Túnica de Couro", "Sandálias Ágeis", "Tome: Golpe Giratório"},
+		DropsPreview:       []string{"Clava de Madeira", "Machadinha de Madeira", "Broquel de Madeira", "Túnica de Couro", "Sandálias Ágeis", "Tome: Golpe Giratório", "Manual: Cabana do Aventureiro"},
 		Monsters: []Monster{
 			{Key: "shereque_ogre", VisualKey: "shereque_ogre", Name: "Ogre Verde", Level: 2, Health: 80, MaxHealth: 80, Attack: 9, AttackType: AttackTypeMelee},
 			{Key: "shereque_donkey", VisualKey: "shereque_donkey", Name: "Burro Falante", Level: 4, Health: 100, MaxHealth: 100, Attack: 12, AttackType: AttackTypeMelee},
@@ -78,7 +209,7 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🎩",
 		MaxStages:          5,
 		RequiresUnlockFrom: "",
-		DropsPreview:       []string{"Espada do Aprendiz", "Machadinha de Madeira", "Broquel de Madeira", "Anel de Cobre", "Manual: Tiro Quádruplo"},
+		DropsPreview:       []string{"Espada do Aprendiz", "Machadinha de Madeira", "Broquel de Madeira", "Anel de Cobre", "Manual: Tiro Quádruplo", "Manual: Fonte Arcana"},
 		Monsters: []Monster{
 			{Key: "chapolin_pirate", VisualKey: "chapolin_pirate", Name: "Pirata Alma Negra", Level: 3, Health: 95, MaxHealth: 95, Attack: 11, AttackType: AttackTypeMelee},
 			{Key: "chapolin_tripa", VisualKey: "chapolin_tripa", Name: "Tripa Seca", Level: 4, Health: 105, MaxHealth: 105, Attack: 13, AttackType: AttackTypeMelee},
@@ -88,19 +219,22 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 	},
 
 	// ─── TIER 2 (LV. 5–19) ──────────────────────────────────────────────────
+	// RequiresTierComplete: true → liberado apenas quando TODOS os chefes do Tier 1
+	// (Floresta, Shereque, Chapolin) forem derrotados. Data-driven: adicionar mais
+	// regiões ao Tier 1 no futuro é suficiente; nenhuma mudança de código adicional.
 	"orcruins": {
-		ID:                 "orcruins",
-		BiomeKey:           "orcruins",
-		Name:               "Castelo de Greiscu",
-		Tier:               2,
-		Order:              4,
-		MinLevel:           5,
-		MaxLevel:           12,
-		Description:        "Fortificação ancestral guardada pelo terrível Esquelético.",
-		Icon:               "🏰",
-		MaxStages:          5,
-		RequiresUnlockFrom: "forest",
-		DropsPreview:       []string{"Machado Orc", "Sabre de Bronze", "Cota de Malha", "Escudo de Madeira", "Mochila de Aventureiro", "Livro: Cura Divina"},
+		ID:                   "orcruins",
+		BiomeKey:             "orcruins",
+		Name:                 "Castelo de Greiscu",
+		Tier:                 2,
+		Order:                4,
+		MinLevel:             5,
+		MaxLevel:             12,
+		Description:          "Fortificação ancestral guardada pelo terrível Esquelético.",
+		Icon:                 "🏰",
+		MaxStages:            5,
+		RequiresTierComplete: true,
+		DropsPreview:         []string{"Machado Orc", "Sabre de Bronze", "Cota de Malha", "Escudo de Madeira", "Mochila de Aventureiro", "Livro: Cura Divina", "Manual: Bancada de Desmontagem"},
 		Monsters: []Monster{
 			{Key: "orcruins_orc", VisualKey: "orcruins_orc", Name: "Orc Guerreiro", Level: 6, Health: 140, MaxHealth: 140, Attack: 16, AttackType: AttackTypeMelee},
 			{Key: "orcruins_orc_mage", VisualKey: "orcruins_orc_mage", Name: "Orc Mago", Level: 7, Health: 150, MaxHealth: 150, Attack: 18, AttackType: AttackTypeRanged},
@@ -111,18 +245,18 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Boss: Monster{Key: "orcruins_boss_skeleton", VisualKey: "orcruins_boss_skeleton", IsBoss: true, Name: "Esquelético Pacato 💀", Level: 12, Health: 1100, MaxHealth: 1100, Attack: 52, AttackType: AttackTypeRanged},
 	},
 	"esgotos": {
-		ID:                 "esgotos",
-		BiomeKey:           "esgotos",
-		Name:               "Esgotos Tartaruga",
-		Tier:               2,
-		Order:              5,
-		MinLevel:           5,
-		MaxLevel:           12,
-		Description:        "Subterrâneo escuro dominado pelo Clã do Pé e ratos mutantes.",
-		Icon:               "🥷",
-		MaxStages:          5,
-		RequiresUnlockFrom: "forest",
-		DropsPreview:       []string{"Arco Longo", "Maça de Batalha", "Calça de Couro", "Botas de Couro", "Colar de Prata", "Virotes Perfurantes", "Manual: Tiro Preciso"},
+		ID:                   "esgotos",
+		BiomeKey:             "esgotos",
+		Name:                 "Esgotos Tartaruga",
+		Tier:                 2,
+		Order:                5,
+		MinLevel:             5,
+		MaxLevel:             12,
+		Description:          "Subterrâneo escuro dominado pelo Clã do Pé e ratos mutantes.",
+		Icon:                 "🥷",
+		MaxStages:            5,
+		RequiresTierComplete: true,
+		DropsPreview:         []string{"Sabre de Bronze", "Maça de Batalha", "Calça de Couro", "Botas de Couro", "Colar de Prata", "Virotes Perfurantes", "Manual: Tiro Preciso"},
 		Monsters: []Monster{
 			{Key: "esgotos_ninja", VisualKey: "esgotos_ninja", Name: "Ninja do Clã do Pé", Level: 7, Health: 150, MaxHealth: 150, Attack: 17, AttackType: AttackTypeRanged},
 			{Key: "esgotos_rat", VisualKey: "esgotos_rat", Name: "Rato Mutante", Level: 10, Health: 200, MaxHealth: 200, Attack: 23, AttackType: AttackTypeMelee},
@@ -130,18 +264,18 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Boss: Monster{Key: "esgotos_boss_destroyer", VisualKey: "esgotos_boss_destroyer", IsBoss: true, Name: "Destruidor Ranzinza 🥷", Level: 12, Health: 1200, MaxHealth: 1200, Attack: 55, AttackType: AttackTypeMelee},
 	},
 	"planalto": {
-		ID:                 "planalto",
-		BiomeKey:           "planalto",
-		Name:               "Planalto dos Três Poderes",
-		Tier:               2,
-		Order:              6,
-		MinLevel:           8,
-		MaxLevel:           19,
-		Description:        "Cenário político místico onde militantes e guardiões da lei disputam a Suprema Caneta.",
-		Icon:               "🏛️",
-		MaxStages:          5,
-		RequiresUnlockFrom: "forest",
-		DropsPreview:       []string{"Martelo Constitucional", "Caneta Esferográfica Suprema", "Megafone do Povo", "Toga da Inviolabilidade", "Boina Tática da Puliça", "Pasta Executiva Presidencial", "Tome: Golpe Brutal"},
+		ID:                   "planalto",
+		BiomeKey:             "planalto",
+		Name:                 "Planalto dos Três Poderes",
+		Tier:                 2,
+		Order:                6,
+		MinLevel:             8,
+		MaxLevel:             19,
+		Description:          "Cenário político místico onde militantes e guardiões da lei disputam a Suprema Caneta.",
+		Icon:                 "🏛️",
+		MaxStages:            5,
+		RequiresTierComplete: true,
+		DropsPreview:         []string{"Martelo Constitucional", "Caneta Esferográfica Suprema", "Megafone do Povo", "Toga da Inviolabilidade", "Boina Tática da Puliça", "Pasta Executiva Presidencial", "Tome: Golpe Brutal", "Manual do Mestre de Obras"},
 		Monsters: []Monster{
 			{Key: "planalto_militante", VisualKey: "planalto_militante", Name: "Militante do Treze ⭐️", Level: 8, Health: 165, MaxHealth: 165, Attack: 18, AttackType: AttackTypeMelee},
 			{Key: "planalto_patriota", VisualKey: "planalto_patriota", Name: "Patriota do Caminhão 🇧🇷", Level: 10, Health: 195, MaxHealth: 195, Attack: 22, AttackType: AttackTypeRanged},
@@ -151,19 +285,20 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 	},
 
 	// ─── TIER 3 (LV. 12–20) ─────────────────────────────────────────────────
+	// RequiresTierComplete: true → liberado quando TODOS os chefes do Tier 2 forem derrotados.
 	"rogartes": {
-		ID:                 "rogartes",
-		BiomeKey:           "rogartes",
-		Name:               "Escola de Rogartes",
-		Tier:               3,
-		Order:              6,
-		MinLevel:           12,
-		MaxLevel:           20,
-		Description:        "Escola de magia infestada por dementadores e bruxos das sombras.",
-		Icon:               "🧙‍♂️",
-		MaxStages:          5,
-		RequiresUnlockFrom: "orcruins",
-		DropsPreview:       []string{"Cetro do Esquelético", "Elmo Rúnico", "Peitoral de Platina", "Bolsa Rúnica", "Livro: Bola de Fogo"},
+		ID:                   "rogartes",
+		BiomeKey:             "rogartes",
+		Name:                 "Escola de Rogartes",
+		Tier:                 3,
+		Order:                7,
+		MinLevel:             12,
+		MaxLevel:             20,
+		Description:          "Escola de magia infestada por dementadores e bruxos das sombras.",
+		Icon:                 "🧙‍♂️",
+		MaxStages:            5,
+		RequiresTierComplete: true,
+		DropsPreview:         []string{"Espada de Aço", "Cetro do Esquelético", "Elmo Rúnico", "Peitoral de Platina", "Bolsa Rúnica", "Livro: Bola de Fogo"},
 		Monsters: []Monster{
 			{Key: "rogartes_dementor", VisualKey: "rogartes_dementor", Name: "Dementador das Sombras", Level: 13, Health: 260, MaxHealth: 260, Attack: 29, AttackType: AttackTypeRanged},
 			{Key: "rogartes_troll", VisualKey: "rogartes_troll", Name: "Trasgo das Cavernas", Level: 17, Health: 350, MaxHealth: 350, Attack: 36, AttackType: AttackTypeMelee},
@@ -172,19 +307,20 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 	},
 
 	// ─── TIER 4 (LV. 20–35) ─────────────────────────────────────────────────
+	// RequiresTierComplete: true → liberado quando TODOS os chefes do Tier 3 forem derrotados.
 	"frozen": {
-		ID:                 "frozen",
-		BiomeKey:           "frozen",
-		Name:               "Santuário de Atenas",
-		Tier:               4,
-		Order:              7,
-		MinLevel:           20,
-		MaxLevel:           35,
-		Description:        "Picos congelados guardados pelos Cavaleiros de Ouro e espectros.",
-		Icon:               "🛡️",
-		MaxStages:          5,
-		RequiresUnlockFrom: "rogartes",
-		DropsPreview:       []string{"Katana da Fúria", "Marreta Biônica", "Arco dos Ventos", "Orbe Protetor", "Robe Místico", "Mochila Dragônica", "Livro: Estilhaço de Gelo"},
+		ID:                   "frozen",
+		BiomeKey:             "frozen",
+		Name:                 "Santuário de Atenas",
+		Tier:                 4,
+		Order:                8,
+		MinLevel:             20,
+		MaxLevel:             35,
+		Description:          "Picos congelados guardados pelos Cavaleiros de Ouro e espectros.",
+		Icon:                 "🛡️",
+		MaxStages:            5,
+		RequiresTierComplete: true,
+		DropsPreview:         []string{"Katana da Fúria", "Marreta Biônica", "Arco dos Ventos", "Orbe Protetor", "Robe Místico", "Mochila Dragônica", "Livro: Estilhaço de Gelo"},
 		Monsters: []Monster{
 			{Key: "frozen_specter", VisualKey: "frozen_specter", Name: "Lorde Espectro", Level: 22, Health: 380, MaxHealth: 380, Attack: 40, AttackType: AttackTypeRanged},
 			{Key: "frozen_zombie", VisualKey: "frozen_zombie", Name: "Zumbi Congelado", Level: 25, Health: 440, MaxHealth: 440, Attack: 45, AttackType: AttackTypeMelee},
@@ -195,20 +331,21 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 	},
 
 	// ─── TIER 5 (LV. 35–99) ─────────────────────────────────────────────────
+	// RequiresTierComplete: true → liberado quando TODOS os chefes do Tier 4 forem derrotados.
 	"abyss": {
-		ID:                 "abyss",
-		BiomeKey:           "abyss",
-		Name:               "Caverna do Dragão Perdido",
-		Tier:               5,
-		Order:              8,
-		MinLevel:           35,
-		MaxLevel:           99,
-		Description:        "Abismo vulcânico lendário onde feras guardam relíquias míticas.",
-		Icon:               "🌋",
-		MaxStages:          5,
-		RequiresUnlockFrom: "frozen",
-		DropsPreview:       []string{"Espada Mítica do Vingador", "Lâmina de Greiscu", "Arco Apocalíptico", "Cajado da Eternidade", "Mochila do Zodíaco", "Flechas Divinas"},
-		IsSecret:           true,
+		ID:                   "abyss",
+		BiomeKey:             "abyss",
+		Name:                 "Caverna do Dragão Perdido",
+		Tier:                 5,
+		Order:                9,
+		MinLevel:             35,
+		MaxLevel:             99,
+		Description:          "Abismo vulcânico lendário onde feras guardam relíquias míticas.",
+		Icon:                 "🌋",
+		MaxStages:            5,
+		RequiresTierComplete: true,
+		DropsPreview:         []string{"Espada Mítica do Vingador", "Lâmina de Greiscu", "Arco Apocalíptico", "Cajado da Eternidade", "Escudo do Zodíaco", "Mochila do Zodíaco"},
+		IsSecret:             true,
 		Monsters: []Monster{
 			{Key: "abyss_dragon", VisualKey: "abyss_dragon", Name: "Dragão Cinderino", Level: 40, Health: 900, MaxHealth: 900, Attack: 80, AttackType: AttackTypeRanged},
 			{Key: "abyss_demon", VisualKey: "abyss_demon", Name: "Demônio Ancestral", Level: 50, Health: 1250, MaxHealth: 1250, Attack: 105, AttackType: AttackTypeRanged},
@@ -231,16 +368,22 @@ func GetRandomMonsterForRegion(regionID string, r *rand.Rand) Monster {
 		reg, _ = GetExpeditionRegion(DefaultExpeditionRegionID)
 	}
 	mTemplate := reg.Monsters[r.Intn(len(reg.Monsters))]
+	spd := mTemplate.AttackSpeedSeconds
+	if spd <= 0 {
+		spd = DefaultMonsterAttackSpeed
+	}
 
 	return Monster{
-		Key:        mTemplate.Key,
-		VisualKey:  mTemplate.VisualKey,
-		IsBoss:     mTemplate.IsBoss,
-		Name:       mTemplate.Name,
-		Level:      mTemplate.Level,
-		Health:     mTemplate.Health,
-		MaxHealth:  mTemplate.MaxHealth,
-		Attack:     mTemplate.Attack,
-		AttackType: mTemplate.AttackType,
+		Key:                mTemplate.Key,
+		VisualKey:          mTemplate.VisualKey,
+		IsBoss:             mTemplate.IsBoss,
+		Name:               mTemplate.Name,
+		Level:              mTemplate.Level,
+		Health:             mTemplate.Health,
+		MaxHealth:          mTemplate.MaxHealth,
+		Attack:             mTemplate.Attack,
+		AttackType:         mTemplate.AttackType,
+		AttackSpeedSeconds: spd,
+		AttackCooldownSec:  spd,
 	}
 }

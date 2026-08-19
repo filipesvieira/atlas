@@ -11,9 +11,15 @@ func offlineFixture() OfflineSimulationInput {
 	rng := rand.New(rand.NewSource(7))
 	sword := GenerateItemFromTemplate("Sabre de Bronze", "Raro", rng)
 	shield := GenerateItemFromTemplate("Escudo de Madeira", "Raro", rng)
+	// Fixture deliberadamente forte: os testes de progressão abaixo validam
+	// o caminho de vitória; a derrota é coberta por um cenário dedicado.
+	sword.PhysicalAttack = 120
+	sword.Attack = 120
+	sword.Lifesteal = 20
+	shield.Defense = 120
 	start := time.Date(2026, 8, 6, 8, 0, 0, 0, time.UTC)
 	return OfflineSimulationInput{
-		Character:          &CharacterData{ID: "char_test", Level: 12, STR: 20, DEX: 8, INT: 6, VIT: 18, ActiveRegion: "orcruins", ActiveStance: "balanced"},
+		Character:          &CharacterData{ID: "char_test", Level: 12, STR: 20, DEX: 8, INT: 6, VIT: 80, ActiveRegion: "orcruins", ActiveStance: "balanced"},
 		Inventory:          &InventoryData{Equipment: EquipmentSlots{MainHand: sword, OffHand: shield}, Backpack: []Item{}, Cap: 1500},
 		IsExpeditionActive: true,
 		ActiveRegion:       "orcruins",
@@ -81,15 +87,19 @@ func TestOfflineProgressAdvancesStagesAndUnlocksBossRegion(t *testing.T) {
 	if result.BossesDefeated <= 0 || result.ExpeditionsCompleted <= 0 {
 		t.Fatalf("a simulação longa não concluiu o ciclo de boss: %+v", result)
 	}
-	foundRogartes := false
+	// Nova semântica: RegionsUnlocked contém o ID da própria região derrotada
+	// (marcador "boss derrotado"), não as próximas regiões.
+	// O fixture usa ActiveRegion = "orcruins", então após derrotar o boss de orcruins
+	// esperamos "orcruins" em RegionsUnlocked.
+	foundOrcruins := false
 	for _, regionID := range result.RegionsUnlocked {
-		if regionID == "rogartes" {
-			foundRogartes = true
+		if regionID == "orcruins" {
+			foundOrcruins = true
 			break
 		}
 	}
-	if !foundRogartes {
-		t.Fatalf("boss de orcruins não desbloqueou rogartes: %+v", result.RegionsUnlocked)
+	if !foundOrcruins {
+		t.Fatalf("boss de orcruins não foi registrado como derrotado: %+v", result.RegionsUnlocked)
 	}
 	if result.FinalStage < 1 || result.FinalStage > 5 {
 		t.Fatalf("fase final inválida: %d", result.FinalStage)
@@ -103,7 +113,8 @@ func TestOfflineBossUnlockOrderIsDeterministicAndOnlyNewRegions(t *testing.T) {
 	input := offlineFixture()
 	input.ActiveRegion = "forest"
 	input.Character.ActiveRegion = "forest"
-	input.Character.UnlockedRegions = []string{"forest", "shereque", "chapolin"}
+	// Personagem sem nenhum boss derrotado ainda
+	input.Character.UnlockedRegions = []string{}
 	input.CurrentStage = 5
 	input.IsBossStage = true
 	input.PeriodEnd = input.PeriodStart.Add(30 * time.Minute)
@@ -112,7 +123,117 @@ func TestOfflineBossUnlockOrderIsDeterministicAndOnlyNewRegions(t *testing.T) {
 	if !reflect.DeepEqual(first.RegionsUnlocked, second.RegionsUnlocked) {
 		t.Fatalf("ordem de desbloqueios não determinística: %v / %v", first.RegionsUnlocked, second.RegionsUnlocked)
 	}
-	if len(first.RegionsUnlocked) != 3 || first.RegionsUnlocked[0] != "esgotos" || first.RegionsUnlocked[1] != "orcruins" || first.RegionsUnlocked[2] != "planalto" {
-		t.Fatalf("desbloqueios inesperados: %v", first.RegionsUnlocked)
+	// Nova semântica: apenas "forest" é registrado (boss da floresta derrotado),
+	// não mais as próximas regiões. Rogartes/Esgotos/Planalto são desbloqueados implicitamente
+	// via CheckRegionAvailability quando todos os chefes do Tier 1 estiverem em UnlockedRegions.
+	if len(first.RegionsUnlocked) != 1 || first.RegionsUnlocked[0] != "forest" {
+		t.Fatalf("desbloqueios inesperados: %v (esperado [forest])", first.RegionsUnlocked)
+	}
+}
+
+func TestOfflineSimulationStopsOnDefeatWithoutGrantingIncompleteBoss(t *testing.T) {
+	rng := rand.New(rand.NewSource(19))
+	starter := GenerateItemFromTemplate("Espada do Aprendiz", "Comum", rng)
+	start := time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
+	input := OfflineSimulationInput{
+		Character:          &CharacterData{ID: "weak_char", Level: 5, Health: 345, STR: 5, DEX: 5, INT: 5, VIT: 5, ActiveRegion: "frozen", ActiveStance: "balanced"},
+		Inventory:          &InventoryData{Equipment: EquipmentSlots{MainHand: starter}, Backpack: []Item{}, Cap: 1500},
+		IsExpeditionActive: true,
+		ActiveRegion:       "frozen",
+		ActiveStance:       "balanced",
+		CurrentStage:       5,
+		IsBossStage:        true,
+		PeriodStart:        start,
+		PeriodEnd:          start.Add(30 * time.Minute),
+		StateRevision:      1,
+		Seed:               91,
+	}
+
+	result := CalculateOfflineProgress(input)
+	if !result.Defeated || result.StoppedReason != "derrotado_durante_simulacao_offline" {
+		t.Fatalf("herói fraco deveria ser derrotado: %+v", result)
+	}
+	if result.BossesDefeated != 0 || result.BossesRewarded != 0 || len(result.BossTrophies) != 0 {
+		t.Fatalf("onda de chefe incompleta concedeu recompensa: %+v", result)
+	}
+	if result.FinalStage != 1 || result.IsBossStageAfter {
+		t.Fatalf("derrota não resetou a expedição: %+v", result)
+	}
+	if result.HealthAfter <= 0 {
+		t.Fatalf("vida de retorno inválida: %d", result.HealthAfter)
+	}
+}
+
+func TestOfflineBossSpecialRewardsAreCappedPerAbsence(t *testing.T) {
+	input := offlineFixture()
+	input.ActiveRegion = "forest"
+	input.Character.ActiveRegion = "forest"
+	input.CurrentStage = 5
+	input.IsBossStage = true
+	input.PeriodEnd = input.PeriodStart.Add(MaximumOfflineMinutes * time.Minute)
+	input.Inventory.Equipment.MainHand.PhysicalAttack = 5000
+	input.Inventory.Equipment.MainHand.Attack = 5000
+	input.Inventory.Equipment.MainHand.Lifesteal = 100
+	input.Inventory.Equipment.OffHand.Defense = 5000
+
+	result := CalculateOfflineProgress(input)
+	if result.BossesRewarded > MaximumOfflineRewardedBosses {
+		t.Fatalf("limite de recompensa de chefe excedido: %d", result.BossesRewarded)
+	}
+	var trophies int64
+	for _, trophy := range result.BossTrophies {
+		trophies += trophy.Quantity
+	}
+	if trophies > int64(MaximumOfflineRewardedBosses) {
+		t.Fatalf("troféus excederam o limite de chefes premiados: %d", trophies)
+	}
+}
+
+func TestOfflineSimulationAutoResumesAndFarmsOverFullDuration(t *testing.T) {
+	rng := rand.New(rand.NewSource(42))
+	sword := GenerateItemFromTemplate("Sabre de Bronze", "Raro", rng)
+	sword.PhysicalAttack = 45
+	sword.Attack = 45
+	sword.Lifesteal = 8
+	shield := GenerateItemFromTemplate("Escudo de Madeira", "Raro", rng)
+	shield.Defense = 35
+	start := time.Date(2026, 8, 17, 18, 41, 47, 0, time.UTC)
+	input := OfflineSimulationInput{
+		Character: &CharacterData{
+			ID:                   "player_13",
+			Level:                13,
+			Health:               417,
+			STR:                  25,
+			DEX:                  15,
+			INT:                  5,
+			VIT:                  35,
+			ActiveRegion:         "sewers",
+			ActiveStance:         "balanced",
+			AutoResumeExpedition: true, // Auto-retorno ativo
+		},
+		Inventory:          &InventoryData{Equipment: EquipmentSlots{MainHand: sword, OffHand: shield}, Backpack: []Item{}, Cap: 1500},
+		IsExpeditionActive: true,
+		ActiveRegion:       "sewers",
+		ActiveStance:       "balanced",
+		CurrentStage:       1,
+		IsBossStage:        false,
+		PeriodStart:        start,
+		PeriodEnd:          start.Add(174 * time.Minute), // 174 minutos como na imagem do usuário
+		StateRevision:      1,
+		Seed:               777,
+	}
+
+	result := CalculateOfflineProgress(input)
+	if result.MinutesOffline != 174 {
+		t.Fatalf("tempo offline incorreto: %d", result.MinutesOffline)
+	}
+	if result.WavesCompleted < 20 {
+		t.Fatalf("esperava dezenas de ondas completadas em 174min com auto-retorno, mas obteve %d", result.WavesCompleted)
+	}
+	if result.Kills < 25 {
+		t.Fatalf("esperava muitos abates em 174min, obteve %d", result.Kills)
+	}
+	if result.XPGained < 5000 {
+		t.Fatalf("esperava muito XP acumulado em 174min, obteve %d", result.XPGained)
 	}
 }

@@ -1,27 +1,47 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { AuthScreen } from './components/Auth/AuthScreen';
 import { CharacterScreen } from './components/Auth/CharacterScreen';
 import { DashboardGrid } from './components/Dashboard/DashboardGrid';
 import { OfflineSummaryModal } from './components/Modal/OfflineSummaryModal';
+import { GameTutorialModal } from './components/Modal/GameTutorialModal';
 import { API_BASE_URL } from './config';
 
 export function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('atlas_token'));
+  const [account, setAccount] = useState<any>(() => {
+    try { return JSON.parse(localStorage.getItem('atlas_account') || 'null'); } catch { return null; }
+  });
   const [character, setCharacter] = useState<any>(null);
   const [offlineData, setOfflineData] = useState<any | null>(null);
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [selectingCharacterId, setSelectingCharacterId] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
 
-  const handleAuthSuccess = (newToken: string) => {
+  // Abertura automática no primeiro acesso ao selecionar o personagem
+  useEffect(() => {
+    if (character) {
+      const dontShow = localStorage.getItem('atlas_tutorial_dont_show_auto') === 'true';
+      if (!dontShow) {
+        const timer = setTimeout(() => setIsTutorialOpen(true), 600);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [character?.id]);
+
+  const handleAuthSuccess = (newToken: string, authenticatedAccount: any) => {
     setToken(newToken);
+    setAccount(authenticatedAccount);
     localStorage.setItem('atlas_token', newToken);
+    localStorage.setItem('atlas_account', JSON.stringify(authenticatedAccount || null));
   };
 
   const handleLogout = () => {
     setToken(null);
+    setAccount(null);
     setCharacter(null);
     setSelectionError(null);
     localStorage.removeItem('atlas_token');
+    localStorage.removeItem('atlas_account');
   };
 
   const handleSelectCharacter = async (char: any) => {
@@ -37,6 +57,13 @@ export function App() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
+
+      if (res.status === 401 || res.status === 403) {
+        console.warn('Token JWT expirado durante o claim offline. Realizando logout...');
+        handleLogout();
+        return;
+      }
+
       if (!res.ok) {
         throw new Error(`Falha no claim offline (${res.status})`);
       }
@@ -63,7 +90,11 @@ export function App() {
   const handleCharacterUpdate = useCallback((updatedChar: any) => {
     if (updatedChar) {
       // XP, ouro, HP, região e fase também são autoritativos; não apenas nome/nível.
-      setCharacter((prev: any) => ({ ...prev, ...updatedChar }));
+	  setCharacter((prev: any) => {
+		const previousRevision = prev?.state_revision ?? 0;
+		const incomingRevision = updatedChar?.state_revision ?? previousRevision;
+		return incomingRevision < previousRevision ? prev : { ...prev, ...updatedChar };
+	  });
     }
   }, []);
 
@@ -85,7 +116,7 @@ export function App() {
               {selectionError}
             </div>
           )}
-          <CharacterScreen token={token} onSelectCharacter={handleSelectCharacter} />
+          <CharacterScreen token={token} isAdmin={account?.role === 'admin'} onSelectCharacter={handleSelectCharacter} onLogout={handleLogout} />
         </>
       ) : (
         <>
@@ -103,12 +134,24 @@ export function App() {
               </div>
             </div>
 
-            <div className="flex items-center gap-4 text-xs font-mono">
+            <div className="flex items-center gap-3 text-xs font-mono">
               <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-800 text-slate-200 border border-slate-700 shadow-inner">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span className="font-semibold text-amber-400">{character.name}</span>
                 <span className="text-slate-400">(Lv. {character.level})</span>
               </div>
+
+              {account?.role === 'admin' && <span className="rounded border border-fuchsia-500/40 bg-fuchsia-950/40 px-2 py-1 text-[10px] font-black text-fuchsia-300">🧪 QA ADMIN</span>}
+
+              {/* Botão de Ícone do Livro para o Guia do Jogo */}
+              <button
+                onClick={() => setIsTutorialOpen(true)}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 border border-slate-700 hover:border-amber-500/50 transition flex items-center justify-center text-sm shadow-sm"
+                title="📖 Guia do Aventureiro & Manual do Jogo"
+              >
+                <span>📖</span>
+              </button>
+
               <button
                 onClick={handleLogout}
                 className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/60 hover:text-rose-300 text-slate-300 border border-slate-700 transition"
@@ -126,6 +169,12 @@ export function App() {
               onCharacterUpdate={handleCharacterUpdate}
             />
           </main>
+
+          {/* Modal do Guia do Jogo & Tutorial */}
+          <GameTutorialModal
+            isOpen={isTutorialOpen}
+            onClose={() => setIsTutorialOpen(false)}
+          />
         </>
       )}
     </div>

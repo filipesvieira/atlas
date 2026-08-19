@@ -9,19 +9,19 @@ type StarterItemDefinition struct {
 }
 
 type StarterPackDefinition struct {
-	ID          string                  `json:"id"`
-	Aliases     []string                `json:"-"`
-	Vocation    string                  `json:"vocation"`
-	Title       string                  `json:"title"`
-	Subtitle    string                  `json:"subtitle"`
-	KitLabel    string                  `json:"kit_label"`
-	StatFocus   string                  `json:"stat_focus"`
-	Details     []string                `json:"details"`
-	Accent      string                  `json:"accent"`
-	MainHand    *StarterItemDefinition  `json:"-"`
-	OffHand     *StarterItemDefinition  `json:"-"`
-	Ammo        *StarterItemDefinition  `json:"-"`
-	Backpack    []StarterItemDefinition `json:"-"`
+	ID        string                  `json:"id"`
+	Aliases   []string                `json:"-"`
+	Vocation  string                  `json:"vocation"`
+	Title     string                  `json:"title"`
+	Subtitle  string                  `json:"subtitle"`
+	KitLabel  string                  `json:"kit_label"`
+	StatFocus string                  `json:"stat_focus"`
+	Details   []string                `json:"details"`
+	Accent    string                  `json:"accent"`
+	MainHand  *StarterItemDefinition  `json:"-"`
+	OffHand   *StarterItemDefinition  `json:"-"`
+	Ammo      *StarterItemDefinition  `json:"-"`
+	Backpack  []StarterItemDefinition `json:"-"`
 }
 
 var StarterPacks = []StarterPackDefinition{

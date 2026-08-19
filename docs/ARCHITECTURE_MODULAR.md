@@ -20,7 +20,7 @@ Premissas preservadas:
 
 ```mermaid
 flowchart TD
-    Catalog["Backend GameCatalog"] --> UI["UI de Expedições / Onboarding"]
+    Catalog["Backend GameCatalog"] --> UI["UI de Expedições / Ajuda Classless"]
     Regions["ExpeditionRegions"] --> Catalog
     Regions --> MR["MonsterRegistry"]
     Loot["MonsterLootProfileMap"] --> MR
@@ -42,7 +42,7 @@ uma segunda `WORLD_REGIONS` que poderia divergir.
 | Expedições e fases | `backend/pkg/game/expeditions.go` | engine, offline, GameCatalog |
 | Loot por monstro | `MonsterLootProfileMap` em `loot.go` | `MonsterRegistry`, gerador de loot |
 | Itens/equipamentos | `lootTemplates` + `ItemRegistry` | loot, starters, equipamento |
-| Starter packs | `backend/pkg/game/starter_packs.go` | engine + onboarding via GameCatalog |
+| Estilos classless | `backend/pkg/game/starter_packs.go` | ajuda de estilos via GameCatalog; handler legado compatível |
 | Biomas visuais | `BiomeRegistry.ts` + `BiomeRenderers.ts` | `GameViewport` |
 | Heróis visuais | `HeroRegistry.ts` + `HeroRenderers.ts` | `GameViewport` |
 | Monstros visuais | `MonsterRegistry.ts` + `renderers/monsters/tier*.ts` | `PixelArtRenderer`, `GameViewport` |
@@ -67,8 +67,9 @@ uma segunda `WORLD_REGIONS` que poderia divergir.
   inferência por nome (`dragão`, `chamas` etc.).
 - `WORLD_REGIONS` foi removido. As abas de tier, limites de nível, boss,
   `maxStages` e previews vêm do backend.
-- O onboarding não contém mais três kits hardcoded; ele renderiza
-  `starter_packs` do catálogo.
+- A antiga escolha de kit foi removida. `CombatStylesHelpModal` renderiza os
+  metadados de `starter_packs` apenas como ajuda; toda troca real de estilo
+  acontece ao equipar armas.
 - URLs HTTP/WS foram centralizadas em `config.ts` e aceitam
   `VITE_API_BASE_URL` / `VITE_WS_BASE_URL`.
 - `SpriteGenerator.ts`, que não possuía consumidores e mantinha regras visuais
@@ -140,11 +141,12 @@ Crie seu renderer em `HeroRenderers` (ou em um módulo dedicado) e registre a
 vocação/aliases e `attackStyle` em `HeroRegistry`. O viewport permanece
 inalterado.
 
-### Novo starter pack
+### Novo estilo de combate documentado
 
-Adicione uma entrada em `StarterPacks`. A UI recebe automaticamente o novo
-pack pelo GameCatalog. Se a vocação introduzir uma aparência inédita, registre
-também o visual no `HeroRegistry`.
+Adicione uma entrada em `StarterPacks`. A ajuda recebe automaticamente o novo
+estilo pelo GameCatalog. Isso não cria uma classe nem concede outro kit. Se o
+estilo introduzir uma aparência inédita, registre também o visual no
+`HeroRegistry`.
 
 ## O que permaneceu como switch de propósito
 
@@ -203,4 +205,3 @@ renderers; o motor trabalha apenas com contratos e keys estáveis**.
 - `ItemIcon.tsx`: Fachada para ícones vetoriais SVG de 15 slots/armas, helpers universais de raridade (`getRarityStyle`), rótulos canônicos de slots (`getSlotLabel`), badges de atributos (`BonusBadges`) e normalização de nomes (`getCleanItemName`).
 - `TibiaEquipmentGrid.tsx`: Grid 3x4 estilo Tibia, barras clássicas de HP/Mana com gradientes, cálculo de capacidade em tempo real e Super Tooltip com bônus de atributos e requisitos de nível sincronizados.
 - `TibiaBackpackModal.tsx`: Modal responsivo de inventário com barra de filtros (tipos de equipamento e raridades), busca instantânea, cálculo de bônus globais e fluxo de venda de itens em lote.
-

@@ -7,7 +7,7 @@ const expeditionSource = read('backend/pkg/game/expeditions.go');
 const lootSource = read('backend/pkg/game/loot.go');
 
 const templates = new Map();
-for (const match of lootSource.matchAll(/^\s*\{Name: "([^"]+)".*?RequiredLevel: (\d+), Tier: (\d+).*?\},$/gm)) {
+for (const match of lootSource.matchAll(/^\s*\{(?:Key:\s*"[^"]+",\s*)?Name:\s*"([^"]+)".*?RequiredLevel:\s*(\d+),\s*Tier:\s*(\d+).*?\},$/gm)) {
   templates.set(match[1], { requiredLevel: Number(match[2]), tier: Number(match[3]) });
 }
 
@@ -117,6 +117,7 @@ const summary = {
   monstersAndBosses: monsterCount,
   lootProfiles: profiles.size,
   itemTemplates: templates.size,
+  equipmentDropPolicy: 'common_monsters=materials_only; bosses=rare_direct_drop',
   monsterVisuals: visualKeys.size,
   errors: errors.length,
 };

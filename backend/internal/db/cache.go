@@ -1,10 +1,10 @@
 package db
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
 	"time"
-	"fmt"
 
 	"github.com/atlas/backend/pkg/game"
 )
@@ -62,18 +62,18 @@ func LoadBaseItems() {
 		}
 
 		item := &game.Item{
-			ID:            id, // We'll override this when spawning so they don't stack perfectly, or keep base ID + random suffix
-			Name:          name,
+			ID:             id, // We'll override this when spawning so they don't stack perfectly, or keep base ID + random suffix
+			Name:           name,
 			PhysicalAttack: atk,
 			MagicAttack:    0,
 			Hands:          1,
 			ValueGold:      int64(10 * tier),
-			Defense:       def,
-			Weight:        weight,
-			Rarity:        rarity,
-			SpecialEffect: effect,
-			SlotType:      slot,
-			Tier:          tier,
+			Defense:        def,
+			Weight:         weight,
+			Rarity:         rarity,
+			SpecialEffect:  effect,
+			SlotType:       slot,
+			Tier:           tier,
 		}
 		BaseItems = append(BaseItems, item)
 	}
@@ -176,11 +176,11 @@ func GetRandomLoot(playerLevel int, r *rand.Rand) *game.Item {
 	}
 
 	chosen := validItems[r.Intn(len(validItems))]
-	
+
 	// Create a copy to give a unique ID
 	newItem := *chosen
 	newItem.ID = fmt.Sprintf("%s-%d-%d", chosen.ID, time.Now().UnixNano(), r.Intn(10000))
-	
+
 	// Sorteia raridade (prefixo/sufixo) simulado
 	rarityRoll := r.Float64()
 	if rarityRoll < 0.05 {

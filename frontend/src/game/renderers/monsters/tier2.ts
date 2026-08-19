@@ -964,4 +964,3 @@ export const tier2MonsterVisuals: MonsterVisualDefinition[] = [
     },
   },
 ];
-

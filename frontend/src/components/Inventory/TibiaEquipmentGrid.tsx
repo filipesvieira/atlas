@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { TibiaBackpackModal, Item, EquipmentSlots } from './TibiaBackpackModal';
-import { ItemIcon, getCleanItemName, getItemAttack, getRarityStyle, BonusBadges, getSlotLabel } from './ItemIcon';
+import { ItemIcon, getCleanItemName, getItemAttack, getItemStatBadge, getRarityStyle, BonusBadges, getSlotLabel, getHandsBadge } from './ItemIcon';
+import { ResourceDepotButton } from '../Camp/ResourceDepotButton';
+import { CampButton } from '../Camp/CampButton';
 import type { DerivedStats } from '../../hooks/useGameSocket';
 
-export type { Item, EquipmentSlots };
-
-interface TibiaEquipmentGridProps {
+export interface TibiaEquipmentGridProps {
   character?: any;
   derivedStats?: DerivedStats | null;
   equipment?: EquipmentSlots;
@@ -17,13 +17,20 @@ interface TibiaEquipmentGridProps {
   maxHealth?: number;
   mana?: number;
   maxMana?: number;
+  storageUsed?: number;
+  storageCapacity?: number;
+  activeConstructionSlots?: number;
+  maxConstructionSlots?: number;
+  onOpenDepot?: () => void;
+  onOpenCamp?: () => void;
   onEquipItem?: (itemId: string, slot: string) => void;
   onUnequipItem?: (slot: string) => void;
   onDiscardItem?: (itemId: string) => void;
   onBulkSell?: (itemIds: string[]) => void;
+  onLearnBlueprint?: (itemId: string) => void;
 }
 
-interface SlotItemProps {
+export interface SlotItemProps {
   item?: Item | null;
   placeholderIcon: string;
   label: string;
@@ -32,7 +39,7 @@ interface SlotItemProps {
   onUnequip?: (slot: string) => void;
 }
 
-function SlotItem({ item, placeholderIcon, label, slotKey, charLevel = 1, onUnequip }: SlotItemProps) {
+export function SlotItem({ item, placeholderIcon, label, slotKey, charLevel = 1, onUnequip }: SlotItemProps) {
   const style = item ? getRarityStyle(item.rarity) : {
     border: 'border-slate-800 bg-slate-950/80 hover:border-slate-700',
     text: 'text-slate-600',
@@ -46,7 +53,7 @@ function SlotItem({ item, placeholderIcon, label, slotKey, charLevel = 1, onUneq
   const cleanName = item ? getCleanItemName(item.name) : label;
   const isRightSlot = slotKey === 'bag' || slotKey === 'offhand' || slotKey === 'ammo';
   const tooltipPos = isRightSlot ? 'right-full mr-3 -top-2' : 'left-full ml-3 -top-2';
-  const atkVal = item ? getItemAttack(item) : 0;
+  const statBadge = getItemStatBadge(item);
   const isLevelLocked = item?.required_level ? charLevel < item.required_level : false;
 
   return (
@@ -67,9 +74,9 @@ function SlotItem({ item, placeholderIcon, label, slotKey, charLevel = 1, onUneq
             size="md"
             className={`${style.text} opacity-90 transition-transform group-hover:scale-110`}
           />
-          {(atkVal > 0 || (item.defense || 0) > 0) && (
-            <div className="text-[8px] font-mono text-emerald-400 font-bold leading-none mt-0.5">
-              +{atkVal > 0 ? `${atkVal}A` : `${item.defense}D`}
+          {statBadge && (
+            <div className={`text-[8px] font-mono font-bold leading-none mt-0.5 ${statBadge.colorClass}`}>
+              {statBadge.text}
             </div>
           )}
         </div>
@@ -106,13 +113,29 @@ function SlotItem({ item, placeholderIcon, label, slotKey, charLevel = 1, onUneq
 
           {/* Estatísticas Principais */}
           <div className="flex justify-between text-[10px] font-mono mb-1">
-            <span className="text-rose-400 font-bold">Atk: +{atkVal}</span>
+            {item.magic_attack ? (
+              <span className="text-cyan-300 font-bold">Magia: +{item.magic_attack}</span>
+            ) : (
+              <span className="text-rose-400 font-bold">Atk: +{getItemAttack(item)}</span>
+            )}
             <span className="text-sky-400 font-bold">Def: +{item.defense || 0}</span>
             <span className="text-slate-400">{(item.weight || 0).toFixed(1)} oz</span>
           </div>
 
           {/* Badges de Bônus de Atributos */}
           <BonusBadges item={item} />
+
+          {/* Badge de Duas Mãos vs Uma Mão */}
+          {(() => {
+            const handsBadge = getHandsBadge(item);
+            if (!handsBadge) return null;
+            return (
+              <div className={`text-[9px] font-mono px-1.5 py-0.5 rounded border mt-1.5 flex items-center justify-between gap-1 ${handsBadge.badgeClass}`}>
+                <span className="font-bold">{handsBadge.icon} {handsBadge.label}</span>
+                <span className="text-[8px] opacity-80">{handsBadge.shortLabel}</span>
+              </div>
+            );
+          })()}
 
           {/* Efeito Especial */}
           {item.special_effect && (
@@ -138,29 +161,30 @@ export function TibiaEquipmentGrid({
   cap = 1500,
   totalAttack = 15,
   totalDefense = 5,
-  health = 150,
-  maxHealth = 150,
-  mana = 50,
-  maxMana = 50,
+  storageUsed = 0,
+  storageCapacity = 500,
+  activeConstructionSlots = 0,
+  maxConstructionSlots = 1,
+  onOpenDepot,
+  onOpenCamp,
   onEquipItem,
   onUnequipItem,
   onDiscardItem,
   onBulkSell,
+  onLearnBlueprint,
 }: TibiaEquipmentGridProps) {
   const [isBackpackOpen, setIsBackpackOpen] = useState(false);
 
   const safeBackpack = Array.isArray(backpack) ? backpack : [];
   const safeEquipment = equipment || {};
 
-  const hpPercent = Math.max(0, Math.min(100, Math.round((health / maxHealth) * 100)));
-  const manaPercent = Math.max(0, Math.min(100, Math.round((mana / maxMana) * 100)));
-
-  // Bônus de Peso e Slots por Raridade da Mochila (Bag)
+  // Bônus de Peso e Slots por Raridade da Mochila (Bag) sincronizado autoritativamente
   let bagCapBonus = 0;
   let bagSlotsBonus = 0;
 
   if (safeEquipment.bag) {
-    switch (safeEquipment.bag.rarity) {
+    const bagRarity = safeEquipment.bag.rarity || 'Comum';
+    switch (bagRarity) {
       case 'Comum':
         bagCapBonus = 200;
         bagSlotsBonus = 4;
@@ -173,30 +197,33 @@ export function TibiaEquipmentGrid({
         bagCapBonus = 500;
         bagSlotsBonus = 8;
         break;
+      case 'Épico':
+        bagCapBonus = 650;
+        bagSlotsBonus = 10;
+        break;
       case 'Lendário':
         bagCapBonus = 800;
         bagSlotsBonus = 12;
         break;
+      case 'Mítico':
+        bagCapBonus = 1000;
+        bagSlotsBonus = 14;
+        break;
+      case 'Divino':
+        bagCapBonus = 1300;
+        bagSlotsBonus = 16;
+        break;
       default:
-        bagCapBonus = 300;
-        bagSlotsBonus = 8;
+        bagCapBonus = 200;
+        bagSlotsBonus = 4;
     }
   }
 
-  const maxSlots = 20 + bagSlotsBonus;
-  const effectiveCap = derivedStats ? derivedStats.total_capacity : (cap + bagCapBonus);
+  const effectiveCap = derivedStats?.total_capacity || (cap + bagCapBonus);
+  const maxSlots = derivedStats?.max_slots || (20 + bagSlotsBonus);
 
-  // Peso total da mochila
-  const backpackWeight = safeBackpack.reduce((sum, item) => sum + (item ? (item.weight || 0) : 0), 0);
-  
-  // Peso dos equipamentos
-  const equipWeight = [
-    safeEquipment.head, safeEquipment.chest, safeEquipment.legs, safeEquipment.boots,
-    safeEquipment.mainhand, safeEquipment.offhand, safeEquipment.necklace, safeEquipment.ring,
-    safeEquipment.ammo, safeEquipment.bag
-  ].reduce((sum, item) => sum + (item ? (item.weight || 0) : 0), 0);
-
-  const totalWeight = backpackWeight + equipWeight;
+  // Cálculo de Peso Total Ocupado
+  const totalWeight = safeBackpack.reduce((acc, item) => acc + (item?.weight || 0), 0);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-xl text-slate-100 flex flex-col gap-3">
@@ -205,70 +232,35 @@ export function TibiaEquipmentGrid({
         <h3 className="font-bold text-xs text-amber-400 flex items-center gap-1.5">
           <span>🛡️</span> Equipamentos do Aventureiro
         </h3>
-        <div className="flex gap-2 text-[11px] font-mono">
-          <span className="text-amber-300 font-semibold">Atk: {totalAttack}</span>
-          <span className="text-sky-300 font-semibold">Def: {totalDefense}</span>
-        </div>
       </div>
 
-      {/* Tibia Classic Bars (HP Vermelho / Mana Azul) */}
-      <div className="space-y-1.5 bg-slate-950 p-2 rounded-lg border border-slate-800 shadow-inner">
-        {/* Barra de HP Tibia */}
-        <div className="space-y-0.5">
-          <div className="flex justify-between text-[11px] font-mono">
-            <span className="text-rose-400 font-bold flex items-center gap-1">❤️ HP</span>
-            <span className="text-rose-300 font-bold">{health} / {maxHealth}</span>
-          </div>
-          <div className="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-rose-950 shadow-inner">
-            <div
-              className="bg-gradient-to-r from-rose-700 via-rose-500 to-rose-400 h-full transition-all duration-300 shadow"
-              style={{ width: `${hpPercent}%` }}
-            ></div>
-          </div>
-        </div>
-
-        {/* Barra de Mana Tibia */}
-        <div className="space-y-0.5">
-          <div className="flex justify-between text-[11px] font-mono">
-            <span className="text-sky-400 font-bold flex items-center gap-1">💙 Mana</span>
-            <span className="text-sky-300 font-bold">{mana} / {maxMana}</span>
-          </div>
-          <div className="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-sky-950 shadow-inner">
-            <div
-              className="bg-gradient-to-r from-sky-700 via-sky-500 to-sky-400 h-full transition-all duration-300 shadow"
-              style={{ width: `${manaPercent}%` }}
-            ></div>
-          </div>
-        </div>
-      </div>
-
-      {/* Grid 3x4 Estilo Tibia */}
-      <div className="flex flex-col items-center justify-center bg-slate-950 p-3 rounded-xl border border-slate-800 shadow-inner">
-        {/* Linha 1: Necklace | Head | Backpack */}
+      {/* Grid Clássico Tibia 3x4 (10 Slots + Centralizado) */}
+      <div className="bg-slate-950/90 border border-slate-800/80 rounded-xl p-3 shadow-inner flex flex-col items-center">
+        {/* Linha 1: Necklace (Colar) | Head (Elmo) | Bag (Mochila) */}
         <div className="flex gap-2.5 mb-2">
-          <SlotItem item={safeEquipment.necklace} placeholderIcon="📿" label="Necklace" slotKey="necklace" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
-          <SlotItem item={safeEquipment.head} placeholderIcon="🪖" label="Head" slotKey="head" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
-          <SlotItem item={safeEquipment.bag} placeholderIcon="🎒" label="Bag" slotKey="bag" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.necklace} placeholderIcon="📿" label="Colar" slotKey="necklace" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.head} placeholderIcon="🪖" label="Elmo" slotKey="head" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.bag} placeholderIcon="🎒" label="Mochila" slotKey="bag" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
         </div>
 
-        {/* Linha 2: MainHand | Chest | OffHand */}
+        {/* Linha 2: MainHand (Arma) | Chest (Armadura) | OffHand (Escudo) */}
         <div className="flex gap-2.5 mb-2">
-          <SlotItem item={safeEquipment.mainhand} placeholderIcon="⚔️" label="Weapon" slotKey="mainhand" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
-          <SlotItem item={safeEquipment.chest} placeholderIcon="🛡️" label="Chest" slotKey="chest" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
-          <SlotItem item={safeEquipment.offhand} placeholderIcon="🛡️" label="Shield" slotKey="offhand" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.mainhand} placeholderIcon="🗡️" label="Arma" slotKey="mainhand" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.chest} placeholderIcon="🥋" label="Armadura" slotKey="chest" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.offhand} placeholderIcon="🛡️" label="Escudo" slotKey="offhand" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
         </div>
 
-        {/* Linha 3: Ring | Legs | Ammo */}
+        {/* Linha 3: Ring (Anel) | Legs (Calça) | Ammo (Munição) */}
         <div className="flex gap-2.5 mb-2">
-          <SlotItem item={safeEquipment.ring} placeholderIcon="💍" label="Ring" slotKey="ring" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
-          <SlotItem item={safeEquipment.legs} placeholderIcon="👖" label="Legs" slotKey="legs" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
-          <SlotItem item={safeEquipment.ammo} placeholderIcon="🏹" label="Ammo" slotKey="ammo" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.ring} placeholderIcon="💍" label="Anel" slotKey="ring" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.legs} placeholderIcon="👖" label="Calça" slotKey="legs" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.ammo} placeholderIcon="🏹" label="Munição" slotKey="ammo" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
         </div>
 
-        {/* Linha 4: Boots */}
+        {/* Linha 4: Vazio | Boots (Bota) | Vazio */}
         <div className="flex gap-2.5">
           <div className="w-11 h-11"></div>
-          <SlotItem item={safeEquipment.boots} placeholderIcon="🥾" label="Boots" slotKey="boots" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
+          <SlotItem item={safeEquipment.boots} placeholderIcon="🥾" label="Bota" slotKey="boots" charLevel={character?.level || 1} onUnequip={onUnequipItem} />
           <div className="w-11 h-11"></div>
         </div>
 
@@ -277,9 +269,15 @@ export function TibiaEquipmentGrid({
           <span>Capacidade (Cap):</span>
           <span className="text-amber-400 font-bold">{Math.max(0, effectiveCap - totalWeight).toFixed(1)} / {effectiveCap.toFixed(1)} oz</span>
         </div>
+
+        {/* Saldo Bancário */}
+        <div className="w-full flex justify-between items-center text-[11px] font-mono mt-1 pt-1.5 border-t border-slate-800 text-slate-400">
+          <span>Saldo Bancário:</span>
+          <span className="text-amber-300 font-bold">💰 {character?.gold_bank?.toLocaleString() || 0} Gold</span>
+        </div>
       </div>
 
-      {/* Botão de Abertura da Mochila em Modal */}
+      {/* Botões de Abertura: Mochila, Depósito e Acampamento */}
       <div className="space-y-2">
         <button
           onClick={() => setIsBackpackOpen(true)}
@@ -292,6 +290,22 @@ export function TibiaEquipmentGrid({
             {safeBackpack.length} / {maxSlots} Slots
           </span>
         </button>
+
+        {onOpenDepot && (
+          <ResourceDepotButton
+            storageUsed={storageUsed}
+            storageCapacity={storageCapacity}
+            onClick={onOpenDepot}
+          />
+        )}
+
+        {onOpenCamp && (
+          <CampButton
+            activeSlots={activeConstructionSlots}
+            maxSlots={maxConstructionSlots}
+            onClick={onOpenCamp}
+          />
+        )}
       </div>
 
       {/* Modal da Mochila Estilo Tibia com Equipamentos e Multi-seleção */}
@@ -312,6 +326,7 @@ export function TibiaEquipmentGrid({
         onUnequipItem={onUnequipItem}
         onDiscardItem={onDiscardItem}
         onBulkSell={onBulkSell}
+        onLearnBlueprint={onLearnBlueprint}
       />
     </div>
   );

@@ -16,11 +16,14 @@ type DerivedStats struct {
 	MaxHealth          int     `json:"max_health"`
 	MaxMana            int     `json:"max_mana"`
 	TotalCapacity      int     `json:"total_capacity"`
+	MaxSlots           int     `json:"max_slots"`
 	CritChance         float64 `json:"crit_chance"`
 	ManaRegenPerSecond float64 `json:"mana_regen_per_second"`
 	CurrentDPS         int     `json:"current_dps"`
 	SpeedMultiplier    float64 `json:"speed_multiplier"`
 	PrimaryArchetype   string  `json:"primary_archetype"`
+	AttackSpeedSeconds float64 `json:"attack_speed_seconds"`
+	AttackSpeedBonus   float64 `json:"attack_speed_bonus"`
 }
 
 // CalculateDerivedStats calcula os atributos derivados do aventureiro a partir
@@ -29,9 +32,10 @@ func CalculateDerivedStats(char *CharacterData, inv *InventoryData, stance strin
 	if char == nil {
 		return DerivedStats{
 			EffectiveSTR: 5, EffectiveDEX: 5, EffectiveINT: 5, EffectiveVIT: 5,
-			MaxHealth: 235, MaxMana: 95, TotalCapacity: 1085,
+			MaxHealth: 235, MaxMana: 95, TotalCapacity: 1085, MaxSlots: 20,
 			CritChance: 5.41, ManaRegenPerSecond: 1.60,
 			SpeedMultiplier: 1.0, PrimaryArchetype: "melee",
+			AttackSpeedSeconds: 2.20, AttackSpeedBonus: 0.0,
 		}
 	}
 
@@ -89,30 +93,40 @@ func CalculateDerivedStats(char *CharacterData, inv *InventoryData, stance strin
 	maxHealth := 100 + (effectiveVIT * 25) + (char.Level * 10) + bonusHP
 	maxMana := 30 + (effectiveINT * 12) + (char.Level * 5) + bonusMP
 
-	// 2. Capacidade Total de Carga (Cap oz)
+	// 2. Capacidade Total de Carga (Cap oz) e Slots de Mochila
 	// Base de 1000 + Nível*10 + STR*15 + Bônus por Raridade da Mochila
 	bagCapBonus := 0
+	bagSlotsBonus := 0
 	if eq.Bag != nil {
 		switch eq.Bag.Rarity {
 		case "Comum":
 			bagCapBonus = 200
+			bagSlotsBonus = 4 // 24 slots
 		case "Incomum":
 			bagCapBonus = 350
+			bagSlotsBonus = 6 // 26 slots
 		case "Raro":
 			bagCapBonus = 500
+			bagSlotsBonus = 8 // 28 slots
 		case "Épico":
 			bagCapBonus = 650
+			bagSlotsBonus = 10 // 30 slots
 		case "Lendário":
 			bagCapBonus = 800
+			bagSlotsBonus = 12 // 32 slots
 		case "Mítico":
 			bagCapBonus = 1000
+			bagSlotsBonus = 14 // 34 slots
 		case "Divino":
 			bagCapBonus = 1300
+			bagSlotsBonus = 16 // 36 slots
 		default:
-			bagCapBonus = 300
+			bagCapBonus = 200
+			bagSlotsBonus = 4
 		}
 	}
 	totalCapacity := 1000 + (char.Level * 10) + (effectiveSTR * 15) + bagCapBonus
+	maxSlots := 20 + bagSlotsBonus
 
 	// 3. Chance de Crítico com Diminishing Returns & Hard Cap de 50%
 	// Crit_DEX = (EffectiveDEX / (EffectiveDEX + 300)) * 25.0%
@@ -177,6 +191,43 @@ func CalculateDerivedStats(char *CharacterData, inv *InventoryData, stance strin
 		totalAtk = int(5.0 * (1.0 + (float64(effectiveSTR) / 100.0)))
 	}
 
+	// 5.1 Velocidade de Ataque Base por Categoria de Arma (Intervalo em segundos)
+	baseAttackSpeed := 2.20
+	if eq.MainHand != nil {
+		wType := GetItemWeaponType(eq.MainHand)
+		isTwoHanded := eq.MainHand.Hands == 2
+		switch wType {
+		case WeaponTypeBow:
+			baseAttackSpeed = 2.10
+		case WeaponTypeWand:
+			if isTwoHanded {
+				baseAttackSpeed = 2.60 // Cajados arcanos pesados de 2 mãos
+			} else {
+				baseAttackSpeed = 2.00 // Varinhas mágicas de 1 mão
+			}
+		default:
+			if isTwoHanded {
+				baseAttackSpeed = 2.80 // Montantes e machados pesados de 2 mãos
+			} else {
+				baseAttackSpeed = 2.20 // Espadas, machados e clavas de 1 mão
+			}
+		}
+	} else {
+		baseAttackSpeed = 2.40 // Desarmado / Andarilho
+	}
+
+	// 5.2 Redução de Intervalo por Destreza (DEX) com Diminishing Returns suave (até -35%)
+	dexReduction := (float64(effectiveDEX) / (float64(effectiveDEX) + 280.0)) * 0.35
+
+	// 5.3 Bônus de Velocidade de Ataque dos Equipamentos
+	equipSpeedBonus := 0.0
+	equipSpeedMultiplier := math.Max(0.50, 1.0-(equipSpeedBonus/100.0))
+
+	// Intervalo Final de Ataque em segundos
+	attackSpeedSeconds := baseAttackSpeed * (1.0 - dexReduction) * equipSpeedMultiplier
+	attackSpeedSeconds = math.Max(0.80, math.Min(4.00, attackSpeedSeconds))
+	attackSpeedSeconds = math.Round(attackSpeedSeconds*100) / 100
+
 	// Bônus de Maestria de Arma
 	var masteryLevel int
 	if eq.MainHand != nil {
@@ -222,8 +273,8 @@ func CalculateDerivedStats(char *CharacterData, inv *InventoryData, stance strin
 		totalAtk = int(float64(totalAtk) * 0.75)
 	}
 
-	// 8. Cálculo de DPS dinâmico
-	currentDPS := int((float64(totalAtk) / 0.75) * speedMultiplier)
+	// 8. Cálculo de DPS dinâmico autoritativo baseado no intervalo real de ataque
+	currentDPS := int((float64(totalAtk) / attackSpeedSeconds) * speedMultiplier)
 
 	return DerivedStats{
 		EffectiveSTR:       effectiveSTR,
@@ -235,10 +286,13 @@ func CalculateDerivedStats(char *CharacterData, inv *InventoryData, stance strin
 		MaxHealth:          maxHealth,
 		MaxMana:            maxMana,
 		TotalCapacity:      totalCapacity,
+		MaxSlots:           maxSlots,
 		CritChance:         critChance,
 		ManaRegenPerSecond: manaRegenPerSecond,
 		CurrentDPS:         currentDPS,
 		SpeedMultiplier:    speedMultiplier,
 		PrimaryArchetype:   primaryArchetype,
+		AttackSpeedSeconds: attackSpeedSeconds,
+		AttackSpeedBonus:   equipSpeedBonus,
 	}
 }

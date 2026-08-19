@@ -1,8 +1,12 @@
 import { biomeRegistry } from '../../game/registries/BiomeRegistry';
 import { heroRegistry } from '../../game/registries/HeroRegistry';
+import { SkinRegistryService } from '../../game/registries/SkinRegistry';
 import { monsterRegistry } from '../../game/registries/MonsterRegistry';
 import { CombatEffectRegistry } from '../../game/effects/CombatEffectRegistry';
 import { Position } from '../../game/effects/types';
+import { campSceneRenderer } from '../../game/camp/CampSceneRenderer';
+import { drawWandStar, drawStaffVortex, drawFireballComet, drawIceOrbComet, drawRealArrow } from '../../game/effects/renderers/projectileSprites';
+import type { CampState, SettlementState } from '../../hooks/useGameSocket';
 
 interface FloatingText {
   id: string;
@@ -16,10 +20,31 @@ interface FloatingText {
   scale?: number;
 }
 
+interface ProjectileTrailParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  alpha: number;
+  size: number;
+  color: string;
+}
+
+interface ProjectileImpactParticle {
+  vx: number;
+  vy: number;
+  x: number;
+  y: number;
+  size: number;
+  color: string;
+  alpha: number;
+}
+
 interface Projectile {
   id: string;
   startX: number;
   startY: number;
+  targetId?: string;
   targetX: number;
   targetY: number;
   currentX: number;
@@ -27,6 +52,15 @@ interface Projectile {
   progress: number;
   color: string;
   type: string;
+  rotationAngle?: number;
+  rotationSpeed?: number;
+  trail: ProjectileTrailParticle[];
+  isExploding?: boolean;
+  explodeProgress?: number;
+  explodeDuration?: number;
+  impactX?: number;
+  impactY?: number;
+  impactParticles?: ProjectileImpactParticle[];
 }
 
 interface RenderMonster {
@@ -45,6 +79,8 @@ interface RenderMonster {
   currentY: number;
   targetX: number;
   targetY: number;
+  walkDistance: number;
+  isWalking: boolean;
   hitFlashTimer: number; // >0 faz o monstro piscar em vermelho ao levar dano
 }
 
@@ -52,7 +88,7 @@ interface RenderMonster {
 // ⚙️ CONFIGURAÇÃO DA LINHA DE BATALHA (CHÃO DE COMBATE)
 // Altere BATTLE_GROUND_Y para subir ou descer o Herói e os Monstros em todos os cenários.
 // ───────────────────────────────────────────────────────────────────────────
-export const BATTLE_GROUND_Y = 195; // Posição vertical no chão (em canvas de 260px)
+export const BATTLE_GROUND_Y = 225; // Posição vertical no chão (em canvas de 300px)
 
 export class GameViewport {
   private canvas: HTMLCanvasElement | null = null;
@@ -61,22 +97,32 @@ export class GameViewport {
   private isDestroyed = false;
 
   // Dimensões da arena
-  private width = 500;
-  private height = 260;
+  private width = 680;
+  private height = 300;
 
   // Estado do Herói
   private heroName = 'Aventureiro';
   private heroLevel = 1;
   private vocation = 'guerreiro';
+  private weaponArchetype = 'melee';
+  private mainHandItem: any = null;
   private heroHealth = 100;
   private heroMaxHealth = 100;
   private heroMana = 30;
   private heroMaxMana = 30;
   private heroX = 100;
   private heroY = BATTLE_GROUND_Y;
-  private targetHeroX = 100;
-  private targetHeroY = BATTLE_GROUND_Y;
+  private heroBaseX = 100;
+  private heroLeapTimer = 0;
+  private heroLeapDuration = 0.3;
+  private heroLeapStartX = 100;
+  private heroLeapTargetX = 100;
+  private heroLeapHeight = 0;
+  private heroLeapType: 'dash' | 'leap' | 'none' = 'none';
+  private heroCosmicTrail: Array<{ x: number; y: number; vx: number; vy: number; alpha: number; size: number; color: string }> = [];
   private heroWalkFrame = 0;
+  private heroAttackDuration = 0.35; // 350ms de ciclo de ataque
+  private heroAttackTimer = 0;
 
   // Estado dos Monstros e Bioma
   private regionId = 'forest';
@@ -89,6 +135,8 @@ export class GameViewport {
   private floatingTexts: FloatingText[] = [];
   private projectiles: Projectile[] = [];
   private isActive = true;
+  private camp: CampState | null = null;
+  private settlement: SettlementState | null = null;
   private particles: { x: number; y: number; alpha: number; speed: number; phase: number }[] = [];
 
   constructor() {}
@@ -141,27 +189,99 @@ export class GameViewport {
   // ─── ATUALIZAÇÃO DA LÓGICA E ANIMAÇÃO ──────────────────────────────────────
 
   private update(_dt: number) {
-    // 1. Interpolação Lerp do Herói
-    const heroDx = this.targetHeroX - this.heroX;
-    const heroDy = this.targetHeroY - this.heroY;
-    const isHeroMoving = Math.abs(heroDx) > 0.5 || Math.abs(heroDy) > 0.5;
-
-    this.heroX += heroDx * 0.14;
-    this.heroY += heroDy * 0.14;
-
-    if (isHeroMoving) {
-      this.heroWalkFrame += 0.25;
-    } else {
-      this.heroWalkFrame = 0;
+    // 0. Atualizar Temporizador do Golpe do Herói
+    if (this.heroAttackTimer > 0) {
+      this.heroAttackTimer = Math.max(0, this.heroAttackTimer - _dt);
     }
 
-    // 2. Interpolação Lerp dos Monstros
-    this.monsters.forEach((m) => {
-      const mDx = m.targetX - m.currentX;
-      const mDy = m.targetY - m.currentY;
+    // 1. Interpolação e Física de Salto / Investida (Hero Leap & Dash)
+    if (this.heroLeapTimer > 0) {
+      this.heroLeapTimer = Math.max(0, this.heroLeapTimer - _dt);
+      const leapProg = 1.0 - (this.heroLeapTimer / this.heroLeapDuration);
 
-      m.currentX += mDx * 0.12;
-      m.currentY += mDy * 0.12;
+      if (leapProg <= 0.5) {
+        // Fase 1: Avanço / Salto em direção ao monstro
+        const fwdProg = leapProg * 2.0;
+        this.heroX = this.heroLeapStartX + (this.heroLeapTargetX - this.heroLeapStartX) * fwdProg;
+        this.heroY = BATTLE_GROUND_Y - Math.sin(fwdProg * Math.PI) * this.heroLeapHeight;
+
+        // No Golpe Brutal, emitir rastro contínuo de poeira cósmica dourada atrás do herói (Img 1)
+        if (this.heroLeapType === 'leap') {
+          const leapTrailColors = ['#ffffff', '#fef08a', '#facc15', '#f59e0b', '#fb923c'];
+          for (let k = 0; k < 3; k++) {
+            this.heroCosmicTrail.push({
+              x: this.heroX + (Math.random() * 8 - 4),
+              y: this.heroY + (Math.random() * 8 - 4) + 6,
+              vx: -(16 + Math.random() * 25),
+              vy: (Math.random() - 0.5) * 16,
+              alpha: 0.95,
+              size: 2.0 + Math.random() * 2.5,
+              color: leapTrailColors[Math.floor(Math.random() * leapTrailColors.length)],
+            });
+          }
+        }
+      } else {
+        // Fase 2: Retorno suave após o golpe
+        const retProg = (leapProg - 0.5) * 2.0;
+        this.heroX = this.heroLeapTargetX + (this.heroBaseX - this.heroLeapTargetX) * retProg;
+        this.heroY = BATTLE_GROUND_Y - Math.sin(retProg * Math.PI) * (this.heroLeapHeight * 0.25);
+      }
+
+      this.heroWalkFrame += 0.35;
+
+      if (this.heroLeapTimer === 0) {
+        this.heroLeapType = 'none';
+        this.heroX = this.heroBaseX;
+        this.heroY = BATTLE_GROUND_Y;
+      }
+    } else {
+      // Posição base do herói (repouso / corrida suave)
+      const heroDx = this.heroBaseX - this.heroX;
+      const heroDy = BATTLE_GROUND_Y - this.heroY;
+      const isHeroMoving = Math.abs(heroDx) > 0.5 || Math.abs(heroDy) > 0.5;
+
+      this.heroX += heroDx * 0.18;
+      this.heroY += heroDy * 0.18;
+
+      if (isHeroMoving) {
+        this.heroWalkFrame += 0.25;
+      } else {
+        this.heroWalkFrame += 0.04;
+      }
+    }
+
+    // Atualizar partículas do rastro cósmico do herói
+    for (let i = this.heroCosmicTrail.length - 1; i >= 0; i--) {
+      const tp = this.heroCosmicTrail[i];
+      tp.x += tp.vx * _dt;
+      tp.y += tp.vy * _dt;
+      tp.alpha -= 3.2 * _dt;
+      if (tp.alpha <= 0) {
+        this.heroCosmicTrail.splice(i, 1);
+      }
+    }
+
+    // 2. Movimentação Suave e Contínua dos Monstros (Estilo Trabalhadores do Acampamento)
+    this.monsters.forEach((m) => {
+      const dx = m.targetX - m.currentX;
+      const dy = m.targetY - m.currentY;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist > 1.0) {
+        // Velocidade fluida contínua para evitar travamentos ou saltos espaçados entre ticks
+        const moveSpeed = Math.max(55, Math.min(130, dist * 2.0));
+        const step = Math.min(dist, moveSpeed * _dt);
+        const moveRatio = step / dist;
+
+        m.currentX += dx * moveRatio;
+        m.currentY += dy * moveRatio;
+        m.walkDistance = (m.walkDistance || 0) + step;
+        m.isWalking = true;
+      } else {
+        m.currentX = m.targetX;
+        m.currentY = m.targetY;
+        m.isWalking = false;
+      }
 
       if (m.hitFlashTimer > 0) {
         m.hitFlashTimer -= 1;
@@ -171,14 +291,162 @@ export class GameViewport {
     // 3. Atualizar Subsistema Modular de Efeitos
     this.effectRegistry.update(_dt * 1000);
 
-    // 4. Atualizar Projéteis
+    // 4. Atualizar Projéteis, Rastreamento Dinâmico e Impactos/Explosões
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
-      p.progress += 0.14;
-      p.currentX = p.startX + (p.targetX - p.startX) * p.progress;
-      p.currentY = p.startY + (p.targetY - p.startY) * p.progress;
 
-      if (p.progress >= 1.0) {
+      if (!p.isExploding) {
+        // Rastrear posição dinâmica atualizada do monstro enquanto viaja
+        const liveTarget = p.targetId && this.monsters.has(p.targetId)
+          ? { x: this.monsters.get(p.targetId)!.currentX, y: this.monsters.get(p.targetId)!.currentY - 6 }
+          : { x: p.targetX, y: p.targetY };
+
+        p.targetX = liveTarget.x;
+        p.targetY = liveTarget.y;
+
+        p.progress += 0.16; // Viagem ágil e fluida
+        p.currentX = p.startX + (p.targetX - p.startX) * Math.min(1.0, p.progress);
+        p.currentY = p.startY + (p.targetY - p.startY) * Math.min(1.0, p.progress);
+        p.rotationAngle = (p.rotationAngle || 0) + (p.rotationSpeed || 10) * _dt;
+
+        if (!p.trail) p.trail = [];
+
+        // Gerar partículas de poeira cósmica / rastro
+        if (p.type === 'wand_star') {
+          const starColors = ['#ffffff', '#fef08a', '#facc15', '#f59e0b', '#fbbf24'];
+          p.trail.push({
+            x: p.currentX + (Math.random() * 4 - 2),
+            y: p.currentY + (Math.random() * 4 - 2),
+            vx: -(12 + Math.random() * 20),
+            vy: (Math.random() - 0.5) * 10,
+            alpha: 0.95,
+            size: 1.5 + Math.random() * 2.0,
+            color: starColors[Math.floor(Math.random() * starColors.length)],
+          });
+        } else if (p.type === 'staff_vortex') {
+          const vortexColors = ['#00f0ff', '#38bdf8', '#7c3aed', '#a855f7', '#1e1b4b', '#ffffff'];
+          p.trail.push({
+            x: p.currentX + (Math.random() * 4 - 2),
+            y: p.currentY + (Math.random() * 4 - 2),
+            vx: -(14 + Math.random() * 22),
+            vy: (Math.random() - 0.5) * 10,
+            alpha: 0.95,
+            size: 1.8 + Math.random() * 2.2,
+            color: vortexColors[Math.floor(Math.random() * vortexColors.length)],
+          });
+        } else if (p.type === 'fireball') {
+          const fireColors = ['#fef08a', '#facc15', '#f97316', '#ef4444'];
+          p.trail.push({
+            x: p.currentX + (Math.random() * 4 - 2),
+            y: p.currentY + (Math.random() * 4 - 2),
+            vx: -(14 + Math.random() * 20),
+            vy: (Math.random() - 0.5) * 12,
+            alpha: 0.9,
+            size: 2 + Math.random() * 2,
+            color: fireColors[Math.floor(Math.random() * fireColors.length)],
+          });
+        } else if (p.type === 'ice_shard') {
+          const iceColors = ['#ffffff', '#cffafe', '#7dd3fc', '#38bdf8'];
+          p.trail.push({
+            x: p.currentX + (Math.random() * 4 - 2),
+            y: p.currentY + (Math.random() * 4 - 2),
+            vx: -(12 + Math.random() * 20),
+            vy: (Math.random() - 0.5) * 10,
+            alpha: 0.9,
+            size: 1.8 + Math.random() * 2,
+            color: iceColors[Math.floor(Math.random() * iceColors.length)],
+          });
+        }
+
+        // Checar impacto direto no corpo do monstro
+        const distToTarget = Math.hypot(p.currentX - p.targetX, p.currentY - p.targetY);
+        if (p.progress >= 1.0 || distToTarget <= 14) {
+          p.isExploding = true;
+          p.currentX = p.targetX;
+          p.currentY = p.targetY;
+          p.impactX = p.targetX;
+          p.impactY = p.targetY;
+          p.explodeProgress = 0;
+          p.explodeDuration = 0.22;
+          p.impactParticles = [];
+
+          // Ativar piscar de dano no monstro atingido
+          if (p.targetId && this.monsters.has(p.targetId)) {
+            this.monsters.get(p.targetId)!.hitFlashTimer = 8;
+          }
+
+          // Gerar partículas de impacto / explosão temática no corpo do monstro
+          if (p.type === 'wand_star') {
+            const hitColors = ['#ffffff', '#fef08a', '#fde047', '#f59e0b', '#d97706'];
+            for (let k = 0; k < 12; k++) {
+              const ang = Math.random() * Math.PI * 2;
+              const spd = 35 + Math.random() * 70;
+              p.impactParticles.push({
+                x: 0,
+                y: 0,
+                vx: Math.cos(ang) * spd,
+                vy: Math.sin(ang) * spd * 0.7,
+                size: 2 + Math.random() * 2.5,
+                color: hitColors[Math.floor(Math.random() * hitColors.length)],
+                alpha: 1.0,
+              });
+            }
+          } else if (p.type === 'staff_vortex') {
+            const hitColors = ['#00f0ff', '#38bdf8', '#7c3aed', '#c084fc', '#ffffff'];
+            for (let k = 0; k < 14; k++) {
+              const ang = Math.random() * Math.PI * 2;
+              const spd = 40 + Math.random() * 75;
+              p.impactParticles.push({
+                x: 0,
+                y: 0,
+                vx: Math.cos(ang) * spd,
+                vy: Math.sin(ang) * spd * 0.7,
+                size: 2 + Math.random() * 2.5,
+                color: hitColors[Math.floor(Math.random() * hitColors.length)],
+                alpha: 1.0,
+              });
+            }
+          } else if (p.type === 'arrow') {
+            const hitColors = ['#ffffff', '#facc15', '#e2e8f0'];
+            for (let k = 0; k < 6; k++) {
+              const ang = Math.random() * Math.PI * 2;
+              const spd = 25 + Math.random() * 45;
+              p.impactParticles.push({
+                x: 0,
+                y: 0,
+                vx: Math.cos(ang) * spd,
+                vy: Math.sin(ang) * spd * 0.7,
+                size: 1.5 + Math.random() * 2,
+                color: hitColors[Math.floor(Math.random() * hitColors.length)],
+                alpha: 1.0,
+              });
+            }
+          }
+        }
+      } else {
+        // Fase de Explosão / Impacto
+        p.explodeProgress = (p.explodeProgress || 0) + _dt / (p.explodeDuration || 0.22);
+        if (p.impactParticles) {
+          for (const ip of p.impactParticles) {
+            ip.x += ip.vx * _dt;
+            ip.y += ip.vy * _dt;
+            ip.alpha = Math.max(0, 1.0 - (p.explodeProgress || 0));
+          }
+        }
+      }
+
+      // Atualizar física e dissipação do rastro
+      for (let ti = p.trail.length - 1; ti >= 0; ti--) {
+        const t = p.trail[ti];
+        t.x += t.vx * _dt;
+        t.y += t.vy * _dt;
+        t.alpha -= 3.5 * _dt;
+        if (t.alpha <= 0) {
+          p.trail.splice(ti, 1);
+        }
+      }
+
+      if (p.isExploding && (p.explodeProgress || 0) >= 1.0 && p.trail.length === 0) {
         this.projectiles.splice(i, 1);
       }
     }
@@ -233,8 +501,13 @@ export class GameViewport {
     // 1. Desenhar cenário
     const biomeKey = this.isActive ? this.regionId : 'camp';
     const bgBuffer = biomeRegistry.render(biomeKey, this.width, this.height);
-    this.targetHeroX = this.isActive ? 100 : 200;
+    this.heroBaseX = this.isActive ? 100 : 180;
     ctx.drawImage(bgBuffer, 0, 0, this.width, this.height);
+
+    // 1.1 Desenhar Construções Dinâmicas do Acampamento
+    if (!this.isActive) {
+      campSceneRenderer.render(ctx, this.camp, performance.now(), this.settlement?.residents || []);
+    }
 
     // Desenhar partículas
     this.particles.forEach((p) => {
@@ -242,11 +515,36 @@ export class GameViewport {
       ctx.fillRect(p.x, p.y, 2, 2);
     });
 
-    // 2. Desenhar Herói do Jogador
-    const heroBob = Math.sin(this.heroWalkFrame) * 3;
-    const spriteSize = 48;
-    const heroSprite = heroRegistry.render(this.vocation, spriteSize);
-    ctx.drawImage(heroSprite, this.heroX - spriteSize / 2, this.heroY - spriteSize / 2 + heroBob);
+    // 1.2 Desenhar Rastro Cósmico do Herói (Salto do Golpe Brutal)
+    this.heroCosmicTrail.forEach((tp) => {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, tp.alpha);
+      ctx.fillStyle = tp.color;
+      ctx.fillRect(tp.x, tp.y, tp.size, tp.size);
+      ctx.restore();
+    });
+
+    // 2. Desenhar Herói do Jogador (Renderização Dinâmica Nativa com Pernas, Braços e Ataques)
+    const heroBob = this.isActive && this.heroLeapType === 'none' ? Math.sin(this.heroWalkFrame) * 2.2 : 0;
+    const walkStep = this.isActive ? Math.sin(this.heroWalkFrame * 1.8) * 3.5 : 0;
+    const isAttacking = this.heroAttackTimer > 0;
+    const attackProgress = isAttacking
+      ? 1.0 - (this.heroAttackTimer / this.heroAttackDuration)
+      : 0;
+
+    const activeSkin = SkinRegistryService.getActiveSkin();
+    const heroVisualKey = activeSkin ? activeSkin.renderKey : this.vocation;
+
+    heroRegistry.renderDynamic(ctx, this.heroX, this.heroY + heroBob, heroVisualKey, {
+      time: performance.now(),
+      walkStep,
+      isWalking: this.isActive,
+      isAttacking,
+      attackProgress,
+      attackStyle: this.weaponArchetype === 'magic' ? 'magic' : (this.weaponArchetype === 'distance' || this.weaponArchetype === 'arrow' || this.weaponArchetype === 'bow') ? 'arrow' : 'melee',
+      facing: 1,
+      size: 48,
+    });
     this.drawHeroPlate(ctx, this.heroX, this.heroY - 37 + heroBob);
 
     // 3. Desenhar Monstros Vivos
@@ -264,31 +562,45 @@ export class GameViewport {
       ctx.save();
       ctx.globalAlpha = entranceAlpha;
 
-      // Sombra no solo
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-      ctx.beginPath();
-      ctx.ellipse(m.currentX, m.currentY + (isBoss ? 24 : 16), isBoss ? 24 : 16, isBoss ? 7 : 5, 0, 0, Math.PI * 2);
-      ctx.fill();
+      // 1. Transladar para o centro exato do monstro no solo
+      ctx.translate(m.currentX, m.currentY + mobBob);
 
+      // 2. Aura do Boss (sempre perfeitamente centralizada na origem do monstro)
       if (isBoss) {
         const auraRadius = 24 + Math.sin(Date.now() / 200) * 4;
-        const auraGrad = ctx.createRadialGradient(m.currentX, m.currentY + 10, 5, m.currentX, m.currentY + 10, auraRadius);
+        const auraGrad = ctx.createRadialGradient(0, 10, 5, 0, 10, auraRadius);
         auraGrad.addColorStop(0, 'rgba(234, 88, 12, 0.6)');
         auraGrad.addColorStop(1, 'rgba(239, 68, 68, 0)');
         ctx.fillStyle = auraGrad;
         ctx.beginPath();
-        ctx.arc(m.currentX, m.currentY + 10, auraRadius, 0, Math.PI * 2);
+        ctx.arc(0, 10, auraRadius, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      ctx.translate(m.currentX - mobSpriteSize / 2, m.currentY - mobSpriteSize / 2 + mobBob);
+      // 3. Se estiver fugindo (FLEE) ou virando de lado, espelhar em torno do CENTRO do monstro
       if (m.state === 'FLEE') {
         ctx.scale(-1, 1);
       }
+
       if (m.hitFlashTimer > 0) {
         ctx.globalAlpha = entranceAlpha * 0.65;
       }
-      monsterRegistry.render(ctx, visualKey, mobSpriteSize);
+
+      // 4. Mover para o canto superior esquerdo local para renderizar centrado
+      ctx.translate(-mobSpriteSize / 2, -mobSpriteSize / 2);
+
+      const mobWalkStep = m.isWalking
+        ? Math.sin((m.walkDistance || 0) / 5.5) * 3.5
+        : 0;
+
+      monsterRegistry.render(ctx, visualKey, mobSpriteSize, {
+        time: performance.now(),
+        walkStep: mobWalkStep,
+        isMoving: m.isWalking,
+        hitFlash: m.hitFlashTimer > 0,
+        state: m.state,
+      });
+
       ctx.restore();
 
       if (m.currentX <= this.width + 10) {
@@ -300,16 +612,101 @@ export class GameViewport {
     // 4. Desenhar Efeitos Modulares de Habilidades e Combate
     this.effectRegistry.render(ctx);
 
-    // 5. Desenhar Projéteis
+    // 5. Desenhar Projéteis e Efeitos de Impacto/Explosão
     this.projectiles.forEach((p) => {
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.currentX, p.currentY, p.type === 'fireball' ? 6 : 4, 0, Math.PI * 2);
-      ctx.fill();
+      // 5.1 Rastro de poeira cósmica / partículas
+      if (p.trail && p.trail.length > 0) {
+        for (const tp of p.trail) {
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, tp.alpha);
+          ctx.fillStyle = tp.color;
+          ctx.fillRect(tp.x, tp.y, tp.size, tp.size);
+          ctx.restore();
+        }
+      }
 
-      // Brilho do projétil
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(p.currentX - 1, p.currentY - 1, 3, 3);
+      if (!p.isExploding) {
+        // 5.2 Sprite Pixel Art do Projétil em Voo
+        if (p.type === 'wand_star') {
+          drawWandStar(ctx, p.currentX, p.currentY, p.rotationAngle || 0, 1.35);
+        } else if (p.type === 'staff_vortex') {
+          drawStaffVortex(ctx, p.currentX, p.currentY, p.rotationAngle || 0, 1.4);
+        } else if (p.type === 'fireball') {
+          const angle = Math.atan2(p.targetY - p.startY, p.targetX - p.startX);
+          drawFireballComet(ctx, p.currentX, p.currentY, angle, 1.35);
+        } else if (p.type === 'ice_shard') {
+          const angle = Math.atan2(p.targetY - p.startY, p.targetX - p.startX);
+          drawIceOrbComet(ctx, p.currentX, p.currentY, angle, 1.35);
+        } else {
+          // Flecha real do arqueiro pixel art (Img 1)
+          const angle = Math.atan2(p.targetY - p.startY, p.targetX - p.startX);
+          drawRealArrow(ctx, p.currentX, p.currentY, angle, 1.35);
+        }
+      } else {
+        // 5.3 Efeito de Impacto / Explosão no Corpo do Monstro
+        const expProg = p.explodeProgress || 0;
+        const alpha = Math.max(0, 1 - expProg);
+        const ix = p.impactX || p.currentX;
+        const iy = p.impactY || p.currentY;
+
+        ctx.save();
+        ctx.translate(ix, iy);
+
+        if (p.type === 'wand_star') {
+          // Onda de choque estelar dourada
+          ctx.strokeStyle = `rgba(250, 204, 21, ${alpha * 0.9})`;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, 8 + expProg * 20, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Flash central de centelha
+          if (expProg < 0.4) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${(0.4 - expProg) * 2.5})`;
+            ctx.beginPath();
+            ctx.arc(0, 0, 6, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (p.type === 'staff_vortex') {
+          // Onda de choque cósmica azul/púrpura
+          ctx.strokeStyle = `rgba(0, 240, 255, ${alpha * 0.9})`;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, 10 + expProg * 24, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.strokeStyle = `rgba(168, 85, 247, ${alpha * 0.7})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, 6 + expProg * 16, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (p.type === 'arrow') {
+          // Flash de impacto da flecha e faíscas metálicas
+          ctx.strokeStyle = `rgba(203, 213, 225, ${alpha * 0.85})`;
+          ctx.lineWidth = 2.0;
+          ctx.beginPath();
+          ctx.arc(0, 0, 4 + expProg * 16, 0, Math.PI * 2);
+          ctx.stroke();
+
+          if (expProg < 0.35) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${(0.35 - expProg) * 2.8})`;
+            ctx.beginPath();
+            ctx.arc(0, 0, 5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        // Desenhar partículas de impacto
+        if (p.impactParticles) {
+          for (const ip of p.impactParticles) {
+            ctx.globalAlpha = Math.max(0, ip.alpha);
+            ctx.fillStyle = ip.color;
+            ctx.fillRect(ip.x, ip.y, ip.size, ip.size);
+          }
+        }
+
+        ctx.restore();
+      }
     });
 
     // 6. Desenhar Textos Flutuantes (Dano / Cura)
@@ -454,8 +851,34 @@ export class GameViewport {
       }
     }
 
+    // Identificar Arma e Arquétipo de Combate da Arma Empunhada (Desacoplado da Skin Cosmética)
+    if (msg.inventory?.equipment?.mainhand !== undefined) {
+      this.mainHandItem = msg.inventory.equipment.mainhand;
+    }
+
+    if (msg.derived_stats?.primary_archetype) {
+      this.weaponArchetype = msg.derived_stats.primary_archetype.toLowerCase();
+    } else if (msg.inventory?.equipment?.mainhand) {
+      const wType = (msg.inventory.equipment.mainhand.weapon_type || '').toLowerCase();
+      if (wType.includes('wand') || wType.includes('rod') || wType.includes('magic')) {
+        this.weaponArchetype = 'magic';
+      } else if (wType.includes('bow') || wType.includes('crossbow') || wType.includes('distance')) {
+        this.weaponArchetype = 'distance';
+      } else {
+        this.weaponArchetype = 'melee';
+      }
+    }
+
     if (msg.is_active !== undefined) {
       this.isActive = msg.is_active;
+    }
+
+    if (msg.camp) {
+      this.camp = msg.camp;
+    }
+
+    if (msg.economy?.settlement) {
+      this.settlement = msg.economy.settlement;
     }
 
     // 2. Atualizar Bioma da Região
@@ -464,67 +887,79 @@ export class GameViewport {
     }
 
     // 3. Sincronizar Monstros Ativos
-    const activeMonsters: any[] = msg.monsters || (msg.monster ? [msg.monster] : []);
-    const activeIds = new Set<string>();
+    if (msg.is_active === false || msg.type === 'REGION_CHANGED') {
+      this.monsters.clear();
+    } else if (msg.monsters !== undefined || msg.monster !== undefined) {
+      const activeMonsters: any[] = msg.monsters || (msg.monster ? [msg.monster] : []);
+      const activeIds = new Set<string>();
 
-    activeMonsters.forEach((mob: any, idx: number) => {
-      const mobId = mob.id || `mob_${idx}`;
-      activeIds.add(mobId);
+      activeMonsters.forEach((mob: any, idx: number) => {
+        if (!mob || (mob.health !== undefined && mob.health <= 0)) return;
+        const mobId = mob.id || `mob_${idx}`;
+        activeIds.add(mobId);
 
-      const vKey = (mob.visual_key || mob.key || mob.name || '').toLowerCase();
-      this.regionId = monsterRegistry.getBiomeKey(vKey) || this.regionId;
+        const vKey = (mob.visual_key || mob.key || mob.name || '').toLowerCase();
+        this.regionId = monsterRegistry.getBiomeKey(vKey) || this.regionId;
 
-      const gridX = mob.grid_x ?? (14 - (activeMonsters.length - 1 - idx) * 2);
-      const gridY = mob.grid_y ?? 4;
+        const gridY = mob.grid_y ?? 4;
+        const isRanged = (mob.attack_type || mob.attackType || '').toLowerCase() === 'ranged';
+        const defaultBattleX = isRanged
+          ? Math.min(this.width - 80, 270 + (activeMonsters.length - 1 - idx) * 40)
+          : Math.min(this.width - 120, 165 + (activeMonsters.length - 1 - idx) * 36);
 
-      // Converter coordenadas de grid para pixels alinhados ao solo de combate (BATTLE_GROUND_Y)
-      const targetPixelX = gridX * 32 + 16;
-      const targetPixelY = BATTLE_GROUND_Y + (gridY - 4) * 12;
+        // Converter coordenadas de grid para pixels alinhados ao solo de combate (BATTLE_GROUND_Y)
+        const targetPixelX = mob.grid_x !== undefined && mob.grid_x < 12
+          ? Math.max(150, Math.min(this.width - 60, mob.grid_x * 32 + 16))
+          : defaultBattleX;
+        const targetPixelY = BATTLE_GROUND_Y + (gridY - 4) * 12;
 
-      let m = this.monsters.get(mobId);
-      if (!m) {
-        m = {
-          id: mobId,
-          key: mob.key,
-          visualKey: mob.visual_key,
-          isBoss: mob.is_boss,
-          name: mob.name || 'Monstro',
-          level: mob.level || 1,
-          health: mob.health ?? 100,
-          maxHealth: mob.max_health ?? 100,
-          attackType: mob.attack_type || 'melee',
-          state: mob.state || 'CHASE',
-          statusEffects: mob.status_effects || [],
-          currentX: 520, // Surge fora da tela à direita e entra caminhando
-          currentY: targetPixelY,
-          targetX: targetPixelX,
-          targetY: targetPixelY,
-          hitFlashTimer: 0,
-        };
-        this.monsters.set(mobId, m);
-      } else {
-        // Se a vida diminuiu, ativar piscar de dano (hit flash)
-        if (mob.health < m.health) {
-          m.hitFlashTimer = 8;
+        let m = this.monsters.get(mobId);
+        if (!m) {
+          m = {
+            id: mobId,
+            key: mob.key,
+            visualKey: mob.visual_key,
+            isBoss: mob.is_boss,
+            name: mob.name || 'Monstro',
+            level: mob.level || 1,
+            health: mob.health ?? 100,
+            maxHealth: mob.max_health ?? 100,
+            attackType: mob.attack_type || 'melee',
+            state: mob.state || 'CHASE',
+            statusEffects: mob.status_effects || [],
+            currentX: this.width + 50, // Surge fora da tela à direita e entra caminhando
+            currentY: targetPixelY,
+            targetX: targetPixelX,
+            targetY: targetPixelY,
+            walkDistance: 0,
+            isWalking: true,
+            hitFlashTimer: 0,
+          };
+          this.monsters.set(mobId, m);
+        } else {
+          // Se a vida diminuiu, ativar piscar de dano (hit flash)
+          if (mob.health < m.health) {
+            m.hitFlashTimer = 8;
+          }
+          m.key = mob.key || m.key;
+          m.visualKey = mob.visual_key || m.visualKey;
+          m.isBoss = mob.is_boss ?? m.isBoss;
+          m.health = mob.health ?? m.health;
+          m.maxHealth = mob.max_health ?? m.maxHealth;
+          m.state = mob.state || m.state;
+          m.statusEffects = mob.status_effects || m.statusEffects;
+          m.targetX = targetPixelX;
+          m.targetY = targetPixelY;
         }
-        m.key = mob.key || m.key;
-        m.visualKey = mob.visual_key || m.visualKey;
-        m.isBoss = mob.is_boss ?? m.isBoss;
-        m.health = mob.health ?? m.health;
-        m.maxHealth = mob.max_health ?? m.maxHealth;
-        m.state = mob.state || m.state;
-        m.statusEffects = mob.status_effects || m.statusEffects;
-        m.targetX = targetPixelX;
-        m.targetY = targetPixelY;
-      }
-    });
+      });
 
-    // Remover monstros que não existem mais
-    this.monsters.forEach((_, id) => {
-      if (!activeIds.has(id)) {
-        this.monsters.delete(id);
-      }
-    });
+      // Remover monstros que não existem mais apenas quando a lista veio explicitamente definida
+      this.monsters.forEach((_, id) => {
+        if (!activeIds.has(id)) {
+          this.monsters.delete(id);
+        }
+      });
+    }
 
     // 4. Animar Efeitos Modulares de Combate (Combat Effects Protocol)
     const monsterPosMap = new Map<string, Position>();
@@ -534,24 +969,29 @@ export class GameViewport {
 
     if (msg.combat_effects && msg.combat_effects.length > 0) {
       let hasHeroAttack = false;
-      let primaryTargetX = 340;
-      let primaryTargetY = BATTLE_GROUND_Y;
+      let primaryTargetId: string | undefined;
+      let attackSkillKey: string | undefined;
 
       for (const eff of msg.combat_effects) {
-        this.effectRegistry.spawnEffect(eff, { x: this.heroX, y: this.heroY }, monsterPosMap);
+        this.effectRegistry.spawnEffect(
+          eff,
+          { x: this.heroX, y: this.heroY - 6 },
+          monsterPosMap,
+          (tId) => this.resolveTargetPos(tId),
+          () => ({ x: this.heroX, y: this.heroY })
+        );
+
         if (eff.kind === 'attack' || (eff.kind === 'skill' && eff.key !== 'divine_heal')) {
           hasHeroAttack = true;
-          if (eff.target_ids && eff.target_ids.length > 0 && monsterPosMap.has(eff.target_ids[0])) {
-            const p = monsterPosMap.get(eff.target_ids[0])!;
-            primaryTargetX = p.x;
-            primaryTargetY = p.y;
+          if (eff.kind === 'skill') {
+            attackSkillKey = eff.key;
+          }
+          if (eff.target_ids && eff.target_ids.length > 0) {
+            primaryTargetId = eff.target_ids[0];
           }
         }
 
-        const targetPos =
-          eff.target_ids && eff.target_ids.length > 0 && monsterPosMap.get(eff.target_ids[0])
-            ? monsterPosMap.get(eff.target_ids[0])!
-            : { x: 340, y: BATTLE_GROUND_Y };
+        const targetPos = this.resolveTargetPos(eff.target_ids && eff.target_ids.length > 0 ? eff.target_ids[0] : undefined);
 
         if (eff.key === 'divine_heal' || eff.kind === 'heal') {
           // Cura Sagrada: Flutua suavemente sobre o herói
@@ -570,11 +1010,12 @@ export class GameViewport {
       }
 
       if (hasHeroAttack) {
-        this.triggerAttackAnimation(primaryTargetX, primaryTargetY);
+        this.triggerAttackAnimation(primaryTargetId, attackSkillKey);
       }
     } else if (msg.damage_dealt && msg.damage_dealt > 0) {
       this.triggerAttackAnimation();
-      this.addFloatingText(`-${msg.damage_dealt}`, 340, BATTLE_GROUND_Y - 45, '#fca5a5', 1.0, -0.85, -2.0);
+      const defTarget = this.resolveTargetPos();
+      this.addFloatingText(`-${msg.damage_dealt}`, defTarget.x, defTarget.y - 45, '#fca5a5', 1.0, -0.85, -2.0);
     }
 
     if (msg.damage_taken && msg.damage_taken > 0) {
@@ -584,6 +1025,10 @@ export class GameViewport {
       this.monsters.forEach((m) => {
         if (m.attackType === 'ranged') {
           const projectile = monsterRegistry.getProjectile(m.visualKey || m.key || '');
+          const isMagicMob = (projectile.type as string) === 'spell' || projectile.color.includes('38bdf8') || projectile.color.includes('purple');
+          const isStaffMob = (m.visualKey || m.key || '').includes('mage') || (m.visualKey || m.key || '').includes('darkmage') || (m.visualKey || m.key || '').includes('necromancer');
+          const mobProjType = projectile.type === 'fireball' ? 'fireball' : isStaffMob ? 'staff_vortex' : isMagicMob ? 'wand_star' : 'arrow';
+
           this.projectiles.push({
             id: `enemy_proj_${Date.now()}_${Math.random()}`,
             startX: m.currentX - 15,
@@ -594,7 +1039,14 @@ export class GameViewport {
             currentY: m.currentY - 5,
             progress: 0,
             color: projectile.color,
-            type: projectile.type,
+            type: mobProjType,
+            rotationAngle: 0,
+            rotationSpeed: -10.0,
+            trail: [],
+            isExploding: false,
+            explodeProgress: 0,
+            explodeDuration: 0.18,
+            impactParticles: [],
           });
         }
       });
@@ -605,45 +1057,94 @@ export class GameViewport {
     }
   }
 
-  /** Animação fluida de ataque baseada na vocação */
-  private triggerAttackAnimation(targetPixelX: number = 340, targetPixelY: number = BATTLE_GROUND_Y) {
-    const attackStyle = heroRegistry.getAttackStyle(this.vocation);
+  /** Resolve dinamicamente a posição do monstro alvo em tempo real */
+  public resolveTargetPos(targetId?: string): Position {
+    if (targetId && this.monsters.has(targetId)) {
+      const m = this.monsters.get(targetId)!;
+      return { x: m.currentX, y: m.currentY - 6 };
+    }
+    for (const m of this.monsters.values()) {
+      if (m.currentX > 0 && m.currentX <= this.width + 40) {
+        return { x: m.currentX, y: m.currentY - 6 };
+      }
+    }
+    return { x: Math.min(this.width - 120, this.heroX + 220), y: BATTLE_GROUND_Y - 6 };
+  }
 
-    if (attackStyle === 'magic') {
-      // Disparar Orbe Mágico Azul
+  /** Animação fluida de ataque baseada estritamente na arma empunhada */
+  private triggerAttackAnimation(targetId?: string, skillKey?: string) {
+    this.heroAttackTimer = this.heroAttackDuration;
+
+    const isMagic = this.weaponArchetype === 'magic';
+    const isRanged = this.weaponArchetype === 'distance' || this.weaponArchetype === 'arrow' || this.weaponArchetype === 'bow';
+    const targetPos = this.resolveTargetPos(targetId);
+
+    if (isMagic) {
+      const weaponName = (this.mainHandItem?.name || '').toLowerCase();
+      const weaponHands = this.mainHandItem?.hands || 1;
+      const isStaff = weaponName.includes('cajado') || weaponName.includes('staff') || weaponName.includes('cetro') || weaponHands === 2;
+      const projType = isStaff ? 'staff_vortex' : 'wand_star';
+
       this.projectiles.push({
         id: `proj_${Date.now()}_${Math.random()}`,
-        startX: this.heroX + 15,
+        startX: this.heroX + 18,
         startY: this.heroY - 5,
-        targetX: targetPixelX,
-        targetY: targetPixelY - 10,
-        currentX: this.heroX + 15,
+        targetId: targetId,
+        targetX: targetPos.x,
+        targetY: targetPos.y,
+        currentX: this.heroX + 18,
         currentY: this.heroY - 5,
         progress: 0,
-        color: '#38bdf8',
-        type: 'fireball',
+        color: isStaff ? '#38bdf8' : '#facc15',
+        type: projType,
+        rotationAngle: 0,
+        rotationSpeed: isStaff ? 9.5 : 12.0,
+        trail: [],
+        isExploding: false,
+        explodeProgress: 0,
+        explodeDuration: 0.22,
+        impactParticles: [],
       });
-    } else if (attackStyle === 'arrow') {
-      // Disparar Flecha Amarela
+    } else if (isRanged) {
+      // Disparar Flecha Direcional
       this.projectiles.push({
         id: `proj_${Date.now()}_${Math.random()}`,
-        startX: this.heroX + 15,
+        startX: this.heroX + 18,
         startY: this.heroY - 5,
-        targetX: targetPixelX,
-        targetY: targetPixelY - 10,
-        currentX: this.heroX + 15,
+        targetId: targetId,
+        targetX: targetPos.x,
+        targetY: targetPos.y,
+        currentX: this.heroX + 18,
         currentY: this.heroY - 5,
         progress: 0,
         color: '#facc15',
         type: 'arrow',
+        trail: [],
+        isExploding: false,
+        explodeProgress: 0,
+        explodeDuration: 0.16,
+        impactParticles: [],
       });
     } else {
-      // Guerreiro Melee: Avança suavemente na direção do monstro e golpeia
-      const advanceDistance = Math.min(260, Math.max(160, targetPixelX - 45));
-      this.targetHeroX = advanceDistance;
-      setTimeout(() => {
-        this.targetHeroX = 100;
-      }, 280);
+      // Guerreiro Melee: Salto Parabólico ou Investida Rápida
+      const targetAdvanceX = Math.max(130, targetPos.x - 26);
+      this.heroLeapStartX = this.heroX;
+      this.heroLeapTargetX = targetAdvanceX;
+
+      if (skillKey === 'brutal_strike') {
+        // Golpe Brutal: Salto Alto Parabólico com Rastro Cósmico (Img 1)
+        this.heroLeapType = 'leap';
+        this.heroLeapDuration = 0.44;
+        this.heroLeapTimer = 0.44;
+        this.heroLeapHeight = 46;
+      } else {
+        // Ataque Básico Melee: Investida rápida com corte e sangue jorrando (Img 3)
+        this.heroLeapType = 'dash';
+        this.heroLeapDuration = 0.28;
+        this.heroLeapTimer = 0.28;
+        this.heroLeapHeight = 6;
+        this.effectRegistry.spawnBloodSplash(() => this.resolveTargetPos(targetId));
+      }
     }
   }
 
