@@ -279,6 +279,9 @@ func (c *ContentRegistry) ValidateIntegrity() []string {
 	if err := ValidateRecipeRegistry(); err != nil {
 		errors = append(errors, err.Error())
 	}
+	if err := ValidateConsumableRegistry(); err != nil {
+		errors = append(errors, err.Error())
+	}
 	for monsterKey, profile := range MonsterResourceProfileMap {
 		drops := append([]ResourceDropDefinition{}, profile.Drops...)
 		drops = append(drops, profile.GuaranteedDrops...)

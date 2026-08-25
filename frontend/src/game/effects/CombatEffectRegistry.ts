@@ -1,7 +1,7 @@
 import { CombatEffectEvent, Position, VisualEffect } from './types';
 import { WhirlwindEffect, BrutalStrikeEffect, BloodSplashEffect } from './renderers/meleeEffects';
 import { MultishotEffect, SniperShotEffect } from './renderers/rangedEffects';
-import { FireballEffect, IceShardEffect } from './renderers/magicEffects';
+import { ArcaneNovaEffect, FireballEffect, IceShardEffect } from './renderers/magicEffects';
 import { DivineHealEffect } from './renderers/commonEffects';
 
 export class CombatEffectRegistry {
@@ -63,6 +63,10 @@ export class CombatEffectRegistry {
 
       case 'ice_shard':
         this.activeEffects.push(new IceShardEffect(heroPos, dynamicTargetProvider));
+        break;
+
+      case 'arcane_nova':
+        this.activeEffects.push(new ArcaneNovaEffect(dynamicHeroProvider, dynamicTargetProvider));
         break;
 
       case 'divine_heal':

@@ -136,6 +136,14 @@ var ProfessionRegistry = map[string]ProfessionDefinition{
 		Description: "Destila elixires, poções, pós e refinamentos arcanos.",
 		MaxLevel:    MaxProfessionLevel,
 	},
+	"cook": {
+		Key:         "cook",
+		Name:        "Cozinheiro",
+		Icon:        "🍳",
+		Category:    ProfessionCategoryCrafting,
+		Description: "Transforma peixes, carnes, farinha e ervas em refeições com bônus temporários de combate.",
+		MaxLevel:    MaxProfessionLevel,
+	},
 }
 
 func GetProfessionDefinition(key string) (ProfessionDefinition, bool) {

@@ -1,6 +1,8 @@
 import React from 'react';
 import { BuildingDefinition, ResourceDefinition } from '../../game/GameCatalog';
 import { BuildingSlot, ResourceAmount } from '../../hooks/useGameSocket';
+import { PixelResourceSprite } from '../../game/registries/PixelResourceRegistry';
+import { BuildingScenePreview } from './BuildingScenePreview';
 
 interface BuildingUpgradeModalProps {
   isOpen: boolean;
@@ -75,7 +77,6 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
   const buildingChecks =
     nextLvlDef && nextLvlDef.required_buildings
       ? nextLvlDef.required_buildings.map((req) => {
-          // Encontra nível atual da construção requerida
           let currentReqLvl = 0;
           for (const s of Object.values(allBuildings)) {
             if (s.building_key === req.building_key) {
@@ -106,69 +107,70 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
     if (!seconds && nanoseconds) {
       seconds = Math.round(nanoseconds / 1_000_000_000);
     }
-    if (seconds < 60) return `${seconds} segundos`;
+    if (seconds <= 0) return 'Imediato';
+    if (seconds < 60) return `${seconds}s`;
     const mins = Math.floor(seconds / 60);
-    return `${mins} minuto${mins > 1 ? 's' : ''}`;
+    return `${mins}m`;
   };
 
   const formatEffect = (key: string, val: number) => {
     switch (key) {
       case 'camp_hp_regen_percent':
-        return `+${val}% Regeneração de HP no Acampamento`;
+        return `+${val}% Regen HP no Acampamento`;
       case 'camp_mana_regen_percent':
-        return `+${val}% Regeneração de Mana no Acampamento`;
+        return `+${val}% Regen Mana no Acampamento`;
       case 'camp_all_regen_percent':
-        return `+${val}% Regeneração de HP e Mana no Acampamento`;
+        return `+${val}% Regen HP/MP no Acampamento`;
       case 'resource_storage':
-        return `Capacidade de Armazém aumentada para ${val.toLocaleString()} unidades`;
+        return `Armazém aumentado para ${val.toLocaleString()} unidades`;
       case 'salvage_unlock':
-        return `Desbloqueia a reciclagem de equipamentos na Bancada`;
+        return `Reciclagem liberada na Bancada`;
       case 'salvage_efficiency_percent':
-        return `+${val}% Rendimento de materiais ao desmontar equipamentos`;
+        return `+${val}% Rendimento de materiais`;
       case 'salvage_batch_size':
-        return `Capacidade de Desmonte em Lote: até ${val} itens por vez`;
+        return `Lote: até ${val} itens por vez`;
       case 'salvage_success_chance':
-        return `+${val}% Taxa de Sucesso no Desmonte de Equipamentos`;
+        return `+${val}% Taxa de Sucesso no Desmonte`;
       case 'salvage_safe_mode':
-        return `Desbloqueia o Modo Seguro de Desmonte (100% de sucesso contra perda)`;
+        return `Modo Seguro de Desmonte Liberado`;
       default:
         return `${key}: +${val}`;
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-5 shadow-2xl space-y-4 text-slate-100 font-sans">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in font-pixel-body">
+      <div className="pixel-card-gold rounded-2xl max-w-lg w-full p-5 shadow-2xl space-y-4 text-slate-100">
         {/* Header */}
-        <div className="flex justify-between items-start border-b border-slate-800 pb-3">
+        <div className="pixel-card-header pixel-card-header-gold pb-3 flex justify-between items-start">
           <div className="flex items-center gap-3">
-            <span className="text-3xl p-2 bg-slate-950 rounded-xl border border-slate-800">
-              {buildingDef.icon}
-            </span>
+            <div className="p-1 pixel-slot rounded bg-slate-900 border-amber-500/40 flex items-center justify-center shrink-0">
+              <BuildingScenePreview buildingKey={buildingDef.key} level={currentLevel} size="md" />
+            </div>
             <div>
-              <h3 className="font-bold text-base text-amber-400">{buildingDef.name}</h3>
+              <h3 className="font-pixel-heading text-sm text-amber-400">{buildingDef.name}</h3>
               <p className="text-xs text-slate-400">
-                Nível Atual: <strong className="text-amber-300 font-mono">Nv. {currentLevel}</strong> / {buildingDef.max_level}
+                Nível Atual: <strong className="text-amber-300 font-pixel-heading">Nv. {currentLevel}</strong> / {buildingDef.max_level}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-200 text-lg p-1 transition"
+            className="pixel-btn pixel-btn-crimson px-2 py-0.5 text-xs"
           >
             ✕
           </button>
         </div>
 
         {/* Descrição */}
-        <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
+        <p className="text-xs text-slate-300 leading-relaxed pixel-slot p-3 rounded-xl bg-slate-950/70 border-slate-800">
           {buildingDef.description}
         </p>
 
         {/* Efeitos do Próximo Nível */}
         {!isMaxLevel && nextLvlDef && (
-          <div className="bg-slate-950/80 p-3 rounded-xl border border-emerald-500/30 space-y-2">
-            <h4 className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+          <div className="pixel-slot p-3 rounded-xl bg-slate-950/80 border-emerald-500/40 space-y-2">
+            <h4 className="text-xs font-pixel-heading text-emerald-400 flex items-center gap-1.5">
               <span>✨ Melhorias do Nível {nextLevel}:</span>
             </h4>
             <ul className="text-xs text-emerald-200 space-y-1 pl-1">
@@ -179,9 +181,9 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
                 </li>
               ))}
             </ul>
-            <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-800 flex justify-between">
+            <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-800 flex justify-between">
               <span>Tempo de Construção:</span>
-              <span className="font-mono text-amber-300 font-semibold">
+              <span className="font-pixel-heading text-amber-300">
                 {formatDuration(nextLvlDef.build_duration_seconds, nextLvlDef.build_duration)}
               </span>
             </div>
@@ -191,7 +193,7 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
         {/* Requisitos de Ouro, Recursos e Outras Construções */}
         {!isMaxLevel && nextLvlDef && (
           <div className="space-y-2">
-            <h4 className="text-xs font-bold text-slate-300">Requisitos de Construção:</h4>
+            <h4 className="text-xs font-pixel-heading text-slate-300">Requisitos de Construção:</h4>
 
             {/* Pré-requisitos de Construções */}
             {buildingChecks.length > 0 && (
@@ -199,17 +201,17 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
                 {buildingChecks.map((b) => (
                   <div
                     key={b.key}
-                    className={`flex items-center justify-between p-2 rounded-lg border text-xs ${
+                    className={`flex items-center justify-between p-2 rounded pixel-slot text-xs ${
                       b.hasEnough
-                        ? 'bg-emerald-950/20 border-emerald-500/40 text-emerald-300'
-                        : 'bg-rose-950/30 border-rose-500/40 text-rose-300'
+                        ? 'border-emerald-500/40 text-emerald-300 bg-emerald-950/30'
+                        : 'border-rose-500/40 text-rose-300 bg-rose-950/40'
                     }`}
                   >
                     <div className="flex items-center gap-2">
                       <span>{b.hasEnough ? '✅' : '🔒'}</span>
                       <span className="font-medium">Requer {b.name} Nv. {b.minLevel}</span>
                     </div>
-                    <div className="font-mono text-xs">
+                    <div className="text-xs font-pixel-heading">
                       <span>Atual: Nv. {b.currentLevel}</span>
                     </div>
                   </div>
@@ -219,21 +221,21 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
 
             {/* Custo de Gold */}
             <div
-              className={`flex items-center justify-between p-2 rounded-lg border text-xs ${
+              className={`flex items-center justify-between p-2 rounded pixel-slot text-xs ${
                 hasEnoughGold
-                  ? 'bg-slate-950/60 border-slate-800 text-slate-200'
-                  : 'bg-rose-950/30 border-rose-500/40 text-rose-300'
+                  ? 'border-slate-800 text-slate-200 bg-slate-950/70'
+                  : 'pixel-alert-frame pixel-alert-critical text-rose-300'
               }`}
             >
               <div className="flex items-center gap-2">
                 <span>💰</span>
                 <span className="font-medium">Ouro da Conta</span>
               </div>
-              <div className="font-mono text-xs">
+              <div className="text-xs font-pixel-heading">
                 <span className={hasEnoughGold ? 'text-amber-400 font-bold' : 'text-rose-400 font-bold'}>
                   {characterGold.toLocaleString()}
                 </span>
-                <span className="text-slate-500"> / {nextLvlDef.gold_cost.toLocaleString()} Gold</span>
+                <span className="text-slate-500 font-pixel-body"> / {nextLvlDef.gold_cost.toLocaleString()} Gold</span>
               </div>
             </div>
 
@@ -242,21 +244,21 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
               {costChecks.map((c) => (
                 <div
                   key={c.key}
-                  className={`flex items-center justify-between p-2 rounded-lg border text-xs ${
+                  className={`flex items-center justify-between p-2 rounded pixel-slot text-xs ${
                     c.hasEnough
-                      ? 'bg-slate-950/60 border-slate-800 text-slate-200'
-                      : 'bg-rose-950/30 border-rose-500/40 text-rose-300'
+                      ? 'border-slate-800 text-slate-200 bg-slate-950/70'
+                      : 'pixel-alert-frame pixel-alert-critical text-rose-300'
                   }`}
                 >
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <span>{c.def?.icon || '📦'}</span>
+                    <PixelResourceSprite resourceKey={c.key} name={c.def?.name || c.key} size="sm" />
                     <span className="truncate">{c.def?.name || c.key}</span>
                   </div>
-                  <div className="font-mono text-xs whitespace-nowrap">
+                  <div className="text-xs font-pixel-heading whitespace-nowrap">
                     <span className={c.hasEnough ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
                       {c.available.toLocaleString()}
                     </span>
-                    <span className="text-slate-500"> / {c.required.toLocaleString()}</span>
+                    <span className="text-slate-500 font-pixel-body"> / {c.required.toLocaleString()}</span>
                   </div>
                 </div>
               ))}
@@ -268,21 +270,21 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
                 {trophyChecks.map((t) => (
                   <div
                     key={t.key}
-                    className={`flex items-center justify-between p-2 rounded-lg border text-xs ${
+                    className={`flex items-center justify-between p-2 rounded pixel-slot text-xs ${
                       t.hasEnough
-                        ? 'bg-amber-950/20 border-amber-500/40 text-amber-200'
-                        : 'bg-rose-950/30 border-rose-500/40 text-rose-300'
+                        ? 'border-amber-500/40 text-amber-200 bg-amber-950/30'
+                        : 'pixel-alert-frame pixel-alert-critical text-rose-300'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span>🏆</span>
+                      <PixelResourceSprite resourceKey={t.key} name={t.def?.name || t.key} size="sm" />
                       <span>{t.def?.name || t.key}</span>
                     </div>
-                    <div className="font-mono text-xs">
+                    <div className="text-xs font-pixel-heading">
                       <span className={t.hasEnough ? 'text-amber-400 font-bold' : 'text-rose-400 font-bold'}>
                         {t.available.toLocaleString()}
                       </span>
-                      <span className="text-slate-500"> / {t.required.toLocaleString()}</span>
+                      <span className="text-slate-500 font-pixel-body"> / {t.required.toLocaleString()}</span>
                     </div>
                   </div>
                 ))}
@@ -292,7 +294,7 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
         )}
 
         {isMaxLevel && (
-          <div className="p-3 bg-amber-950/30 border border-amber-500/40 rounded-xl text-center text-xs text-amber-300 font-medium">
+          <div className="p-3 bg-amber-950/40 border border-amber-500/40 rounded-xl text-center text-xs text-amber-300 font-pixel-body">
             🏆 Esta construção atingiu o nível máximo de desenvolvimento do acampamento!
           </div>
         )}
@@ -301,7 +303,7 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
         <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition"
+            className="pixel-btn pixel-btn-dark px-4 py-1.5 text-xs font-pixel-heading"
           >
             Fechar
           </button>
@@ -313,10 +315,10 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
                 onClose();
               }}
               disabled={!canUpgrade}
-              className={`px-5 py-2 font-bold text-xs rounded-xl shadow-lg transition ${
+              className={`px-5 py-1.5 text-xs font-pixel-heading transition ${
                 canUpgrade
-                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950'
-                  : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                  ? 'pixel-btn pixel-btn-gold'
+                  : 'pixel-btn pixel-btn-dark opacity-50 cursor-not-allowed'
               }`}
             >
               {canUpgrade ? 'Iniciar Construção 🔨' : 'Requisitos Não Atendidos'}

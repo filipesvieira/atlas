@@ -16,7 +16,9 @@ const (
 	DefaultBaseResourceStorage int64 = 10000
 )
 
-// CalculateCampBonuses calcula a soma pura dos efeitos de todas as construções ativas.
+// CalculateCampBonuses aplica o snapshot do nível atual de cada construção.
+// Os valores do registry são totais do nível (25 -> 50 -> 85), não deltas;
+// somar níveis anteriores concedia 160% para uma fogueira nível 3.
 func CalculateCampBonuses(buildings map[string]BuildingSlot) CampBonuses {
 	bonuses := CampBonuses{
 		StorageCapacity: DefaultBaseResourceStorage,
@@ -40,35 +42,30 @@ func CalculateCampBonuses(buildings map[string]BuildingSlot) CampBonuses {
 			continue
 		}
 
-		// Percorre os efeitos de todos os níveis acumulados até o nível atual da construção
-		maxLvl := slot.Level
-		if maxLvl > len(bDef.Levels) {
-			maxLvl = len(bDef.Levels)
+		levelIndex := slot.Level - 1
+		if levelIndex >= len(bDef.Levels) {
+			levelIndex = len(bDef.Levels) - 1
 		}
-
-		for l := 0; l < maxLvl; l++ {
-			lvlDef := bDef.Levels[l]
-			for _, eff := range lvlDef.Effects {
-				switch eff.Key {
-				case "camp_hp_regen_percent":
-					bonuses.HPRegenBonusPercent += eff.Value
-				case "camp_mana_regen_percent":
-					bonuses.ManaRegenBonusPercent += eff.Value
-				case "camp_all_regen_percent":
-					bonuses.HPRegenBonusPercent += eff.Value
-					bonuses.ManaRegenBonusPercent += eff.Value
-				case "resource_storage":
-					if int64(eff.Value) > bonuses.StorageCapacity {
-						bonuses.StorageCapacity = int64(eff.Value)
-					}
-				case "salvage_unlock":
-					if eff.Value > 0 {
-						bonuses.SalvageUnlocked = true
-					}
-				case "salvage_efficiency_percent":
-					if eff.Value > bonuses.SalvageEfficiencyPercent {
-						bonuses.SalvageEfficiencyPercent = eff.Value
-					}
+		for _, eff := range bDef.Levels[levelIndex].Effects {
+			switch eff.Key {
+			case "camp_hp_regen_percent":
+				bonuses.HPRegenBonusPercent += eff.Value
+			case "camp_mana_regen_percent":
+				bonuses.ManaRegenBonusPercent += eff.Value
+			case "camp_all_regen_percent":
+				bonuses.HPRegenBonusPercent += eff.Value
+				bonuses.ManaRegenBonusPercent += eff.Value
+			case "resource_storage":
+				if int64(eff.Value) > bonuses.StorageCapacity {
+					bonuses.StorageCapacity = int64(eff.Value)
+				}
+			case "salvage_unlock":
+				if eff.Value > 0 {
+					bonuses.SalvageUnlocked = true
+				}
+			case "salvage_efficiency_percent":
+				if eff.Value > bonuses.SalvageEfficiencyPercent {
+					bonuses.SalvageEfficiencyPercent = eff.Value
 				}
 			}
 		}

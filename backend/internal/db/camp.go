@@ -665,7 +665,78 @@ func LearnBuildingBlueprint(charID, itemID string) (*game.InventoryData, *game.C
 		return nil, nil, fmt.Errorf("erro ao registrar blueprint: %w", err)
 	}
 
-	// 5. Incrementa revisão de estado do acampamento
+	// 5. Projetos de construções reais ganham uma fundação nível 0 no grid.
+	// Ela pode ser arrastada livremente antes do jogador iniciar a primeira obra.
+	// Blueprints utilitários (ex.: master_builder) não possuem BuildingDefinition e
+	// portanto não ocupam terreno. Os cinco placeholders legados só passam a
+	// ocupar espaço quando descobertos; se o jogador já ocupou a posição antiga,
+	// o projeto recém-descoberto é realocado automaticamente para o primeiro local livre.
+	if _, isBuilding := game.GetBuildingDefinition(buildingKey); isBuilding {
+		rows, err := tx.Query(`
+			SELECT b.slot_key,b.building_key,b.level,COALESCE(b.upgrade_target_level,0),b.tile_x,b.tile_y,b.rotation,
+			       (b.building_key='campfire' OR b.level>0 OR bp.building_key IS NOT NULL) AS discovered
+			FROM character_camp_buildings b
+			LEFT JOIN character_building_blueprints bp ON bp.character_id=b.character_id AND bp.building_key=b.building_key
+			WHERE b.character_id=$1 FOR UPDATE OF b`, charID)
+		if err != nil {
+			return nil, nil, err
+		}
+		occupied := make([]game.BuildingSlot, 0, 16)
+		var targetSlot *game.BuildingSlot
+		for rows.Next() {
+			var slot game.BuildingSlot
+			if err := rows.Scan(&slot.SlotKey, &slot.BuildingKey, &slot.Level, &slot.UpgradeTargetLevel, &slot.TileX, &slot.TileY, &slot.Rotation, &slot.Discovered); err != nil {
+				rows.Close()
+				return nil, nil, err
+			}
+			occupied = append(occupied, slot)
+			if slot.BuildingKey == buildingKey {
+				copySlot := slot
+				targetSlot = &copySlot
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		if err := rows.Close(); err != nil {
+			return nil, nil, err
+		}
+
+		withoutTarget := make([]game.BuildingSlot, 0, len(occupied))
+		for _, slot := range occupied {
+			if targetSlot != nil && slot.SlotKey == targetSlot.SlotKey {
+				continue
+			}
+			withoutTarget = append(withoutTarget, slot)
+		}
+
+		if targetSlot == nil {
+			tileX, tileY, ok := game.FindFirstFreeCampPlacement(buildingKey, 0, withoutTarget)
+			if !ok {
+				return nil, nil, fmt.Errorf("não há espaço livre no terreno para posicionar o projeto de construção")
+			}
+			instanceKey := game.CampBuildingInstanceKey(buildingKey)
+			if _, err := tx.Exec(`
+				INSERT INTO character_camp_buildings(character_id,slot_key,building_key,level,tile_x,tile_y,rotation,updated_at)
+				VALUES($1,$2,$3,0,$4,$5,0,NOW())
+				ON CONFLICT(character_id,building_key) DO NOTHING`, charID, instanceKey, buildingKey, tileX, tileY); err != nil {
+				return nil, nil, fmt.Errorf("posicionar fundação do projeto: %w", err)
+			}
+		} else if targetSlot.Level <= 0 && targetSlot.UpgradeTargetLevel <= 0 {
+			if err := game.ValidateCampPlacement(buildingKey, targetSlot.TileX, targetSlot.TileY, targetSlot.Rotation, withoutTarget, ""); err != nil {
+				tileX, tileY, ok := game.FindFirstFreeCampPlacement(buildingKey, targetSlot.Rotation, withoutTarget)
+				if !ok {
+					return nil, nil, fmt.Errorf("não há espaço livre no terreno para posicionar o projeto de construção")
+				}
+				if _, err := tx.Exec(`UPDATE character_camp_buildings SET tile_x=$3,tile_y=$4,updated_at=NOW() WHERE character_id=$1 AND slot_key=$2`, charID, targetSlot.SlotKey, tileX, tileY); err != nil {
+					return nil, nil, fmt.Errorf("realocar fundação recém-descoberta: %w", err)
+				}
+			}
+		}
+	}
+
+	// 6. Incrementa revisão de estado do acampamento
 	if _, err := tx.Exec(`UPDATE character_camps SET state_revision = state_revision + 1, updated_at = NOW() WHERE character_id = $1`, charID); err != nil {
 		return nil, nil, fmt.Errorf("incrementar revisão do acampamento: %w", err)
 	}
@@ -792,31 +863,79 @@ func GetCharacterBlueprints(charID string) (map[string]game.BuildingBlueprintPro
 func EnsureCharacterCamp(charID string) error {
 	_, err := DB.Exec(`
 		INSERT INTO character_camps (character_id, layout_version, state_revision, created_at, updated_at)
-		VALUES ($1, 1, 0, NOW(), NOW())
+		VALUES ($1, $2, 0, NOW(), NOW())
 		ON CONFLICT (character_id) DO NOTHING
-	`, charID)
+	`, charID, game.CampLayoutVersion)
 	if err != nil {
 		return err
 	}
 
 	for slotKey, buildingKey := range game.SlotToBuildingMap {
+		tileX, tileY := game.GetDefaultCampPlacement(slotKey)
 		_, err := DB.Exec(`
-			INSERT INTO character_camp_buildings (character_id, slot_key, building_key, level, updated_at)
-			VALUES ($1, $2, $3, 0, NOW())
+			INSERT INTO character_camp_buildings (character_id, slot_key, building_key, level, tile_x, tile_y, rotation, updated_at)
+			VALUES ($1, $2, $3, 0, $4, $5, 0, NOW())
 			ON CONFLICT (character_id, slot_key) DO NOTHING
-		`, charID, slotKey, buildingKey)
+		`, charID, slotKey, buildingKey, tileX, tileY)
 		if err != nil {
 			return err
 		}
 	}
 
-	// Auto-descoberta da Fogueira para todos os aventureiros
-	if _, err := DB.Exec(`
-		INSERT INTO character_building_blueprints (character_id, building_key, unlocked_max_level, source_key, discovered_at)
-		VALUES ($1, 'campfire', 3, 'initial', NOW())
-		ON CONFLICT (character_id, building_key) DO NOTHING
-	`, charID); err != nil {
-		return err
+	// Auto-descoberta dos projetos iniciais. O catálogo define quais prédios
+	// nascem disponíveis; novas construções não precisam voltar a este método.
+	for _, def := range game.ListBuildingDefinitions() {
+		if !def.DefaultUnlocked {
+			continue
+		}
+		if _, err := DB.Exec(`
+			INSERT INTO character_building_blueprints (character_id, building_key, unlocked_max_level, source_key, discovered_at)
+			VALUES ($1, $2, $3, 'initial', NOW())
+			ON CONFLICT (character_id, building_key) DO NOTHING
+		`, charID, def.Key, def.MaxLevel); err != nil {
+			return err
+		}
+
+		// Os prédios legados já possuem placeholder. Prédios de layout livre
+		// recebem uma fundação nível 0 em uma área que não colide com nenhum slot
+		// legado, podendo ser arrastados antes da obra.
+		instanceKey := game.CampBuildingInstanceKey(def.Key)
+		var exists int
+		if err := DB.QueryRow(`SELECT COUNT(*) FROM character_camp_buildings WHERE character_id=$1 AND building_key=$2`, charID, def.Key).Scan(&exists); err != nil {
+			return err
+		}
+		if exists > 0 {
+			continue
+		}
+		rows, err := DB.Query(`SELECT slot_key,building_key,level,COALESCE(upgrade_target_level,0),tile_x,tile_y,rotation FROM character_camp_buildings WHERE character_id=$1`, charID)
+		if err != nil {
+			return err
+		}
+		occupied := make([]game.BuildingSlot, 0, 16)
+		for rows.Next() {
+			var slot game.BuildingSlot
+			if err := rows.Scan(&slot.SlotKey, &slot.BuildingKey, &slot.Level, &slot.UpgradeTargetLevel, &slot.TileX, &slot.TileY, &slot.Rotation); err != nil {
+				rows.Close()
+				return err
+			}
+			// Reservamos também as posições legadas ainda não descobertas para que
+			// um futuro manual nunca apareça embaixo de uma cozinha existente.
+			slot.Discovered = true
+			occupied = append(occupied, slot)
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		tileX, tileY, ok := game.FindFirstFreeCampPlacement(def.Key, 0, occupied)
+		if !ok {
+			return fmt.Errorf("não há espaço livre para posicionar o projeto inicial de %s", def.Name)
+		}
+		if _, err := DB.Exec(`
+			INSERT INTO character_camp_buildings(character_id,slot_key,building_key,level,tile_x,tile_y,rotation,updated_at)
+			VALUES($1,$2,$3,0,$4,$5,0,NOW())
+			ON CONFLICT (character_id,building_key) DO NOTHING`, charID, instanceKey, def.Key, tileX, tileY); err != nil {
+			return err
+		}
 	}
 
 	// Migração segura: qualquer construção com nível > 0 é automaticamente registrada como descoberta
@@ -865,7 +984,7 @@ func GetCharacterCamp(charID string) (*game.CampState, error) {
 	}
 
 	rows, err := DB.Query(`
-		SELECT slot_key, building_key, level, upgrade_target_level, upgrade_started_at, upgrade_ends_at, updated_at
+		SELECT slot_key, building_key, level, upgrade_target_level, upgrade_started_at, upgrade_ends_at, tile_x, tile_y, rotation, updated_at
 		FROM character_camp_buildings
 		WHERE character_id = $1
 	`, charID)
@@ -887,6 +1006,9 @@ func GetCharacterCamp(charID string) (*game.CampState, error) {
 			&targetLvl,
 			&startAt,
 			&endAt,
+			&slot.TileX,
+			&slot.TileY,
+			&slot.Rotation,
 			&slot.UpdatedAt,
 		)
 		if err != nil {
@@ -934,10 +1056,12 @@ func GetCharacterCamp(charID string) (*game.CampState, error) {
 
 // StartBuildingUpgrade valida custos de ouro, recursos e pré-requisitos, iniciando o timer de construção.
 func StartBuildingUpgrade(accountID, charID, slotKey, buildingKey string) (*game.CampState, error) {
-	// Validação rígida de slot
-	expectedBuilding, slotExists := game.SlotToBuildingMap[slotKey]
-	if !slotExists || expectedBuilding != buildingKey {
-		return nil, fmt.Errorf("a construção %s é incompatível com o slot %s", buildingKey, slotKey)
+	bDef, exists := game.GetBuildingDefinition(buildingKey)
+	if !exists {
+		return nil, fmt.Errorf("construção inválida: %s", buildingKey)
+	}
+	if slotKey == "" {
+		slotKey = game.CampBuildingInstanceKey(buildingKey)
 	}
 
 	tx, err := DB.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
@@ -998,15 +1122,22 @@ func StartBuildingUpgrade(accountID, charID, slotKey, buildingKey string) (*game
 
 	// 3. Lock na construção atual do slot (personagem/acampamento já travados)
 	var currentLevel int
+	var storedBuildingKey string
 	var upgradeTarget sql.NullInt32
 	var upgradeEnds sql.NullTime
 	err = tx.QueryRow(`
-		SELECT level, upgrade_target_level, upgrade_ends_at 
-		FROM character_camp_buildings 
+		SELECT building_key, level, upgrade_target_level, upgrade_ends_at
+		FROM character_camp_buildings
 		WHERE character_id = $1 AND slot_key = $2 FOR UPDATE
-	`, charID, slotKey).Scan(&currentLevel, &upgradeTarget, &upgradeEnds)
-	if err != nil && err != sql.ErrNoRows {
-		return nil, fmt.Errorf("erro ao buscar slot da construção: %w", err)
+	`, charID, slotKey).Scan(&storedBuildingKey, &currentLevel, &upgradeTarget, &upgradeEnds)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("posicione o projeto de %s no terreno antes de iniciar a obra", bDef.Name)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("erro ao buscar construção: %w", err)
+	}
+	if storedBuildingKey != buildingKey {
+		return nil, fmt.Errorf("a instância %s pertence a %s, não a %s", slotKey, storedBuildingKey, buildingKey)
 	}
 
 	// Reconciliar se já expirou
@@ -1015,10 +1146,6 @@ func StartBuildingUpgrade(accountID, charID, slotKey, buildingKey string) (*game
 	}
 
 	targetLevel := currentLevel + 1
-	bDef, exists := game.GetBuildingDefinition(buildingKey)
-	if !exists {
-		return nil, fmt.Errorf("construção inválida: %s", buildingKey)
-	}
 	if targetLevel > bDef.MaxLevel {
 		return nil, fmt.Errorf("a construção %s já atingiu o nível máximo (%d)", bDef.Name, bDef.MaxLevel)
 	}
@@ -1110,45 +1237,35 @@ func StartBuildingUpgrade(accountID, charID, slotKey, buildingKey string) (*game
 		}
 	}
 
-	// 10. Agendar upgrade (ou concluir instantaneamente se for conta de QA / Admin)
+	// 10. Agendar upgrade. O onboarding das três construções iniciais usa
+	// duração zero e também deve concluir na mesma transação; contas admin/QA
+	// continuam com conclusão imediata para testes.
 	now := time.Now().UTC()
 	var userRole string
 	_ = tx.QueryRow(`SELECT role FROM accounts WHERE id = $1`, accountID).Scan(&userRole)
+	completeImmediately := userRole == "admin" || lvlDef.BuildDuration <= 0
 
-	if userRole == "admin" {
-		// Modo QA / Admin: Conclusão instantânea imediata sem tempo de espera
+	if completeImmediately {
+		// Conclusão imediata sem alterar a posição escolhida no grid.
 		_, err = tx.Exec(`
-			INSERT INTO character_camp_buildings (character_id, slot_key, building_key, level, upgrade_target_level, upgrade_started_at, upgrade_ends_at, updated_at)
-			VALUES ($1, $2, $3, $4, NULL, NULL, NULL, NOW())
-			ON CONFLICT (character_id, slot_key)
-			DO UPDATE SET 
-				building_key = EXCLUDED.building_key,
-				level = EXCLUDED.level,
-				upgrade_target_level = NULL,
-				upgrade_started_at = NULL,
-				upgrade_ends_at = NULL,
-				updated_at = NOW()
-		`, charID, slotKey, buildingKey, targetLevel)
+			UPDATE character_camp_buildings
+			SET level=$3,upgrade_target_level=NULL,upgrade_started_at=NULL,upgrade_ends_at=NULL,updated_at=NOW()
+			WHERE character_id=$1 AND slot_key=$2 AND building_key=$4
+		`, charID, slotKey, targetLevel, buildingKey)
 	} else {
 		endsAt := now.Add(lvlDef.BuildDuration)
 		_, err = tx.Exec(`
-			INSERT INTO character_camp_buildings (character_id, slot_key, building_key, level, upgrade_target_level, upgrade_started_at, upgrade_ends_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-			ON CONFLICT (character_id, slot_key)
-			DO UPDATE SET 
-				building_key = EXCLUDED.building_key,
-				upgrade_target_level = EXCLUDED.upgrade_target_level,
-				upgrade_started_at = EXCLUDED.upgrade_started_at,
-				upgrade_ends_at = EXCLUDED.upgrade_ends_at,
-				updated_at = NOW()
-		`, charID, slotKey, buildingKey, currentLevel, targetLevel, now, endsAt)
+			UPDATE character_camp_buildings
+			SET upgrade_target_level=$3,upgrade_started_at=$4,upgrade_ends_at=$5,updated_at=NOW()
+			WHERE character_id=$1 AND slot_key=$2 AND building_key=$6
+		`, charID, slotKey, targetLevel, now, endsAt, buildingKey)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("erro ao atualizar construção: %w", err)
 	}
-	if userRole == "admin" {
-		// No modo QA a obra termina nesta mesma transação; portanto a
-		// prosperidade de conclusão também precisa ser aplicada imediatamente.
+	if completeImmediately {
+		// A obra termina nesta mesma transação; portanto a prosperidade de
+		// conclusão também precisa ser aplicada imediatamente.
 		if _, err := tx.Exec(`UPDATE settlements SET prosperity=prosperity+$2,revision=revision+1,updated_at=NOW() WHERE character_id=$1`, charID, int64(25*targetLevel)); err != nil {
 			return nil, fmt.Errorf("registrar prosperidade da construção: %w", err)
 		}

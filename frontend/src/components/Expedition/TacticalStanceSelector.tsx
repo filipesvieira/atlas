@@ -1,3 +1,5 @@
+import { PixelItemSprite } from '../../game/registries/PixelArtItemRegistry';
+
 interface TacticalStanceSelectorProps {
   currentStance?: string;
   onSelectStance: (stance: string) => void;
@@ -12,51 +14,56 @@ export function TacticalStanceSelector({
   const stances = [
     {
       id: 'offensive',
-      label: '⚔️ Ofensiva',
+      label: 'Ofensiva',
       sub: '+35% Atk | -20% Def',
       title: 'Ofensiva: Aumenta o dano do ataque (+35% Atk) com redução de defesa (-20% Def).',
-      color: 'hover:border-rose-500 text-rose-300',
-      activeColor: 'bg-rose-950/40 border-rose-500 text-rose-300 shadow-rose-500/10',
+      slotKey: 'mainhand',
+      weaponKey: 'sword',
+      color: 'border-slate-800 text-rose-300 hover:border-rose-500',
+      activeColor: 'bg-rose-950/60 border-rose-500 text-rose-200 shadow-[0_0_10px_rgba(244,63,94,0.4)]',
     },
     {
       id: 'balanced',
-      label: '⚖️ Equilibrada',
+      label: 'Equilibrada',
       sub: 'Atributos Padrão',
       title: 'Equilibrada: Mantém os atributos normais e equilibrados do personagem sem penalidades.',
-      color: 'hover:border-amber-500 text-amber-300',
-      activeColor: 'bg-amber-950/40 border-amber-500 text-amber-300 shadow-amber-500/10',
+      slotKey: '',
+      weaponKey: '',
+      color: 'border-slate-800 text-amber-300 hover:border-amber-500',
+      activeColor: 'bg-amber-950/60 border-amber-400 text-amber-200 shadow-[0_0_10px_rgba(251,191,36,0.4)]',
     },
     {
       id: 'defensive',
-      label: '🛡️ Defensiva',
+      label: 'Defensiva',
       sub: '+50% Def | -25% Atk',
       title: 'Defensiva: Foco em proteção (+50% Def) com redução do dano de ataque (-25% Atk).',
-      color: 'hover:border-sky-500 text-sky-300',
-      activeColor: 'bg-sky-950/40 border-sky-500 text-sky-300 shadow-sky-500/10',
+      slotKey: 'offhand',
+      weaponKey: 'shield',
+      color: 'border-slate-800 text-sky-300 hover:border-sky-500',
+      activeColor: 'bg-sky-950/60 border-sky-400 text-sky-200 shadow-[0_0_10px_rgba(56,189,248,0.4)]',
     },
   ];
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-xl space-y-2">
-      <div className="flex justify-between items-center border-b border-slate-800 pb-1.5">
-        <h3 className="font-bold text-xs text-amber-400 flex items-center gap-1.5">
-          <span>🎯</span> Posturas Táticas
+    <div className="pixel-card rounded-xl p-3 space-y-2">
+      <div className="pixel-card-header">
+        <h3 className="font-pixel-heading text-xs text-amber-400 flex items-center gap-1.5">
+          <span>🎯 Posturas Táticas</span>
         </h3>
         <div className="flex items-center gap-2">
           {onOpenCombatHelp && (
             <button
               onClick={onOpenCombatHelp}
-              className="px-2 py-0.5 bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 rounded text-[10px] font-bold transition flex items-center gap-1 shadow-sm"
+              className="pixel-btn pixel-btn-dark px-2 py-0.5 text-[10px] font-pixel-body"
               title="Entenda as posturas táticas e os estilos de combate"
             >
               <span>❓ Estilos</span>
             </button>
           )}
-          <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">Estratégia</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-2 font-pixel-body">
         {stances.map((stance) => {
           const isSelected = currentStance === stance.id;
           return (
@@ -64,14 +71,21 @@ export function TacticalStanceSelector({
               key={stance.id}
               onClick={() => onSelectStance(stance.id)}
               title={stance.title}
-              className={`p-2 rounded-lg border text-center transition-all ${
+              className={`p-2 pixel-slot rounded text-center transition-all flex flex-col items-center justify-center gap-1 ${
                 isSelected
-                  ? `${stance.activeColor} shadow-md`
-                  : `bg-slate-950 border-slate-800 ${stance.color}`
+                  ? `${stance.activeColor}`
+                  : `bg-slate-950/80 ${stance.color}`
               }`}
             >
-              <div className="text-xs font-bold truncate">{stance.label}</div>
-              <div className="text-[9px] font-mono opacity-80 mt-0.5">{stance.sub}</div>
+              {stance.id === 'offensive' ? (
+                <PixelItemSprite weaponType="sword" size="sm" />
+              ) : stance.id === 'defensive' ? (
+                <PixelItemSprite slotType="offhand" size="sm" />
+              ) : (
+                <span className="text-sm">⚖️</span>
+              )}
+              <div className="text-[11px] font-bold font-pixel-heading truncate">{stance.label}</div>
+              <div className="text-[8px] opacity-80 mt-0.5">{stance.sub}</div>
             </button>
           );
         })}

@@ -1,117 +1,313 @@
 import type { CampState, SettlementResident } from '../../hooks/useGameSocket';
 import { CampBuildingRegistry } from './CampBuildingRegistry';
-import { CampLayoutSlots } from './CampLayoutRegistry';
-import { BuildingRenderContext } from './types';
+import {
+  CAMP_GRID_HEIGHT,
+  CAMP_GRID_WIDTH,
+  LegacySlotDefaults,
+  getBuildingVisualProfile,
+  getGridFootprint,
+  tileToScreen,
+} from './CampLayoutRegistry';
+import { BuildingRenderContext, CampPlacementPreview } from './types';
 import { constructionOverlayRenderer } from './renderers/ConstructionOverlayRenderer';
 
+interface SceneRenderEntry {
+  depth: number;
+  stableOrder: number;
+  render: () => void;
+  slotKey?: string;
+  hitRegion?: { x: number; y: number; width: number; height: number };
+}
+
+interface ResidentSceneState {
+  resident: SettlementResident;
+  x: number;
+  y: number;
+  bob: number;
+  walking: boolean;
+  crafting: boolean;
+  facing: number;
+  role: 'fisher' | 'extractor' | 'cultivator' | 'craftsman';
+  index: number;
+}
+
+export interface CampHeroSceneState {
+  x: number;
+  y: number;
+  groundY: number;
+  walking: boolean;
+  facing: number;
+}
+
+const MAX_VISIBLE_RESIDENTS = 10;
+
 export class CampSceneRenderer {
+  private hitRegions = new Map<string, { x: number; y: number; width: number; height: number }>();
+  private placementPreview: CampPlacementPreview | null = null;
+
+  public setPlacementPreview(preview: CampPlacementPreview | null) {
+    this.placementPreview = preview;
+  }
+
+  public hitTest(x: number, y: number): string | null {
+    const regions = Array.from(this.hitRegions.entries()).reverse();
+    for (const [slotKey, rect] of regions) {
+      if (x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height) return slotKey;
+    }
+    return null;
+  }
+
+  public isPlacementValid(camp: CampState | null, slotKey: string, tileX: number, tileY: number, rotation = 0): boolean {
+    const moving = camp?.buildings?.[slotKey];
+    if (!moving) return false;
+    const fp = getGridFootprint(moving.building_key, rotation);
+    if (tileX < 0 || tileY < 0 || tileX + fp.width > CAMP_GRID_WIDTH || tileY + fp.height > CAMP_GRID_HEIGHT) return false;
+    for (const [otherKey, other] of Object.entries(camp?.buildings || {})) {
+      const otherDiscovered = other.building_key === 'campfire' || Boolean(camp?.blueprints?.[other.building_key]) || other.level > 0;
+      if (otherKey === slotKey || (!otherDiscovered && other.level <= 0 && !other.upgrade_target_level)) continue;
+      const otherFP = getGridFootprint(other.building_key, other.rotation || 0);
+      if (tileX < other.tile_x + otherFP.width && tileX + fp.width > other.tile_x && tileY < other.tile_y + otherFP.height && tileY + fp.height > other.tile_y) return false;
+    }
+    return true;
+  }
+
+  /** Posição visual do herói no acampamento, compartilhando a malha dos moradores. */
+  public getHeroSceneState(time: number): CampHeroSceneState {
+    const start = tileToScreen(8, 14);
+    const end = tileToScreen(15, 9);
+    const cycle = 18000;
+    const progress = (time % cycle) / cycle;
+    let x = start.x;
+    let groundY = start.y;
+    let walking = false;
+    let facing = 1;
+
+    if (progress < 0.10) {
+      facing = 1;
+    } else if (progress < 0.46) {
+      const t = (progress - 0.10) / 0.36;
+      x = start.x + (end.x - start.x) * t;
+      groundY = start.y + (end.y - start.y) * t;
+      walking = true;
+      facing = end.x >= start.x ? 1 : -1;
+    } else if (progress < 0.56) {
+      x = end.x;
+      groundY = end.y;
+      facing = end.x >= start.x ? 1 : -1;
+    } else if (progress < 0.92) {
+      const t = (progress - 0.56) / 0.36;
+      x = end.x + (start.x - end.x) * t;
+      groundY = end.y + (start.y - end.y) * t;
+      walking = true;
+      facing = end.x >= start.x ? -1 : 1;
+    } else {
+      facing = -1;
+    }
+
+    return { x, y: groundY - 24, groundY, walking, facing };
+  }
+
   public render(
     ctx: CanvasRenderingContext2D,
     camp: CampState | null,
     time: number,
-    residents: SettlementResident[] = []
+    residents: SettlementResident[] = [],
+    heroRenderer?: (state: CampHeroSceneState) => void
   ) {
     const slotsMap = camp?.buildings || {};
     const blueprintsMap = camp?.blueprints || {};
+    this.hitRegions.clear();
 
-    // Ordena os slots por sortY para profundidade correta (construções do fundo desenhadas primeiro)
-    const sortedSlots = Object.values(CampLayoutSlots).sort((a, b) => a.sortY - b.sortY);
+    const renderQueue: SceneRenderEntry[] = [];
+    let stableOrder = 0;
 
-    for (const slotCfg of sortedSlots) {
-      const slotData = slotsMap[slotCfg.slotKey];
-      const buildingKey = slotData?.building_key || slotCfg.buildingKey;
-
-      // Verifica se a construção foi descoberta
-      // Fogueira é sempre descoberta; outras dependem do blueprint ou de já terem sido construídas
-      const isDiscovered =
-        buildingKey === 'campfire' ||
-        Boolean(blueprintsMap[buildingKey]) ||
-        (slotData && slotData.level > 0);
-
-      // Se a construção ainda não foi descoberta, não renderiza nada no slot (permanece terreno natural)
+    for (const slotData of Object.values(slotsMap)) {
+      const buildingKey = slotData.building_key;
+      const isDiscovered = buildingKey === 'campfire' || Boolean(blueprintsMap[buildingKey]) || slotData.level > 0;
       if (!isDiscovered) continue;
 
       const renderer = CampBuildingRegistry.get(buildingKey);
       if (!renderer) continue;
 
+      const legacyPos = LegacySlotDefaults[slotData.slot_key] || { tileX: 0, tileY: 0 };
+      const tileX = Number.isFinite(slotData.tile_x) ? slotData.tile_x : legacyPos.tileX;
+      const tileY = Number.isFinite(slotData.tile_y) ? slotData.tile_y : legacyPos.tileY;
+      const rotation = slotData.rotation || 0;
+      const gridFP = getGridFootprint(buildingKey, rotation);
+      const center = tileToScreen(tileX + (gridFP.width - 1) / 2, tileY + (gridFP.height - 1) / 2);
+      const visual = getBuildingVisualProfile(buildingKey);
+      const groundY = center.y + gridFP.height * visual.groundOffset;
+
       let isUnderConstruction = false;
       let constructionProgress = 0;
-      let targetLevel = (slotData?.level || 0) + 1;
-
-      if (slotData?.upgrade_target_level && slotData.upgrade_started_at && slotData.upgrade_ends_at) {
-        const start = new Date(slotData.upgrade_started_at).getTime();
-        const end = new Date(slotData.upgrade_ends_at).getTime();
+      let targetLevel = (slotData.level || 0) + 1;
+      if (slotData.upgrade_target_level && slotData.upgrade_started_at && slotData.upgrade_ends_at) {
+        const startAt = new Date(slotData.upgrade_started_at).getTime();
+        const endAt = new Date(slotData.upgrade_ends_at).getTime();
         const now = Date.now();
-        if (now < end) {
+        if (now < endAt) {
           isUnderConstruction = true;
           targetLevel = slotData.upgrade_target_level;
-          const totalDuration = end - start;
-          const elapsed = now - start;
-          constructionProgress = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
+          constructionProgress = Math.min(100, Math.max(0, ((now - startAt) / Math.max(1, endAt - startAt)) * 100));
         }
       }
 
       const footprint = {
-        width: slotCfg.maxWidth,
-        height: slotCfg.maxHeight,
+        width: Math.round(visual.silhouetteWidth * visual.sceneScale),
+        height: Math.round(visual.silhouetteHeight * visual.sceneScale),
       };
-
+      const groundHitPadding = Math.max(12, Math.round(footprint.height * 0.45));
       const renderCtx: BuildingRenderContext = {
         ctx,
-        level: slotData?.level || 0,
+        level: slotData.level || 0,
         targetLevel,
         discovered: true,
         isUnderConstruction,
         constructionProgress,
-        x: slotCfg.anchorX,
-        y: slotCfg.groundY,
-        scale: slotCfg.baseScale || 1.0,
+        x: center.x,
+        y: groundY,
+        scale: visual.sceneScale,
         time,
         footprint,
       };
 
-      // 1. Desenha o nível atual da construção
-      renderer(ctx, renderCtx);
-
-      // 2. Se estiver em obra, desenha o overlay com andaime, martelo, poeira e progresso por cima
-      if (isUnderConstruction) {
-        constructionOverlayRenderer.render(ctx, {
-          currentLevel: slotData?.level || 0,
-          targetLevel,
-          progress: constructionProgress,
-          footprint,
-          x: slotCfg.anchorX,
-          groundY: slotCfg.groundY,
-          time,
-        });
-      }
+      renderQueue.push({
+        // O pé do objeto define profundidade no isométrico. NPCs atrás da casa
+        // deixam de aparecer sempre por cima dela.
+        depth: groundY,
+        stableOrder: stableOrder++,
+        slotKey: slotData.slot_key,
+        hitRegion: {
+          x: center.x - footprint.width / 2,
+          y: groundY - footprint.height,
+          width: footprint.width,
+          height: footprint.height + groundHitPadding,
+        },
+        render: () => {
+          renderer(ctx, renderCtx);
+          if (isUnderConstruction) {
+            constructionOverlayRenderer.render(ctx, {
+              currentLevel: slotData.level || 0,
+              targetLevel,
+              progress: constructionProgress,
+              footprint,
+              x: center.x,
+              groundY,
+              time,
+            });
+          }
+        },
+      });
     }
 
-    this.renderResidents(ctx, residents, time);
+    if (heroRenderer) {
+      const heroState = this.getHeroSceneState(time);
+      renderQueue.push({
+        depth: heroState.groundY,
+        stableOrder: stableOrder++,
+        render: () => heroRenderer(heroState),
+      });
+    }
+
+    const residentStates = this.calculateResidentStates(camp, residents, time);
+    for (const state of residentStates) {
+      renderQueue.push({
+        depth: state.y,
+        stableOrder: stableOrder++,
+        render: () => this.renderResidentState(ctx, state, time),
+      });
+    }
+
+    renderQueue
+      .sort((a, b) => a.depth - b.depth || a.stableOrder - b.stableOrder)
+      .forEach((entry) => {
+        if (entry.slotKey && entry.hitRegion) this.hitRegions.set(entry.slotKey, entry.hitRegion);
+        entry.render();
+      });
+
+    if (this.placementPreview && camp?.buildings?.[this.placementPreview.slotKey]) {
+      this.renderPlacementPreview(ctx, camp, this.placementPreview);
+    }
   }
 
-  private renderResidents(ctx: CanvasRenderingContext2D, residents: SettlementResident[], time: number) {
-    const visibleResidents = residents.filter((resident) => resident.status !== 'collecting').slice(0, 16);
-    
-    // Rotas de travessia de ponta a ponta do vilarejo
+  private renderPlacementPreview(ctx: CanvasRenderingContext2D, camp: CampState, preview: CampPlacementPreview) {
+    const building = camp.buildings[preview.slotKey];
+    const fp = getGridFootprint(building.building_key, preview.rotation);
+    ctx.save();
+    ctx.globalAlpha = 0.72;
+    ctx.fillStyle = preview.valid ? 'rgba(34,197,94,0.30)' : 'rgba(239,68,68,0.35)';
+    ctx.strokeStyle = preview.valid ? '#4ade80' : '#f87171';
+    ctx.lineWidth = 2;
+    for (let x = 0; x < fp.width; x++) {
+      for (let y = 0; y < fp.height; y++) {
+        const c = tileToScreen(preview.tileX + x, preview.tileY + y);
+        ctx.beginPath();
+        ctx.moveTo(c.x, c.y - 8);
+        ctx.lineTo(c.x + 16, c.y);
+        ctx.lineTo(c.x, c.y + 8);
+        ctx.lineTo(c.x - 16, c.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  private calculateResidentStates(camp: CampState | null, residents: SettlementResident[], time: number): ResidentSceneState[] {
+    const presentResidents = residents
+      .filter((resident) => resident.status !== 'collecting')
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const craftingResidents = presentResidents.filter((resident) => resident.status === 'crafting');
+    const idleResidents = presentResidents.filter((resident) => resident.status !== 'crafting');
+    const idleCapacity = Math.max(0, MAX_VISIBLE_RESIDENTS - craftingResidents.length);
+    const visibleIdle: SettlementResident[] = [];
+    if (idleCapacity > 0 && idleResidents.length > 0) {
+      const rotationOffset = Math.floor(time / 30000) % idleResidents.length;
+      for (let i = 0; i < Math.min(idleCapacity, idleResidents.length); i++) {
+        visibleIdle.push(idleResidents[(rotationOffset + i) % idleResidents.length]);
+      }
+    }
+    const visibleResidents = [...craftingResidents.slice(0, MAX_VISIBLE_RESIDENTS), ...visibleIdle]
+      .slice(0, MAX_VISIBLE_RESIDENTS);
+
+    const route = (sx: number, sy: number, ex: number, ey: number) => {
+      const start = tileToScreen(sx, sy);
+      const end = tileToScreen(ex, ey);
+      return { startX: start.x, startY: start.y, endX: end.x, endY: end.y };
+    };
+
+    // Rotas longas e espalhadas pelo terreno V3. Com 20+ moradores o sistema
+    // simula a população inteira, mas somente um subconjunto representativo é
+    // desenhado simultaneamente para preservar leitura visual e FPS.
     const traversalRoutes = [
-      { startX: 130, startY: 214, endX: 690, endY: 228 }, // Pescador (Cabanas Oeste <-> Rio Leste)
-      { startX: 210, startY: 218, endX: 650, endY: 232 }, // Lenhador / Minerador (Centro <-> Floresta Leste)
-      { startX: 150, startY: 208, endX: 580, endY: 194 }, // Cultivador (Alojamento Oeste <-> Hortas Leste)
-      { startX: 120, startY: 212, endX: 620, endY: 220 }, // Ferreiro / Artesão (Oeste <-> Armazém Leste)
-      { startX: 280, startY: 178, endX: 680, endY: 222 }, // Alquimista (Fonte Arcana <-> Laboratório Leste)
-      { startX: 170, startY: 222, endX: 710, endY: 216 }, // Marceneiro / Construtor
-      { startX: 140, startY: 210, endX: 600, endY: 230 }, // Coureiro / Provedor
-      { startX: 230, startY: 216, endX: 730, endY: 225 }, // Carregador da Comunidade
+      route(3, 14, 20, 14),
+      route(4, 11, 19, 7),
+      route(5, 15, 18, 5),
+      route(3, 8, 20, 10),
+      route(7, 16, 17, 4),
+      route(2, 12, 21, 8),
+      route(5, 6, 19, 15),
+      route(8, 4, 20, 13),
+      route(3, 5, 15, 16),
+      route(9, 16, 21, 6),
     ];
 
-    visibleResidents.forEach((resident, index) => {
-      const route = traversalRoutes[index % traversalRoutes.length];
-      const isCrafting = resident.status === 'crafting';
+    return visibleResidents.map((resident, index) => {
+      const skills = new Set((resident.skills || []).map((skill) => skill.skill_key));
+      let role: ResidentSceneState['role'] = 'cultivator';
+      if (skills.has('fisher')) {
+        role = 'fisher';
+      } else if (skills.has('lumberjack') || skills.has('miner')) {
+        role = 'extractor';
+      } else if (skills.has('blacksmith') || skills.has('jeweler') || skills.has('alchemist') || skills.has('woodworker') || skills.has('cook')) {
+        role = 'craftsman';
+      }
 
-      // Ciclo completo de travessia de longo curso (ida, pausa de trabalho, volta, pausa de descanso)
-      const totalCycle = 22000 + (index * 2600);
-      const cycleProgress = ((time + index * 4200) % totalCycle) / totalCycle;
+      const isCrafting = resident.status === 'crafting';
+      const selectedRoute = traversalRoutes[index % traversalRoutes.length];
+      const totalCycle = 26000 + index * 3100;
+      const cycleProgress = ((time + index * 5200) % totalCycle) / totalCycle;
 
       let currentX: number;
       let currentY: number;
@@ -119,70 +315,92 @@ export class CampSceneRenderer {
       let facing = 1;
 
       if (isCrafting) {
-        currentX = 375 + (index % 3) * 20;
-        currentY = 234;
-        isWalking = false;
-        facing = 1;
-      } else if (cycleProgress < 0.42) {
-        // 1. Caminhando ativamente de Oeste para Leste
-        const t = cycleProgress / 0.42;
-        currentX = route.startX + (route.endX - route.startX) * t;
-        currentY = route.startY + (route.endY - route.startY) * t + Math.sin(t * Math.PI * 4) * 2;
+        const target = this.resolveWorkPoint(camp, skills, index);
+        currentX = target.x;
+        currentY = target.y;
+      } else if (cycleProgress < 0.43) {
+        const t = cycleProgress / 0.43;
+        currentX = selectedRoute.startX + (selectedRoute.endX - selectedRoute.startX) * t;
+        currentY = selectedRoute.startY + (selectedRoute.endY - selectedRoute.startY) * t + Math.sin(t * Math.PI * 4) * 1.5;
         isWalking = true;
+        facing = selectedRoute.endX >= selectedRoute.startX ? 1 : -1;
+      } else if (cycleProgress < 0.52) {
+        currentX = selectedRoute.endX;
+        currentY = selectedRoute.endY;
         facing = 1;
-      } else if (cycleProgress < 0.50) {
-        // 2. Parado no destino Leste executando atividade
-        currentX = route.endX;
-        currentY = route.endY;
-        isWalking = false;
-        facing = 1;
-      } else if (cycleProgress < 0.92) {
-        // 3. Caminhando ativamente de Leste de volta para Oeste
-        const t = (cycleProgress - 0.50) / 0.42;
-        currentX = route.endX + (route.startX - route.endX) * t;
-        currentY = route.endY + (route.startY - route.endY) * t + Math.sin(t * Math.PI * 4) * 2;
+      } else if (cycleProgress < 0.94) {
+        const t = (cycleProgress - 0.52) / 0.42;
+        currentX = selectedRoute.endX + (selectedRoute.startX - selectedRoute.endX) * t;
+        currentY = selectedRoute.endY + (selectedRoute.startY - selectedRoute.endY) * t + Math.sin(t * Math.PI * 4) * 1.5;
         isWalking = true;
-        facing = -1;
+        facing = selectedRoute.endX >= selectedRoute.startX ? -1 : 1;
       } else {
-        // 4. Parado no ponto de origem Oeste descansando/descarregando
-        currentX = route.startX;
-        currentY = route.startY;
-        isWalking = false;
+        currentX = selectedRoute.startX;
+        currentY = selectedRoute.startY;
         facing = -1;
       }
 
       const bob = isCrafting
-        ? Math.abs(Math.sin(time / 140)) * 2.5
+        ? Math.abs(Math.sin(time / 140)) * 2.1
         : isWalking
-        ? Math.abs(Math.sin(time / 140)) * 2.0
-        : Math.sin(time / 450 + index * 1.3) * 1.0;
-      
-      const skills = new Set(resident.skills.map((skill) => skill.skill_key));
-      let role: 'fisher' | 'extractor' | 'cultivator' | 'craftsman' = 'cultivator';
-      if (skills.has('fisher')) {
-        role = 'fisher';
-      } else if (skills.has('lumberjack') || skills.has('miner')) {
-        role = 'extractor';
-      } else if (skills.has('blacksmith') || skills.has('jeweler') || skills.has('alchemist') || skills.has('woodworker')) {
-        role = 'craftsman';
-      }
+          ? Math.abs(Math.sin(time / 145)) * 1.7
+          : Math.sin(time / 500 + index * 1.3) * 0.8;
 
-      this.renderResidentSprite(ctx, currentX, currentY - bob, role, isCrafting, isWalking, facing, time + index * 200, index);
-
-      // Placa de Identificação com Nome (sempre desespelhada e legível)
-      ctx.save();
-      ctx.font = 'bold 8px monospace';
-      ctx.textAlign = 'center';
-      const label = resident.name;
-      const width = Math.max(52, ctx.measureText(label).width + 10);
-      ctx.fillStyle = 'rgba(2, 6, 23, 0.92)';
-      ctx.fillRect(Math.round(currentX - width / 2), currentY - 50 - bob, Math.round(width), 12);
-      ctx.strokeStyle = isCrafting ? '#f59e0b' : '#475569';
-      ctx.strokeRect(Math.round(currentX - width / 2) + 0.5, currentY - 49.5 - bob, Math.round(width) - 1, 11);
-      ctx.fillStyle = isCrafting ? '#fbbf24' : '#f1f5f9';
-      ctx.fillText(label, currentX, currentY - 41 - bob);
-      ctx.restore();
+      return {
+        resident,
+        x: currentX,
+        y: currentY,
+        bob,
+        walking: isWalking,
+        crafting: isCrafting,
+        facing,
+        role,
+        index,
+      };
     });
+  }
+
+  private resolveWorkPoint(camp: CampState | null, skills: Set<string>, index: number) {
+    let preferredBuilding = 'workbench';
+    if (skills.has('cook')) preferredBuilding = 'kitchen';
+    else if (skills.has('alchemist')) preferredBuilding = 'alchemy_bench';
+
+    const building = Object.values(camp?.buildings || {}).find((slot) => slot.building_key === preferredBuilding && slot.level > 0);
+    if (!building) {
+      const fallback = tileToScreen(12 + (index % 3), 10 + (index % 2));
+      return { x: fallback.x + (index % 2 === 0 ? -7 : 7), y: fallback.y };
+    }
+
+    const fp = getGridFootprint(building.building_key, building.rotation || 0);
+    const center = tileToScreen(building.tile_x + (fp.width - 1) / 2, building.tile_y + (fp.height - 1) / 2);
+    const lane = index % 3;
+    return {
+      x: center.x + (lane - 1) * 13,
+      y: center.y + fp.height * 4 + 10 + (lane % 2) * 4,
+    };
+  }
+
+  private renderResidentState(ctx: CanvasRenderingContext2D, state: ResidentSceneState, time: number) {
+    const { resident, x, y, bob, role, crafting, walking, facing, index } = state;
+    this.renderResidentSprite(ctx, x, y - bob, role, crafting, walking, facing, time + index * 200, index);
+
+    // Nomes deixam de ficar permanentemente empilhados. Trabalhadores em
+    // movimento são reconhecidos pelo sprite/roupa; placas aparecem quando
+    // param ou executam uma profissão.
+    if (walking && !crafting) return;
+
+    ctx.save();
+    ctx.font = 'bold 7px monospace';
+    ctx.textAlign = 'center';
+    const label = resident.name;
+    const width = Math.max(44, ctx.measureText(label).width + 8);
+    ctx.fillStyle = 'rgba(2, 6, 23, 0.88)';
+    ctx.fillRect(Math.round(x - width / 2), y - 46 - bob, Math.round(width), 10);
+    ctx.strokeStyle = crafting ? '#f59e0b' : '#475569';
+    ctx.strokeRect(Math.round(x - width / 2) + 0.5, y - 45.5 - bob, Math.round(width) - 1, 9);
+    ctx.fillStyle = crafting ? '#fbbf24' : '#e2e8f0';
+    ctx.fillText(label, x, y - 38 - bob);
+    ctx.restore();
   }
 
   private renderResidentSprite(

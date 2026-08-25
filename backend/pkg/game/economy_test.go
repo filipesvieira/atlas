@@ -31,6 +31,26 @@ func TestLegacyItemMigrationOnlyAddsSource(t *testing.T) {
 	}
 }
 
+func TestLegacyBootMigrationRestoresMovementSpeed(t *testing.T) {
+	legacyByKey := Item{TemplateKey: "botas_de_couro", Rarity: "Raro"}
+	migratedByKey := RebalanceExistingItem(legacyByKey)
+	if migratedByKey.MovementSpeedBonus != 16.5 {
+		t.Fatalf("botas legadas por chave deveriam receber +16.5%%, obtido %.1f%%", migratedByKey.MovementSpeedBonus)
+	}
+
+	legacyByName := Item{Name: "Botas Celestiais", Rarity: "Comum"}
+	migratedByName := RebalanceExistingItem(legacyByName)
+	if migratedByName.MovementSpeedBonus != 20.0 {
+		t.Fatalf("botas legadas por nome deveriam receber +20%%, obtido %.1f%%", migratedByName.MovementSpeedBonus)
+	}
+
+	// Um valor já explícito não pode ser substituído pela compatibilidade.
+	current := Item{TemplateKey: "botas_de_couro", Rarity: "Raro", MovementSpeedBonus: 12.3}
+	if got := RebalanceExistingItem(current).MovementSpeedBonus; got != 12.3 {
+		t.Fatalf("bônus explícito foi alterado: %.1f%%", got)
+	}
+}
+
 func TestEveryGenericEquipmentHasCraftRecipe(t *testing.T) {
 	if err := ValidateRecipeRegistry(); err != nil {
 		t.Fatal(err)
@@ -130,6 +150,47 @@ func TestGatheringUsesImmutableExpeditionSnapshot(t *testing.T) {
 	after := CalculateGatheringResult(activity, activity.EndsAt)
 	if before.CompletedCycles != after.CompletedCycles || before.ProfessionXP != after.ProfessionXP || !reflect.DeepEqual(before.Rewards, after.Rewards) {
 		t.Fatal("alteração do catálogo modificou retroativamente uma ordem existente")
+	}
+}
+
+func TestGatheringDestinationsAreSelectableAndKeepLegacyDefinitions(t *testing.T) {
+	legacy, exists := GetGatheringExpedition("lonely_pickaxe")
+	if !exists || legacy.PlayerSelectable {
+		t.Fatalf("a expedição legada deve permanecer apenas para snapshots já iniciados")
+	}
+
+	route, exists := GetGatheringExpedition("route_lonely_pickaxe_iron_crack")
+	if !exists {
+		t.Fatal("rota selecionável da Fenda Ferruginosa não foi registrada")
+	}
+	if !route.PlayerSelectable || route.DisplayName != "Fenda Ferruginosa" || route.AreaName != "Pedreira da Picareta Solitária" {
+		t.Fatalf("metadados da rota inválidos: %#v", route)
+	}
+	if len(route.Nodes) != 1 || route.Nodes[0].Key != "iron_crack" || route.Nodes[0].Weight != 1 {
+		t.Fatalf("a rota escolhida deve conter somente a frente selecionada: %#v", route.Nodes)
+	}
+}
+
+func TestTrackerRoutesHaveDistinctResourceIdentity(t *testing.T) {
+	deerRoute, deerOK := GetGatheringExpedition("route_mysterious_meat_trail_deer_tracks")
+	boneRoute, boneOK := GetGatheringExpedition("route_mysterious_meat_trail_bone_clearing")
+	if !deerOK || !boneOK || len(deerRoute.Nodes) != 1 || len(boneRoute.Nodes) != 1 {
+		t.Fatal("rotas selecionáveis do rastreador não foram registradas corretamente")
+	}
+
+	hasReward := func(node GatheringNodeDefinition, key string) bool {
+		for _, reward := range node.Rewards {
+			if reward.ResourceKey == key {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasReward(deerRoute.Nodes[0], "raw_meat") || hasReward(deerRoute.Nodes[0], "animal_bone") {
+		t.Fatalf("Pegadas de Cervos devem priorizar carne e não entregar ossos: %#v", deerRoute.Nodes[0].Rewards)
+	}
+	if !hasReward(boneRoute.Nodes[0], "animal_bone") {
+		t.Fatalf("Clareira dos Ossos deve entregar Osso de Caça: %#v", boneRoute.Nodes[0].Rewards)
 	}
 }
 

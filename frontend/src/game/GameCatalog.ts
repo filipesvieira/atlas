@@ -14,7 +14,7 @@ export interface SkillCatalogEntry {
   visual_key: string;
 }
 
-export type ResourceCategory = 'material' | 'profession_raw' | 'monster_part' | 'processed' | 'catalyst' | 'trophy' | 'scrap';
+export type ResourceCategory = 'material' | 'profession_raw' | 'monster_part' | 'processed' | 'consumable' | 'catalyst' | 'trophy' | 'scrap';
 
 export interface ResourceDefinition {
   key: string;
@@ -90,6 +90,7 @@ export interface BuildingDefinition {
   icon: string;
   description: string;
   slot_type: string;
+  default_unlocked?: boolean;
   max_level: number;
   levels: BuildingLevelDefinition[];
 }
@@ -99,6 +100,7 @@ export interface ProfessionDefinition {
   name: string;
   icon: string;
   description: string;
+  category?: 'gathering' | 'crafting' | string;
   max_level: number;
 }
 
@@ -112,6 +114,7 @@ export interface GatheringRewardDefinition {
 export interface GatheringExpeditionDefinition {
   key: string;
   display_name: string;
+  area_name?: string;
   icon: string;
   description: string;
   biome_key: string;
@@ -127,15 +130,16 @@ export interface GatheringExpeditionDefinition {
     profession_xp: number;
     required_tool_tier: number;
     rewards: Array<{ resource_key: string; chance: number; min_quantity: number; max_quantity: number }>;
-  }>;
+  }>; 
   content_version: number;
+  player_selectable: boolean;
 }
 
 export interface RecipeDefinition {
   key: string;
   name: string;
   description: string;
-  kind: 'equipment' | 'processing';
+  kind: 'equipment' | 'processing' | 'consumable';
   output_template_key?: string;
   output_resource_key?: string;
   output_quantity?: number;
@@ -168,6 +172,7 @@ export interface RecipeDefinition {
   crit_chance?: number;
   lifesteal?: number;
   mana_regen?: number;
+  base_movement_speed_bonus?: number;
 }
 
 export interface EconomyPolicy {
@@ -178,6 +183,17 @@ export interface EconomyPolicy {
   crafting_first_loot_enabled: boolean;
   common_equipment_drop_multiplier: number;
   boss_artifact_drop_multiplier: number;
+}
+
+export interface ConsumableDefinition {
+  resource_key: string;
+  name: string;
+  description: string;
+  category: 'meal' | 'potion';
+  effect_key: 'xp_gain_percent' | 'attack_percent';
+  magnitude: number;
+  duration_seconds: number;
+  content_version: number;
 }
 
 interface GameCatalogResponse {
@@ -207,6 +223,7 @@ interface GameCatalogResponse {
   professions?: ProfessionDefinition[];
   gathering_expeditions?: GatheringExpeditionDefinition[];
   recipes?: RecipeDefinition[];
+  consumables?: ConsumableDefinition[];
   economy_policy?: EconomyPolicy;
 }
 
@@ -252,6 +269,7 @@ export interface GameCatalogData {
   professions: ProfessionDefinition[];
   gatheringExpeditions: GatheringExpeditionDefinition[];
   recipes: RecipeDefinition[];
+  consumables: ConsumableDefinition[];
   economyPolicy?: EconomyPolicy;
 }
 
@@ -287,6 +305,7 @@ function mapCatalog(response: GameCatalogResponse): GameCatalogData {
     professions: response.professions || [],
     gatheringExpeditions: response.gathering_expeditions || [],
     recipes: response.recipes || [],
+    consumables: response.consumables || [],
     economyPolicy: response.economy_policy,
   };
 }

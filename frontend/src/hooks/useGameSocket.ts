@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { WS_BASE_URL } from '../config';
+import type { ImportantNotification } from '../types/notifications';
+
+const IGNORED_LOG_TYPES = new Set(['COMBAT_EVENT', 'TICK_UPDATE', 'HERO_MOVEMENT', 'AUTO_SELL_PREVIEW', 'STATE_SNAPSHOT']);
 
 export interface Item {
   id: string;
@@ -23,6 +26,7 @@ export interface Item {
   crit_chance?: number;
   lifesteal?: number;
   mana_regen?: number;
+  movement_speed_bonus?: number;
   hands?: number;
   weapon_type?: string;
   slot_type?: string;
@@ -69,6 +73,7 @@ export interface DerivedStats {
   mana_regen_per_second: number;
   current_dps: number;
   speed_multiplier: number;
+  movement_speed_multiplier?: number;
   primary_archetype: string;
   attack_speed_seconds?: number;
   attack_speed_bonus?: number;
@@ -86,6 +91,9 @@ export interface BuildingSlot {
   upgrade_target_level?: number;
   upgrade_started_at?: string;
   upgrade_ends_at?: string;
+  tile_x: number;
+  tile_y: number;
+  rotation: number;
   updated_at: string;
 }
 
@@ -114,6 +122,22 @@ export interface AutoSellSettings {
   keep_best_per_template: number;
   protected_template_keys: string[];
   sell_crafted_items: boolean;
+  revision: number;
+}
+
+export interface AutoPotionSettings {
+  enabled: boolean;
+  health_threshold_percent: number;
+  mana_threshold_percent: number;
+  max_gold_per_expedition: number;
+  revision: number;
+}
+
+export interface AutoPotionState {
+  gold_spent: number;
+  health_cooldown_until?: string;
+  mana_cooldown_until?: string;
+  budget_exhausted: boolean;
   revision: number;
 }
 
@@ -148,6 +172,9 @@ export interface GatheringActivity {
   started_at: string;
   ends_at: string;
   revision: number;
+  wage_reserved: number;
+  wage_paid: number;
+  wage_rule_version: number;
 }
 
 export interface GatheringResult {
@@ -164,6 +191,9 @@ export interface GatheringResult {
   profession_level_before: number;
   profession_level_after: number;
   was_cancelled: boolean;
+  wage_reserved: number;
+  wage_paid: number;
+  wage_refunded: number;
 }
 
 export interface SettlementResidentSkill {
@@ -230,6 +260,18 @@ export interface SettlementState {
   residents: SettlementResident[];
   hero_desires: HeroDesire[];
   armory: SettlementArmoryItem[];
+  treasury?: {
+    balance: number;
+    reserved_payroll: number;
+    lifetime_income: number;
+    lifetime_expenses: number;
+    auto_fund_enabled: boolean;
+    personal_gold_reserve: number;
+    payroll_unlocked: boolean;
+    unlock_prosperity: number;
+    base_hourly_wage: number;
+    economy_version: number;
+  };
 }
 
 export interface PendingResourceBatch {
@@ -239,6 +281,25 @@ export interface PendingResourceBatch {
   quantity: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface ActiveBuff {
+  category: 'meal' | string;
+  source_resource_key: string;
+  source_name: string;
+  effect_key: 'xp_gain_percent' | 'attack_percent' | string;
+  magnitude: number;
+  started_at: string;
+  expires_at: string;
+  content_version: number;
+}
+
+export interface ConsumeResult {
+  request_id: string;
+  resource_key: string;
+  active_buff: ActiveBuff;
+  replaced_buff?: ActiveBuff;
+  resource_inventory: { items: ResourceAmount[]; storage_used: number; storage_capacity: number; revision: number };
 }
 
 export interface EconomyState {
@@ -251,6 +312,7 @@ export interface EconomyState {
   pending_resources?: ResourceAmount[];
   pending_resource_batches?: PendingResourceBatch[];
   settlement?: SettlementState;
+  active_buffs?: ActiveBuff[];
 }
 
 export interface CraftPreview {
@@ -352,6 +414,19 @@ export interface CombatMessage {
   total_attack?: number;
   total_defense?: number;
   derived_stats?: DerivedStats;
+  arena?: {
+    key: string;
+    width: number;
+    height: number;
+    projectile_follow?: boolean;
+    hero: {
+      grid_x: number;
+      grid_y: number;
+      state?: string;
+      target_id?: string;
+      movement_speed_multiplier?: number;
+    };
+  };
   combat_effects?: Array<{
     kind: 'skill' | 'attack' | 'heal' | 'status';
     key: string;
@@ -370,16 +445,106 @@ export interface CombatMessage {
   max_stages?: number;
   is_boss_stage?: boolean;
   log_text?: string;
+  notification_text?: string;
   item_found?: Item;
   is_active?: boolean;
   discovered_loot?: string[];
   auto_sell_settings?: AutoSellSettings;
+	  auto_potion_settings?: AutoPotionSettings;
+	  auto_potion_state?: AutoPotionState;
   overflow_chest?: Item[];
   auto_sell_preview?: AutoSellEvaluationResult;
   economy?: EconomyState;
+  active_buffs?: ActiveBuff[];
   gathering_result?: GatheringResult;
   craft_preview?: CraftPreview;
+  craft_result?: {
+    item?: Item;
+    resources?: ResourceAmount[];
+    rarity?: string;
+    recipe_key?: string;
+    transaction_id?: string;
+    sent_to_backpack?: boolean;
+    sent_to_armory?: boolean;
+  };
   craft_batch_result?: CraftBatchResult;
+  consume_result?: ConsumeResult;
+}
+
+function importantNotificationForMessage(msg: CombatMessage, previousCharacter: any): ImportantNotification | null {
+  const rawMessage = (msg.notification_text || msg.log_text || '').trim();
+  const eventId = `${msg.type}:${msg.seq || msg.request_id || msg.timestamp}:${msg.craft_result?.transaction_id || msg.gathering_result?.activity_id || ''}`;
+  const notification = (
+    category: ImportantNotification['category'],
+    icon: string,
+    title: string,
+    message: string,
+  ): ImportantNotification => ({
+    id: eventId,
+    category,
+    icon,
+    title,
+    message: message || rawMessage,
+    timestamp: msg.timestamp || new Date().toISOString(),
+    read: false,
+  });
+
+  const character = msg.character;
+  if (character && previousCharacter && character.level > (previousCharacter.level || 0)) {
+    const availablePoints = character.unspent_points || 0;
+    const points = availablePoints > 0 ? ` ${availablePoints} ponto(s) aguardam distribuição.` : '';
+    return notification('progress', '🌟', 'Você subiu de nível', `Nível ${previousCharacter.level} → ${character.level}.${points}`);
+  }
+
+  if (character && previousCharacter && (character.unspent_points || 0) > (previousCharacter.unspent_points || 0)) {
+    return notification('progress', '✨', 'Pontos disponíveis', `${character.unspent_points || 0} ponto(s) de atributo aguardam distribuição.`);
+  }
+
+  if (msg.type === 'SKILL_LEARNED') {
+    return notification('skill', '📚', 'Nova habilidade aprendida', rawMessage || 'Uma nova habilidade foi aprendida permanentemente.');
+  }
+
+  if (msg.type === 'GATHERING_AUTO_CLAIMED' || msg.type === 'GATHERING_CLAIMED') {
+    const result = msg.gathering_result;
+    const worker = result?.resident_name || 'O trabalhador';
+    const cycles = result?.completed_cycles ? ` ${result.completed_cycles} ciclo(s)` : '';
+    return notification('gathering', '🏡', msg.type === 'GATHERING_AUTO_CLAIMED' ? 'Trabalhador retornou' : 'Coleta concluída', rawMessage || `${worker} voltou${cycles} e entregou a produção no Depósito.`);
+  }
+
+  if (msg.type === 'HERO_DESIRE_ATTEMPT_COMPLETED' && msg.craft_result?.item) {
+    const item = msg.craft_result.item;
+    const destination = msg.craft_result.sent_to_backpack
+      ? 'foi enviado diretamente para a mochila.'
+      : 'foi craftado e guardado no Arsenal.';
+    return notification('craft', '🏰', 'Equipamento de Ambição pronto', `${item.name}${item.rarity ? ` (${item.rarity})` : ''} ${destination}`);
+  }
+
+  if (msg.type === 'HERO_DESIRE_ATTEMPT_COMPLETED' && (msg.craft_result?.resources?.length || 0) > 0) {
+    const output = msg.craft_result!.resources!.map((resource) => `+${resource.quantity} ${resource.key}`).join(', ');
+    return notification('craft', '🏡', 'Produção da Ambição concluída', rawMessage || `${output} foi entregue ao Depósito.`);
+  }
+
+  if (msg.type === 'CRAFT_COMPLETED' || msg.type === 'CRAFT_BATCH_COMPLETED') {
+    const item = msg.craft_result?.item;
+    const completed = msg.craft_batch_result?.completed || (item ? 1 : 0);
+    const itemMessage = item ? `${item.name}${item.rarity ? ` (${item.rarity})` : ''} foi craftado com sucesso.` : `${completed} produção(ões) concluída(s) com sucesso.`;
+    return notification('craft', '⚒️', 'Craft concluído', itemMessage);
+  }
+
+  if (msg.type === 'ARMORY_ITEM_CLAIMED' || msg.type === 'PENDING_CRAFT_CLAIMED') {
+    return notification('reward', '🎁', 'Item recebido', msg.item_found?.name ? `${msg.item_found.name} foi enviado para a mochila.` : rawMessage);
+  }
+
+  if (msg.type === 'WELCOME_EVENT' && /trabalhador|produção|entreg/i.test(rawMessage)) {
+    return notification('gathering', '🏡', 'Produção recebida', rawMessage);
+  }
+
+  // COMBAT_EVENT, EXPEDITION_STATUS e avisos de suprimentos ficam fora do
+  // feed de acontecimentos importantes. O log de batalha continua recebendo
+  // esses textos quando aplicável, mas o sino deve destacar apenas fatos que
+  // exigem atenção fora do combate: progresso, produção, coleta e itens.
+
+  return null;
 }
 
 export function useGameSocket(token: string, characterId: string, initialChar?: any) {
@@ -394,6 +559,8 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
   });
   const [discoveredLoot, setDiscoveredLoot] = useState<string[]>([]);
   const [autoSellSettings, setAutoSellSettings] = useState<AutoSellSettings | null>(null);
+	const [autoPotionSettings, setAutoPotionSettings] = useState<AutoPotionSettings | null>(null);
+	const [autoPotionState, setAutoPotionState] = useState<AutoPotionState | null>(null);
   const [overflowChest, setOverflowChest] = useState<Item[]>([]);
   const [autoSellPreview, setAutoSellPreview] = useState<AutoSellEvaluationResult | null>(null);
   const [camp, setCamp] = useState<CampState | null>(null);
@@ -405,6 +572,7 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
     revision: number;
   } | null>(null);
   const [economy, setEconomy] = useState<EconomyState | null>(null);
+  const [activeBuffs, setActiveBuffs] = useState<ActiveBuff[]>([]);
   const [craftPreview, setCraftPreview] = useState<CraftPreview | null>(null);
   const [lastCraftBatchResult, setLastCraftBatchResult] = useState<CraftBatchResult | null>(null);
   const [lastGatheringResult, setLastGatheringResult] = useState<GatheringResult | null>(null);
@@ -429,12 +597,14 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 
   const socketRef = useRef<WebSocket | null>(null);
   const onCombatEventRef = useRef<((event: CombatMessage) => void) | null>(null);
+  const onImportantNotificationRef = useRef<((notification: ImportantNotification) => void) | null>(null);
   const lastSequenceRef = useRef<number>(0);
   const lastCharacterRevisionRef = useRef<number>(initialChar?.state_revision || 0);
   const lastInventoryRevisionRef = useRef<number>(0);
   const lastCampRevisionRef = useRef<number>(0);
   const lastResourceRevisionRef = useRef<number>(0);
   const activeCharacterRef = useRef<string>(characterId);
+  const previousCharacterRef = useRef<any>(initialChar || null);
 
   useEffect(() => {
     if (activeCharacterRef.current === characterId) return;
@@ -444,10 +614,15 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
     lastInventoryRevisionRef.current = 0;
     lastCampRevisionRef.current = 0;
     lastResourceRevisionRef.current = 0;
+    previousCharacterRef.current = initialChar || null;
   }, [characterId, initialChar?.state_revision]);
 
   const setOnCombatEvent = useCallback((cb: (event: CombatMessage) => void) => {
     onCombatEventRef.current = cb;
+  }, []);
+
+  const setOnImportantNotification = useCallback((cb: (notification: ImportantNotification) => void) => {
+    onImportantNotificationRef.current = cb;
   }, []);
 
   const requestStateSync = useCallback(() => {
@@ -487,6 +662,7 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
       ws.onmessage = (event) => {
         try {
           const msg: CombatMessage = JSON.parse(event.data);
+          const previousCharacter = previousCharacterRef.current;
 
           if (msg.seq) {
             if (lastSequenceRef.current > 0 && msg.seq > lastSequenceRef.current + 1) {
@@ -500,9 +676,10 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 
           if (msg.character) {
 			const incomingRevision = msg.character.state_revision ?? msg.state_revision ?? 0;
-			if (incomingRevision >= lastCharacterRevisionRef.current) {
-			  lastCharacterRevisionRef.current = incomingRevision;
-			  setCharacter(msg.character);
+            if (incomingRevision >= lastCharacterRevisionRef.current) {
+              lastCharacterRevisionRef.current = incomingRevision;
+              setCharacter(msg.character);
+              previousCharacterRef.current = msg.character;
 			  if (msg.character.unlocked_regions) {
 				setUnlockedRegions(msg.character.unlocked_regions);
 			  }
@@ -529,6 +706,12 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
           if (msg.auto_sell_settings) {
             setAutoSellSettings(msg.auto_sell_settings);
           }
+		  if (msg.auto_potion_settings) {
+			setAutoPotionSettings(msg.auto_potion_settings);
+		  }
+		  if (msg.auto_potion_state) {
+			setAutoPotionState(msg.auto_potion_state);
+		  }
 
           if (msg.overflow_chest !== undefined) {
             setOverflowChest(Array.isArray(msg.overflow_chest) ? msg.overflow_chest : []);
@@ -541,7 +724,11 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 		  // A conexão WebSocket preserva a ordem das mensagens. A economia agora
 		  // possui revisões independentes para várias ordens e para o assentamento;
 		  // comparar somente a coleta "principal" descartaria atualizações válidas.
-		  if (msg.economy) setEconomy(msg.economy);
+		  if (msg.economy) {
+			setEconomy(msg.economy);
+			setActiveBuffs(msg.economy.active_buffs || []);
+		  }
+		  if (msg.active_buffs) setActiveBuffs(msg.active_buffs);
 			  if (msg.craft_preview) {
 				setCraftPreview(msg.craft_preview);
 			  }
@@ -636,11 +823,17 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 			setIsExpeditionActive(msg.is_active);
 		  }
 
-          if (msg.log_text && msg.log_text.trim() !== '') {
+          const notificationText = msg.type === 'COMBAT_EVENT'
+            ? msg.notification_text
+            : IGNORED_LOG_TYPES.has(msg.type)
+            ? ''
+            : msg.notification_text || msg.log_text;
+
+          if (notificationText && notificationText.trim() !== '') {
             const timeStr = msg.timestamp ? `[${msg.timestamp}] ` : '';
-            const fullLogMsg = `${timeStr}${msg.log_text}`;
+            const fullLogMsg = `${timeStr}${notificationText}`;
             setLogs((prev) => {
-              if (prev.length > 0 && prev[0].slice(11) === msg.log_text) {
+              if (prev.length > 0 && prev[0].slice(11) === notificationText) {
                 return prev;
               }
               return [fullLogMsg, ...prev.slice(0, 49)];
@@ -649,6 +842,11 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 
           if (onCombatEventRef.current) {
             onCombatEventRef.current(msg);
+          }
+
+          const importantNotification = importantNotificationForMessage(msg, previousCharacter);
+          if (importantNotification && onImportantNotificationRef.current) {
+            onImportantNotificationRef.current(importantNotification);
           }
         } catch (err) {
           console.error('Erro processando mensagem WebSocket:', err);
@@ -679,6 +877,17 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
     };
   }, [token, characterId]);
 
+  const moveHero = (direction: string, pressed: boolean) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        action: 'MOVE_HERO',
+        direction,
+        pressed,
+        request_id: makeRequestId('move'),
+      }));
+    }
+  };
+
   const toggleExpedition = () => {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ action: 'TOGGLE_EXPEDITION' }));
@@ -692,6 +901,7 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
   };
 
   const setStance = (stance: string) => {
+    setActiveStance(stance);
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ action: 'SET_STANCE', stance }));
     }
@@ -743,6 +953,19 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
   const startBuildingUpgrade = (slotKey: string, buildingKey: string) => {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ action: 'START_BUILDING_UPGRADE', slot_key: slotKey, building_key: buildingKey }));
+    }
+  };
+
+  const moveCampBuilding = (slotKey: string, tileX: number, tileY: number, rotation: number = 0) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        action: 'MOVE_CAMP_BUILDING',
+        slot_key: slotKey,
+        tile_x: Math.floor(tileX),
+        tile_y: Math.floor(tileY),
+        rotation: ((Math.floor(rotation) % 4) + 4) % 4,
+        expected_revision: camp?.state_revision || 0,
+      }));
     }
   };
 
@@ -810,6 +1033,17 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
       );
     }
   };
+
+	const updateAutoPotionSettings = (settings: AutoPotionSettings) => {
+		if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+			socketRef.current.send(
+				JSON.stringify({
+					action: 'UPDATE_AUTO_POTION_SETTINGS',
+					auto_potion_settings: settings,
+				})
+			);
+		}
+	};
 
   const requestAutoSellPreview = (settings: AutoSellSettings) => {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
@@ -887,6 +1121,17 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
     }
   };
 
+  const consumeFood = (resourceKey: string) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        action: 'CONSUME_FOOD',
+        resource_key: resourceKey,
+        expected_revision: resourceInventory?.revision || 0,
+        request_id: makeRequestId('meal'),
+      }));
+    }
+  };
+
   const requestEconomySync = () => {
 	if (socketRef.current?.readyState === WebSocket.OPEN) {
 	  socketRef.current.send(JSON.stringify({ action: 'REQUEST_ECONOMY_SYNC', request_id: makeRequestId('economy') }));
@@ -923,6 +1168,18 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 	}
   };
 
+  const transferTreasuryGold = (direction: 'deposit' | 'withdraw', amount: number) => {
+	if (socketRef.current?.readyState === WebSocket.OPEN) {
+	  socketRef.current.send(JSON.stringify({ action: 'TRANSFER_TREASURY_GOLD', direction, quantity: Math.max(1, Math.floor(amount)), request_id: makeRequestId('treasury') }));
+	}
+  };
+
+  const updateTreasuryPolicy = (enabled: boolean, personalReserve: number) => {
+	if (socketRef.current?.readyState === WebSocket.OPEN) {
+	  socketRef.current.send(JSON.stringify({ action: 'UPDATE_TREASURY_POLICY', enabled, personal_reserve: Math.max(0, Math.floor(personalReserve)), request_id: makeRequestId('treasurypolicy') }));
+	}
+  };
+
   return {
     character,
     camp,
@@ -934,9 +1191,12 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
     inventory,
     discoveredLoot,
     autoSellSettings,
+	  autoPotionSettings,
+	  autoPotionState,
     overflowChest,
     autoSellPreview,
     economy,
+    activeBuffs,
     craftPreview,
     lastCraftBatchResult,
     lastGatheringResult,
@@ -955,6 +1215,7 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
     attackCooldownRemaining,
     logs,
     connected,
+    moveHero,
     toggleExpedition,
     setAutoResumeExpedition,
     equipItem,
@@ -967,12 +1228,14 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
     allocateStat,
     bulkSell,
     startBuildingUpgrade,
+    moveCampBuilding,
     requestSalvagePreview,
     salvageItem,
     salvageBatch,
     learnBuildingBlueprint,
     clearSalvagePreview,
     updateAutoSellSettings,
+	updateAutoPotionSettings,
     requestAutoSellPreview,
     claimOverflowItem,
     sellOverflowItem,
@@ -983,12 +1246,16 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 	claimGatheringRewards,
 	requestCraftPreview,
 	craftItem,
+	consumeFood,
 	requestEconomySync,
 	claimPendingCraft,
 	claimPendingResources,
 	createHeroDesire,
 	cancelHeroDesire,
 	claimArmoryItem,
+	transferTreasuryGold,
+    updateTreasuryPolicy,
     setOnCombatEvent,
+    setOnImportantNotification,
   };
 }

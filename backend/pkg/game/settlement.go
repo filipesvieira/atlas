@@ -76,20 +76,21 @@ type SettlementArmoryItem struct {
 }
 
 type SettlementState struct {
-	ID                     string                 `json:"id"`
-	Name                   string                 `json:"name"`
-	StageKey               string                 `json:"stage_key"`
-	Population             int                    `json:"population"`
-	PopulationCapacity     int                    `json:"population_capacity"`
-	Reputation             int64                  `json:"reputation"`
-	Prosperity             int64                  `json:"prosperity"`
-	NextResidentProsperity int64                  `json:"next_resident_prosperity,omitempty"`
-	GrowthBlockedReason    string                 `json:"growth_blocked_reason,omitempty"`
-	ProsperityPermanent    bool                   `json:"prosperity_permanent"`
-	Revision               int64                  `json:"revision"`
-	Residents              []SettlementResident   `json:"residents"`
-	Desires                []HeroDesire           `json:"hero_desires"`
-	Armory                 []SettlementArmoryItem `json:"armory"`
+	ID                     string                  `json:"id"`
+	Name                   string                  `json:"name"`
+	StageKey               string                  `json:"stage_key"`
+	Population             int                     `json:"population"`
+	PopulationCapacity     int                     `json:"population_capacity"`
+	Reputation             int64                   `json:"reputation"`
+	Prosperity             int64                   `json:"prosperity"`
+	NextResidentProsperity int64                   `json:"next_resident_prosperity,omitempty"`
+	GrowthBlockedReason    string                  `json:"growth_blocked_reason,omitempty"`
+	ProsperityPermanent    bool                    `json:"prosperity_permanent"`
+	Revision               int64                   `json:"revision"`
+	Residents              []SettlementResident    `json:"residents"`
+	Desires                []HeroDesire            `json:"hero_desires"`
+	Armory                 []SettlementArmoryItem  `json:"armory"`
+	Treasury               SettlementTreasuryState `json:"treasury"`
 }
 
 // SettlementPopulationTarget combina os dois bloqueios de crescimento: espaço
@@ -145,6 +146,7 @@ type SettlementAutomationResult struct {
 	Settlement        *SettlementState           `json:"settlement,omitempty"`
 	ResourceInventory *ResourceInventorySnapshot `json:"resource_inventory,omitempty"`
 	CraftResult       *CraftResult               `json:"craft_result,omitempty"`
+	Inventory         *InventoryData             `json:"inventory,omitempty"`
 	GoldBank          int64                      `json:"gold_bank"`
 	CharacterRevision int64                      `json:"character_revision"`
 }

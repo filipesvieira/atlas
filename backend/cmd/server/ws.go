@@ -44,36 +44,43 @@ func getCharacterLifecycleLock(characterID string) *sync.Mutex {
 }
 
 type ClientAction struct {
-	Action           string                 `json:"action"`
-	ItemID           string                 `json:"item_id"`
-	Slot             string                 `json:"slot"`
-	RegionID         string                 `json:"region_id"`
-	Region           string                 `json:"region"`
-	Stance           string                 `json:"stance"`
-	Skill            string                 `json:"skill"`
-	Stat             string                 `json:"stat"`
-	Pack             string                 `json:"pack"`
-	ItemIDs          []string               `json:"item_ids"`
-	Enabled          bool                   `json:"enabled"`
-	BuildingKey      string                 `json:"building_key"`
-	SlotKey          string                 `json:"slot_key"`
-	ResourceKey      string                 `json:"resource_key"`
-	Quantity         int64                  `json:"quantity"`
-	ExpectedRevision int64                  `json:"expected_revision"`
-	RequestID        string                 `json:"request_id"`
-	SafeMode         bool                   `json:"safe_mode"`
-	AutoSellSettings *game.AutoSellSettings `json:"auto_sell_settings,omitempty"`
-	ExpeditionKey    string                 `json:"expedition_key"`
-	DurationSeconds  int64                  `json:"duration_seconds"`
-	RecipeKey        string                 `json:"recipe_key"`
-	CatalystKey      string                 `json:"catalyst_key"`
-	PreviewRevision  int64                  `json:"preview_revision"`
-	ActivityID       string                 `json:"activity_id"`
-	DesireID         string                 `json:"desire_id"`
-	ArmoryID         string                 `json:"armory_id"`
-	TargetRarity     string                 `json:"target_rarity"`
-	MaxAttempts      int                    `json:"max_attempts"`
-	Priority         int                    `json:"priority"`
+	Action             string                   `json:"action"`
+	ItemID             string                   `json:"item_id"`
+	Slot               string                   `json:"slot"`
+	RegionID           string                   `json:"region_id"`
+	Region             string                   `json:"region"`
+	Stance             string                   `json:"stance"`
+	Skill              string                   `json:"skill"`
+	Stat               string                   `json:"stat"`
+	Pack               string                   `json:"pack"`
+	ItemIDs            []string                 `json:"item_ids"`
+	Enabled            bool                     `json:"enabled"`
+	BuildingKey        string                   `json:"building_key"`
+	SlotKey            string                   `json:"slot_key"`
+	ResourceKey        string                   `json:"resource_key"`
+	Quantity           int64                    `json:"quantity"`
+	ExpectedRevision   int64                    `json:"expected_revision"`
+	RequestID          string                   `json:"request_id"`
+	SafeMode           bool                     `json:"safe_mode"`
+	AutoSellSettings   *game.AutoSellSettings   `json:"auto_sell_settings,omitempty"`
+	AutoPotionSettings *game.AutoPotionSettings `json:"auto_potion_settings,omitempty"`
+	ExpeditionKey      string                   `json:"expedition_key"`
+	DurationSeconds    int64                    `json:"duration_seconds"`
+	RecipeKey          string                   `json:"recipe_key"`
+	CatalystKey        string                   `json:"catalyst_key"`
+	PreviewRevision    int64                    `json:"preview_revision"`
+	ActivityID         string                   `json:"activity_id"`
+	DesireID           string                   `json:"desire_id"`
+	ArmoryID           string                   `json:"armory_id"`
+	TargetRarity       string                   `json:"target_rarity"`
+	MaxAttempts        int                      `json:"max_attempts"`
+	Priority           int                      `json:"priority"`
+	Direction          string                   `json:"direction"`
+	Pressed            bool                     `json:"pressed"`
+	PersonalReserve    int64                    `json:"personal_reserve"`
+	TileX              int                      `json:"tile_x"`
+	TileY              int                      `json:"tile_y"`
+	Rotation           int                      `json:"rotation"`
 }
 
 func convertDBCharToGameChar(c *db.Character) *game.CharacterData {
@@ -379,9 +386,32 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if autoSellErr != nil {
 		log.Printf("aviso ao carregar venda automática de %s: %v", charID, autoSellErr)
 	}
+	autoPotionSettings, autoPotionSettingsErr := db.GetCharacterAutoPotionSettings(charID)
+	if autoPotionSettingsErr != nil {
+		log.Printf("aviso ao carregar suprimentos automáticos de %s: %v", charID, autoPotionSettingsErr)
+	}
+	autoPotionState, autoPotionStateErr := db.GetCharacterAutoPotionState(charID)
+	if autoPotionStateErr != nil {
+		log.Printf("aviso ao carregar estado dos suprimentos automáticos de %s: %v", charID, autoPotionStateErr)
+	}
 	overflowItems, overflowErr := db.GetCharacterOverflowChest(charID)
 	if overflowErr != nil {
-		log.Printf("aviso ao carregar baú de achados de %s: %v", charID, overflowErr)
+		// Estado persistente crítico é fail-closed: nunca transforme falha de leitura
+		// em snapshot vazio que poderia sobrescrever o Baú de Achados no logout.
+		log.Printf("erro crítico ao carregar baú de achados de %s: %v", charID, overflowErr)
+		lifecycleLock.Unlock()
+		_ = conn.WriteJSON(map[string]string{"error": "Não foi possível carregar o inventário protegido. Tente entrar novamente."})
+		_ = conn.Close()
+		return
+	}
+
+	activeBuffs, buffErr := db.GetCharacterActiveBuffs(charID, time.Now().UTC())
+	if buffErr != nil {
+		log.Printf("erro crítico ao carregar buffs persistentes de %s: %v", charID, buffErr)
+		lifecycleLock.Unlock()
+		_ = conn.WriteJSON(map[string]string{"error": "Não foi possível carregar os efeitos ativos do personagem. Tente entrar novamente."})
+		_ = conn.Close()
+		return
 	}
 
 	session := game.NewGameSession(gameChar, gameInv, saveInvWrapper, saveCharWrapper, getLootWrapper, getMonsterWrapper)
@@ -406,8 +436,14 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	session.DiscoveredLoot = discoveredMap
 	session.RecordLootDiscoveryFunc = db.RecordLootDiscovery
 	session.AutoSellSettings = autoSellSettings
+	session.AutoPotionSettings = autoPotionSettings
+	session.AutoPotionState = autoPotionState
 	session.OverflowChest = overflowItems
+	session.ActiveBuffs = activeBuffs
 	session.SaveAutoSellSettingsFunc = db.SaveCharacterAutoSellSettings
+	session.SaveAutoPotionSettingsFunc = db.SaveCharacterAutoPotionSettings
+	session.ResetAutoPotionStateFunc = db.ResetCharacterAutoPotionState
+	session.SpendAutoPotionFunc = db.SpendCharacterAutoPotion
 	session.SaveOverflowChestFunc = db.SaveCharacterOverflowChest
 	session.SavePendingItemFunc = db.QueuePendingItem
 	session.SaveResourcesFunc = func(cid string, drops []game.ResourceAmount, maxCap int64, reason, referenceKey string) (game.ResourceMutationResult, error) {
@@ -525,6 +561,7 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 				message := game.CombatMessage{
 					Type: eventType, Timestamp: time.Now().Format("15:04:05"),
 					Character: game.CloneCharacterSnapshot(session.Character), Economy: economy,
+					Inventory:         game.CloneInventorySnapshot(session.Inventory),
 					ResourceInventory: resourceInventory, CraftResult: craftResult,
 					Camp: game.CloneCampSnapshot(session.Camp), LogText: logText,
 				}
@@ -621,7 +658,7 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Envio do Estado Inicial / Boas Vindas. Mantém o lock até a serialização
 	// terminar para que ticker e ações não alterem ponteiros durante o primeiro frame.
 	session.Mu.Lock()
-	totalAtk, totalDef := session.CalculateStats()
+	initialDerivedStats := session.CalculateDerivedStats()
 	welcomeMsg := "Bem-vindo de volta ao acampamento. Pronto para a próxima expedição."
 	if session.IsExpeditionActive {
 		welcomeMsg = "Sua expedição continua em andamento!"
@@ -651,25 +688,29 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Aviso ao carregar economia do personagem: %v", economyErr)
 	}
 	initialMsg := game.CombatMessage{
-		Type:              "WELCOME_EVENT",
-		Timestamp:         time.Now().Format("15:04:05"),
-		Character:         session.Character,
-		Inventory:         session.Inventory,
-		Camp:              session.Camp,
-		ResourceInventory: initialResourceSnap,
-		TotalAttack:       totalAtk,
-		TotalDefense:      totalDef,
-		ActiveRegion:      session.ActiveRegion,
-		ActiveStance:      session.ActiveStance,
-		CurrentStage:      session.CurrentStage,
-		MaxStages:         session.MaxStages,
-		IsBossStage:       session.IsBossStage,
-		LogText:           welcomeMsg,
-		IsActive:          session.IsExpeditionActive,
-		DiscoveredLoot:    discoveredList,
-		AutoSellSettings:  &session.AutoSellSettings,
-		OverflowChest:     session.OverflowChest,
-		Economy:           initialEconomy,
+		Type:               "WELCOME_EVENT",
+		Timestamp:          time.Now().Format("15:04:05"),
+		Character:          session.Character,
+		Inventory:          session.Inventory,
+		Camp:               session.Camp,
+		ResourceInventory:  initialResourceSnap,
+		TotalAttack:        initialDerivedStats.TotalAttack,
+		TotalDefense:       initialDerivedStats.TotalDefense,
+		DerivedStats:       initialDerivedStats,
+		ActiveRegion:       session.ActiveRegion,
+		ActiveStance:       session.ActiveStance,
+		CurrentStage:       session.CurrentStage,
+		MaxStages:          session.MaxStages,
+		IsBossStage:        session.IsBossStage,
+		LogText:            welcomeMsg,
+		IsActive:           session.IsExpeditionActive,
+		DiscoveredLoot:     discoveredList,
+		AutoSellSettings:   &session.AutoSellSettings,
+		AutoPotionSettings: &session.AutoPotionSettings,
+		AutoPotionState:    &session.AutoPotionState,
+		OverflowChest:      session.OverflowChest,
+		Economy:            initialEconomy,
+		ActiveBuffs:        append([]game.ActiveBuff(nil), session.ActiveBuffs...),
 	}
 	writeErr := conn.WriteJSON(initialMsg)
 	session.Mu.Unlock()
@@ -681,11 +722,22 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Loop Principal de Envio de Eventos do Jogo via WebSocket
 	for {
 		select {
+		case <-readerDone:
+			// O navegador já encerrou a leitura (rebuild, troca de personagem ou
+			// fechamento da aba). Não tente escrever um frame depois do close.
+			return
 		case msg, ok := <-session.SendChannel:
 			if !ok {
 				return
 			}
 			if err := conn.WriteJSON(msg); err != nil {
+				// A leitura pode ter detectado o fechamento entre o select e a
+				// escrita. É um desligamento normal, não uma falha do jogo.
+				select {
+				case <-readerDone:
+					return
+				default:
+				}
 				log.Printf("Erro enviando WebSocket frame: %v", err)
 				return
 			}

@@ -1,247 +1,112 @@
 import { BuildingRenderContext } from '../types';
+import {
+  drawIsoBox,
+  drawIsoFootprint,
+  drawIsoPanel,
+  drawIsoPanelGrid,
+  drawIsoRoof,
+  drawIsoShadow,
+  drawIsoGroundPost,
+  drawIsoWalls,
+} from './IsoBuildingPrimitives';
 
-/**
- * Renderizador da Cabana do Aventureiro (Adventurer Hut) — Níveis 0 a 3.
- * Desenha ancorado a partir do centro inferior da base (groundY).
- * Nível 2 assume 110x76px (porte da antiga casa) e Nível 3 atinge 140x96px (chalé de dois volumes).
- */
+/** Cabana do Aventureiro — níveis 0 a 3 em volume isométrico. */
 export function renderHut(ctx: CanvasRenderingContext2D, renderCtx: BuildingRenderContext) {
-  const { level, x, y, time } = renderCtx;
+  const { level, x, y, time, scale } = renderCtx;
 
   ctx.save();
   ctx.translate(x, y);
+  ctx.scale(scale, scale);
 
   if (level === 0) {
-    // Nível 0: Saco de dormir rústico, estacas e mochila improvisada
-    ctx.fillStyle = '#334155';
-    ctx.fillRect(-15, -6, 30, 6);
-    ctx.fillStyle = '#64748b';
-    ctx.fillRect(-13, -10, 10, 5); // Travesseiro
-    ctx.fillStyle = '#78350f';
-    ctx.fillRect(8, -12, 6, 8); // Mochila de couro encostada
-    ctx.fillRect(7, -13, 8, 2);
+    drawIsoShadow(ctx, 38, 28);
+    drawIsoFootprint(ctx, 36, 26, '#334155', '#0f172a');
+    drawIsoBox(ctx, { x: -3, y: -1, width: 27, depth: 13, height: 4, top: '#64748b', left: '#475569', right: '#334155' });
+    drawIsoBox(ctx, { x: 12, y: -5, width: 10, depth: 8, height: 13, top: '#92400e', left: '#78350f', right: '#451a03' });
     ctx.restore();
     return;
   }
 
   if (level === 1) {
-    // Nível 1: Tenda grande reforçada com lona esticada e lampião (58 x 42 px)
-    const w = 29;
-    const h = 42;
-
-    // Estacas e cordas laterais
-    ctx.strokeStyle = '#78350f';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(-w - 6, 0);
-    ctx.lineTo(0, -h);
-    ctx.lineTo(w + 6, 0);
-    ctx.stroke();
-
-    // Tecido principal da tenda
-    ctx.fillStyle = '#92400e';
-    ctx.beginPath();
-    ctx.moveTo(0, -h);
-    ctx.lineTo(-w, 0);
-    ctx.lineTo(w, 0);
-    ctx.closePath();
-    ctx.fill();
-
-    // Faixas de reforço
-    ctx.fillStyle = '#b45309';
-    ctx.beginPath();
-    ctx.moveTo(0, -h);
-    ctx.lineTo(-w * 0.5, 0);
-    ctx.lineTo(w * 0.5, 0);
-    ctx.closePath();
-    ctx.fill();
-
-    // Entrada da tenda (abertura escura)
-    ctx.fillStyle = '#291807';
-    ctx.beginPath();
-    ctx.moveTo(0, -h * 0.7);
-    ctx.lineTo(-w * 0.35, 0);
-    ctx.lineTo(w * 0.35, 0);
-    ctx.closePath();
-    ctx.fill();
-
-    // Lampião pendurado na frente
-    ctx.fillStyle = '#78350f';
-    ctx.fillRect(-2, -h * 0.75, 4, 3);
-    const lampFlicker = Math.sin(time / 150) * 0.15 + 0.85;
-    ctx.fillStyle = `rgba(251, 191, 36, ${lampFlicker})`;
-    ctx.fillRect(-3, -h * 0.75 + 3, 6, 6);
-
+    const width = 62;
+    const depth = 46;
+    drawIsoShadow(ctx, width + 8, depth + 8);
+    drawIsoFootprint(ctx, width, depth, '#3f2b1d', '#1c1917');
+    drawIsoWalls(ctx, width - 8, depth - 8, 7, '#78350f', '#92400e', '#b45309');
+    drawIsoRoof(ctx, width - 10, depth - 10, 7, 27, '#92400e', '#78350f', '#713f12', '#5c2d11');
+    drawIsoGroundPost(ctx, -24, -8, 22, 3);
+    drawIsoGroundPost(ctx, 24, -8, 22, 3);
+    const lamp = Math.sin(time / 150) * 0.15 + 0.85;
+    ctx.fillStyle = `rgba(251, 191, 36, ${lamp})`;
+    ctx.fillRect(8, -22, 6, 7);
     ctx.restore();
     return;
   }
 
   if (level === 2) {
-    // Nível 2: Cabana de madeira completa com o porte da antiga casa (110 x 76 px)
-    const houseW = 100;
-    const wallH = 46;
-    const roofH = 30;
-    const left = -houseW / 2;
+    const width = 112;
+    const depth = 78;
+    const wallHeight = 43;
+    drawIsoShadow(ctx, width + 10, depth + 10);
+    drawIsoFootprint(ctx, width, depth, '#475569', '#1e293b');
+    drawIsoWalls(ctx, width, depth, wallHeight, '#5c2d11', '#451a03', '#713f12');
+    drawIsoRoof(ctx, width, depth, wallHeight, 31, '#92400e', '#78350f', '#713f12', '#5c2d11');
 
-    // 1. Paredes de troncos horizontais
-    ctx.fillStyle = '#451a03';
-    ctx.fillRect(left, -wallH, houseW, wallH);
-
-    // Linhas de tábuas de madeira
-    ctx.fillStyle = '#292524';
-    for (let py = -wallH + 8; py < 0; py += 8) {
-      ctx.fillRect(left, py, houseW, 1);
-    }
-
-    // 2. Telhado de madeira nobre inclinado
-    ctx.fillStyle = '#78350f';
-    ctx.beginPath();
-    ctx.moveTo(left - 8, -wallH);
-    ctx.lineTo(0, -wallH - roofH);
-    ctx.lineTo(left + houseW + 8, -wallH);
-    ctx.closePath();
-    ctx.fill();
-
-    // Borda superior do telhado
-    ctx.fillStyle = '#92400e';
-    ctx.beginPath();
-    ctx.moveTo(left - 10, -wallH);
-    ctx.lineTo(0, -wallH - roofH - 3);
-    ctx.lineTo(left + houseW + 10, -wallH);
-    ctx.lineTo(left + houseW + 6, -wallH + 3);
-    ctx.lineTo(0, -wallH - roofH);
-    ctx.lineTo(left - 6, -wallH + 3);
-    ctx.closePath();
-    ctx.fill();
-
-    // 3. Porta de madeira escura
-    ctx.fillStyle = '#1c1917';
-    ctx.fillRect(-12, -32, 24, 32);
+    const door = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'right', position: 0.52, size: 19, height: 29, fill: '#1c1917', stroke: '#0f172a' });
+    drawIsoPanelGrid(ctx, door, '#451a03');
     ctx.fillStyle = '#fbbf24';
-    ctx.fillRect(6, -17, 3, 3); // Maçaneta de ouro
+    ctx.fillRect(door[1].x - 2, door[1].y - 15, 3, 3);
 
-    // 4. Janela iluminada acolhedora
-    const winFlicker = Math.sin(time / 220) * 0.1 + 0.9;
-    ctx.fillStyle = `rgba(251, 191, 36, ${0.9 * winFlicker})`;
-    ctx.fillRect(left + 15, -34, 20, 20);
+    const windowLeft = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'left', position: 0.42, size: 17, height: 16, bottomOffset: 11, fill: `rgba(251, 191, 36, ${0.86 + Math.sin(time / 220) * 0.08})`, stroke: '#78350f' });
+    drawIsoPanelGrid(ctx, windowLeft);
+    const windowRight = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'right', position: 0.8, size: 15, height: 15, bottomOffset: 11, fill: `rgba(251, 191, 36, ${0.82 + Math.sin(time / 260) * 0.08})`, stroke: '#78350f' });
+    drawIsoPanelGrid(ctx, windowRight);
 
-    // Divisórias da janela
-    ctx.fillStyle = '#78350f';
-    ctx.fillRect(left + 24, -34, 2, 20);
-    ctx.fillRect(left + 15, -25, 20, 2);
-
-    // 5. Suporte de armas anexo à esquerda
-    ctx.fillStyle = '#78350f';
-    ctx.fillRect(left - 16, -22, 14, 22);
-    ctx.fillStyle = '#451a03';
-    ctx.fillRect(left - 15, -18, 16, 2);
-    ctx.fillRect(left - 15, -9, 16, 2);
-
-    // 6. Barril de suprimentos à direita
-    ctx.fillStyle = '#78350f';
-    ctx.fillRect(left + houseW + 2, -18, 12, 18);
-    ctx.fillStyle = '#334155';
-    ctx.fillRect(left + houseW + 2, -15, 12, 2);
-    ctx.fillRect(left + houseW + 2, -6, 12, 2);
-
+    drawIsoBox(ctx, { x: -width / 2 - 9, y: -2, width: 12, depth: 12, height: 21, top: '#92400e', left: '#78350f', right: '#451a03' });
+    drawIsoBox(ctx, { x: width / 2 + 7, y: 1, width: 12, depth: 12, height: 18, top: '#92400e', left: '#78350f', right: '#451a03' });
     ctx.restore();
     return;
   }
 
-  // Nível 3: Chalé/Lodge Imponente de Dois Pavimentos com Chaminé e Estandarte (140 x 96 px)
-  const lodgeW = 126;
-  const wallH3 = 56;
-  const roofH3 = 40;
-  const left3 = -lodgeW / 2;
+  // Nível 3: chalé de dois volumes, fundação de pedra, chaminé e estandarte.
+  const width = 132;
+  const depth = 90;
+  const wallHeight = 52;
+  drawIsoShadow(ctx, width + 12, depth + 12);
+  drawIsoFootprint(ctx, width, depth, '#64748b', '#1e293b');
+  drawIsoWalls(ctx, width, depth, wallHeight, '#5c2d11', '#3b1d11', '#713f12');
+  drawIsoRoof(ctx, width, depth, wallHeight, 38, '#9f1239', '#7f1d1d', '#7c2d12', '#5c1f16');
 
-  // 1. Fundação de pedras talhadas
-  ctx.fillStyle = '#334155';
-  ctx.fillRect(left3 - 4, -10, lodgeW + 8, 10);
-  ctx.fillStyle = '#475569';
-  for (let px = left3; px < left3 + lodgeW; px += 18) {
-    ctx.fillRect(px, -9, 16, 8);
-  }
+  const door = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'right', position: 0.5, size: 22, height: 37, fill: '#1c1917', stroke: '#0f172a' });
+  drawIsoPanelGrid(ctx, door, '#451a03');
+  ctx.fillStyle = '#f59e0b';
+  ctx.fillRect(door[1].x - 2, door[1].y - 19, 4, 4);
 
-  // 2. Paredes de madeira reforçada e vigas
-  ctx.fillStyle = '#3b1d11';
-  ctx.fillRect(left3, -wallH3, lodgeW, wallH3 - 10);
+  const upperWindow = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'left', position: 0.35, size: 20, height: 20, bottomOffset: 16, fill: `rgba(251, 191, 36, ${0.9 + Math.sin(time / 180) * 0.06})`, stroke: '#5c2d11' });
+  drawIsoPanelGrid(ctx, upperWindow);
+  const sideWindow = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'right', position: 0.82, size: 19, height: 18, bottomOffset: 16, fill: `rgba(251, 191, 36, ${0.88 + Math.sin(time / 200) * 0.06})`, stroke: '#5c2d11' });
+  drawIsoPanelGrid(ctx, sideWindow);
 
-  // Vigas verticais e horizontais de carvalho
-  ctx.fillStyle = '#5c2d11';
-  ctx.fillRect(left3, -wallH3, 8, wallH3 - 10);
-  ctx.fillRect(left3 + lodgeW - 8, -wallH3, 8, wallH3 - 10);
-  ctx.fillRect(-5, -wallH3, 10, wallH3 - 10);
-  ctx.fillRect(left3, -wallH3 + 22, lodgeW, 5);
-
-  // 3. Chaminé de pedra com fumaça animada à direita
-  const chimX = left3 + lodgeW - 24;
-  const chimY = -wallH3 - roofH3 + 6;
-  ctx.fillStyle = '#475569';
-  ctx.fillRect(chimX, chimY, 14, 38);
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(chimX - 2, chimY, 18, 4);
-
-  // Fumaça animada em partículas
+  const chimneyX = 35;
+  const chimneyY = -wallHeight - 24;
+  drawIsoBox(ctx, { x: chimneyX, y: chimneyY, width: 14, depth: 12, height: 30, top: '#64748b', left: '#475569', right: '#334155' });
   ctx.fillStyle = 'rgba(203, 213, 225, 0.6)';
   for (let i = 0; i < 4; i++) {
-    const fTime = (time * 0.0012 + i * 0.35) % 1;
-    const smkX = chimX + 7 + Math.sin(time * 0.003 + i) * 6 + fTime * 8;
-    const smkY = chimY - 4 - fTime * 24;
-    const smkSize = 4 + fTime * 7;
+    const smokeProgress = (time * 0.0012 + i * 0.35) % 1;
+    const smokeX = chimneyX + 6 + Math.sin(time * 0.003 + i) * 5 + smokeProgress * 6;
+    const smokeY = chimneyY - 30 - smokeProgress * 24;
     ctx.beginPath();
-    ctx.arc(smkX, smkY, smkSize, 0, Math.PI * 2);
+    ctx.arc(smokeX, smokeY, 4 + smokeProgress * 6, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // 4. Telhado imponente de ardósia nobre com duas águas
-  ctx.fillStyle = '#7c2d12';
-  ctx.beginPath();
-  ctx.moveTo(left3 - 12, -wallH3);
-  ctx.lineTo(0, -wallH3 - roofH3);
-  ctx.lineTo(left3 + lodgeW + 12, -wallH3);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = '#9a3412';
-  ctx.beginPath();
-  ctx.moveTo(left3 - 14, -wallH3);
-  ctx.lineTo(0, -wallH3 - roofH3 - 4);
-  ctx.lineTo(left3 + lodgeW + 14, -wallH3);
-  ctx.lineTo(left3 + lodgeW + 10, -wallH3 + 4);
-  ctx.lineTo(0, -wallH3 - roofH3);
-  ctx.lineTo(left3 - 10, -wallH3 + 4);
-  ctx.closePath();
-  ctx.fill();
-
-  // 5. Porta arqueada reforçada de ferro
-  ctx.fillStyle = '#1c1917';
-  ctx.fillRect(-15, -38, 30, 38);
-  ctx.fillStyle = '#f59e0b';
-  ctx.fillRect(8, -20, 4, 4); // Maçaneta dourada
-
-  // 6. Janelas duplas iluminadas (Térreo e Sótão)
-  const winGlow = Math.sin(time / 180) * 0.08 + 0.92;
-  ctx.fillStyle = `rgba(251, 191, 36, ${0.95 * winGlow})`;
-  ctx.fillRect(left3 + 16, -42, 22, 22);
-  ctx.fillRect(-8, -wallH3 - 22, 16, 16); // Janela do sótão
-
-  ctx.fillStyle = '#5c2d11';
-  // Grades de madeira
-  ctx.fillRect(left3 + 26, -42, 2, 22);
-  ctx.fillRect(left3 + 16, -32, 22, 2);
-  ctx.fillRect(0, -wallH3 - 22, 2, 16);
-  ctx.fillRect(-8, -wallH3 - 14, 16, 2);
-
-  // 7. Estandarte heróico do Aventureiro no topo do telhado
+  drawIsoGroundPost(ctx, -2, -wallHeight - 34, 28, 3, '#cbd5e1');
   ctx.fillStyle = '#3b82f6';
   ctx.beginPath();
-  ctx.moveTo(-1, -wallH3 - roofH3 - 14);
-  ctx.lineTo(16, -wallH3 - roofH3 - 8);
-  ctx.lineTo(-1, -wallH3 - roofH3 - 2);
+  ctx.moveTo(0, -wallHeight - 58);
+  ctx.lineTo(18, -wallHeight - 51);
+  ctx.lineTo(0, -wallHeight - 44);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = '#e2e8f0';
-  ctx.fillRect(-3, -wallH3 - roofH3 - 16, 3, 16);
-
   ctx.restore();
 }

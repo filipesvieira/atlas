@@ -48,7 +48,8 @@ func scanGatheringActivity(row rowScanner) (*game.GatheringActivity, error) {
 	err := row.Scan(&activity.ID, &activity.CharacterID, &activity.ExpeditionKey, &activity.ProfessionKey,
 		&activity.State, &activity.DurationSeconds, &activity.StartedAt, &activity.EndsAt,
 		&snapshotJSON, &resultJSON, &activity.ProfessionXPApplied, &activity.Revision,
-		&activity.ResidentID, &activity.ResidentName)
+		&activity.ResidentID, &activity.ResidentName, &activity.WageReserved,
+		&activity.WagePaid, &activity.WageRuleVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +66,7 @@ func scanGatheringActivity(row rowScanner) (*game.GatheringActivity, error) {
 	return activity, nil
 }
 
-const gatheringActivityColumns = `id,character_id,expedition_key,profession_key,state,duration_seconds,started_at,ends_at,snapshot,result,profession_xp_applied,revision,COALESCE(resident_id::text,''),resident_name_snapshot`
+const gatheringActivityColumns = `id,character_id,expedition_key,profession_key,state,duration_seconds,started_at,ends_at,snapshot,result,profession_xp_applied,revision,COALESCE(resident_id::text,''),resident_name_snapshot,wage_reserved,wage_paid,wage_rule_version`
 
 func GetCharacterEconomyState(charID string) (*game.EconomyState, error) {
 	if err := ensureEconomyRows(charID); err != nil {
@@ -74,7 +75,7 @@ func GetCharacterEconomyState(charID string) (*game.EconomyState, error) {
 	if err := ensureSettlementRows(charID); err != nil {
 		return nil, err
 	}
-	state := &game.EconomyState{Professions: []game.ProfessionProgress{}, ActiveGatherings: []game.GatheringActivity{}, PendingGathering: []game.ResourceAmount{}, UnlockedRecipes: []string{}, PendingCraftItems: []game.Item{}, PendingResources: []game.ResourceAmount{}, PendingBatches: []game.PendingResourceBatch{}}
+	state := &game.EconomyState{Professions: []game.ProfessionProgress{}, ActiveGatherings: []game.GatheringActivity{}, PendingGathering: []game.ResourceAmount{}, UnlockedRecipes: []string{}, PendingCraftItems: []game.Item{}, PendingResources: []game.ResourceAmount{}, PendingBatches: []game.PendingResourceBatch{}, ActiveBuffs: []game.ActiveBuff{}}
 	rows, err := DB.Query(`SELECT profession_key,level,experience,revision FROM character_professions WHERE character_id=$1 ORDER BY profession_key`, charID)
 	if err != nil {
 		return nil, err
@@ -249,6 +250,11 @@ func GetCharacterEconomyState(charID string) (*game.EconomyState, error) {
 		return nil, err
 	}
 	state.Settlement = settlement
+	buffs, err := GetCharacterActiveBuffs(charID, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+	state.ActiveBuffs = buffs
 	return state, nil
 }
 
@@ -403,6 +409,9 @@ func StartGatheringActivity(charID, expeditionKey string, durationSeconds int64,
 	if !exists {
 		return nil, fmt.Errorf("expedição de coleta desconhecida: %s", expeditionKey)
 	}
+	if !definition.PlayerSelectable {
+		return nil, fmt.Errorf("esta expedição legada não aceita novas ordens; escolha um destino de coleta")
+	}
 	if requestID == "" || !game.IsGatheringDurationAllowed(definition, durationSeconds) {
 		return nil, fmt.Errorf("requisição ou duração de coleta inválida")
 	}
@@ -420,6 +429,16 @@ func StartGatheringActivity(charID, expeditionKey string, durationSeconds int64,
 
 	if existing, scanErr := scanGatheringActivity(tx.QueryRow(`SELECT `+gatheringActivityColumns+` FROM character_activities WHERE character_id=$1 AND request_id=$2`, charID, requestID)); scanErr == nil {
 		return existing, tx.Commit()
+	}
+	// Ordem canônica de locks econômicos: assentamento -> personagem -> morador.
+	// Transferências da Tesouraria usam a mesma ordem, evitando deadlock entre
+	// financiamento automático, Ambições e novas coletas concorrentes.
+	if _, err := lockSettlementTreasuryTx(tx, charID); err != nil {
+		return nil, err
+	}
+	var lockedHeroGold int64
+	if err := tx.QueryRow(`SELECT gold_bank FROM characters WHERE id=$1 FOR UPDATE`, charID).Scan(&lockedHeroGold); err != nil {
+		return nil, err
 	}
 	var residentID, residentName string
 	var level, toolTier int
@@ -442,6 +461,10 @@ func StartGatheringActivity(charID, expeditionKey string, durationSeconds int64,
 	if level < definition.RequiredProfessionLevel {
 		return nil, fmt.Errorf("%s requer nível %d de profissão", definition.DisplayName, definition.RequiredProfessionLevel)
 	}
+	settlementID, wageReserved, err := reserveGatheringWageTx(tx, charID, residentID, residentName, definition.ProfessionKey, requestID, durationSeconds, level, definition.Tier)
+	if err != nil {
+		return nil, err
+	}
 	startedAt := time.Now().UTC()
 	seed, err := secureServerSeed()
 	if err != nil {
@@ -455,10 +478,15 @@ func StartGatheringActivity(charID, expeditionKey string, durationSeconds int64,
 	if err != nil {
 		return nil, err
 	}
-	activity := &game.GatheringActivity{CharacterID: charID, ResidentID: residentID, ResidentName: residentName, ExpeditionKey: expeditionKey, ProfessionKey: definition.ProfessionKey, State: game.GatheringStateRunning, DurationSeconds: durationSeconds, StartedAt: startedAt, EndsAt: startedAt.Add(time.Duration(durationSeconds) * time.Second), Snapshot: snapshot}
-	err = tx.QueryRow(`INSERT INTO character_activities(character_id,activity_kind,expedition_key,profession_key,state,duration_seconds,started_at,ends_at,snapshot,request_id,resident_id,resident_name_snapshot) VALUES($1,'gathering',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,revision`, charID, expeditionKey, definition.ProfessionKey, activity.State, durationSeconds, activity.StartedAt, activity.EndsAt, string(snapshotJSON), requestID, residentID, residentName).Scan(&activity.ID, &activity.Revision)
+	activity := &game.GatheringActivity{CharacterID: charID, ResidentID: residentID, ResidentName: residentName, ExpeditionKey: expeditionKey, ProfessionKey: definition.ProfessionKey, State: game.GatheringStateRunning, DurationSeconds: durationSeconds, StartedAt: startedAt, EndsAt: startedAt.Add(time.Duration(durationSeconds) * time.Second), Snapshot: snapshot, WageReserved: wageReserved, WageRuleVersion: game.SettlementEconomyVersion}
+	err = tx.QueryRow(`INSERT INTO character_activities(character_id,activity_kind,expedition_key,profession_key,state,duration_seconds,started_at,ends_at,snapshot,request_id,resident_id,resident_name_snapshot,wage_reserved,wage_rule_version) VALUES($1,'gathering',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id,revision`, charID, expeditionKey, definition.ProfessionKey, activity.State, durationSeconds, activity.StartedAt, activity.EndsAt, string(snapshotJSON), requestID, residentID, residentName, wageReserved, game.SettlementEconomyVersion).Scan(&activity.ID, &activity.Revision)
 	if err != nil {
 		return nil, err
+	}
+	if wageReserved > 0 {
+		if _, err := tx.Exec(`INSERT INTO settlement_payroll(activity_id,settlement_id,resident_id,resident_name_snapshot,profession_key,wage_reserved,economy_version) VALUES($1,$2,$3,$4,$5,$6,$7)`, activity.ID, settlementID, residentID, residentName, definition.ProfessionKey, wageReserved, game.SettlementEconomyVersion); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := tx.Exec(`UPDATE settlements SET revision=revision+1,updated_at=NOW() WHERE character_id=$1`, charID); err != nil {
 		return nil, err
@@ -502,6 +530,13 @@ func CancelGatheringActivity(charID, activityID, requestID string) (*game.Gather
 	}
 	result := game.CalculateGatheringResult(*activity, time.Now().UTC())
 	result.WasCancelled = true
+	result.WageReserved = activity.WageReserved
+	paid, refunded, err := settleGatheringPayrollTx(tx, charID, activity, time.Now().UTC(), true, requestID)
+	if err != nil {
+		return nil, err
+	}
+	result.WagePaid = paid
+	result.WageRefunded = refunded
 	var profession game.ProfessionProgress
 	if err := tx.QueryRow(`SELECT profession_key,level,experience,revision FROM character_professions WHERE character_id=$1 AND profession_key=$2 FOR UPDATE`, charID, activity.ProfessionKey).Scan(&profession.ProfessionKey, &profession.Level, &profession.Experience, &profession.Revision); err != nil {
 		return nil, err
@@ -700,6 +735,13 @@ func ClaimGatheringActivity(charID, activityID, requestID string) (*game.Gatheri
 		return &result, nil
 	}
 	result := game.CalculateGatheringResult(*activity, activity.EndsAt)
+	result.WageReserved = activity.WageReserved
+	paid, refunded, err := settleGatheringPayrollTx(tx, charID, activity, activity.EndsAt, false, requestID)
+	if err != nil {
+		return nil, err
+	}
+	result.WagePaid = paid
+	result.WageRefunded = refunded
 	var profession game.ProfessionProgress
 	if err := tx.QueryRow(`SELECT profession_key,level,experience,revision FROM character_professions WHERE character_id=$1 AND profession_key=$2 FOR UPDATE`, charID, activity.ProfessionKey).Scan(&profession.ProfessionKey, &profession.Level, &profession.Experience, &profession.Revision); err != nil {
 		return nil, err

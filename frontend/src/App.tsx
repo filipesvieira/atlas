@@ -4,18 +4,77 @@ import { CharacterScreen } from './components/Auth/CharacterScreen';
 import { DashboardGrid } from './components/Dashboard/DashboardGrid';
 import { OfflineSummaryModal } from './components/Modal/OfflineSummaryModal';
 import { GameTutorialModal } from './components/Modal/GameTutorialModal';
-import { API_BASE_URL } from './config';
+import { NotificationBell } from './components/Notifications/NotificationBell';
+import type { ImportantNotification } from './types/notifications';
+import { API_BASE_URL, CLIENT_CONFIG_ERROR } from './config';
+
+const AUTH_TOKEN_KEY = 'atlas_token';
+const AUTH_ACCOUNT_KEY = 'atlas_account';
+
+function readStoredToken(): string | null {
+  try {
+    const stored = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (!stored) return null;
+
+    // Evita iniciar a aplicação com um JWT já expirado. A API continua sendo
+    // a autoridade final, mas isso elimina uma tela de personagem inutilizável
+    // após um rebuild que ocorreu enquanto o usuário estava offline.
+    const payload = stored.split('.')[1];
+    const claims = payload ? JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))) : null;
+    if (claims?.exp && claims.exp * 1000 <= Date.now()) {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(AUTH_ACCOUNT_KEY);
+      return null;
+    }
+    return stored;
+  } catch {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_ACCOUNT_KEY);
+    return null;
+  }
+}
+
+function readStoredAccount(): any {
+  try {
+    const raw = localStorage.getItem(AUTH_ACCOUNT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    localStorage.removeItem(AUTH_ACCOUNT_KEY);
+    return null;
+  }
+}
+
+function clearStoredAuth() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(AUTH_ACCOUNT_KEY);
+}
 
 export function App() {
-  const [token, setToken] = useState<string | null>(localStorage.getItem('atlas_token'));
-  const [account, setAccount] = useState<any>(() => {
-    try { return JSON.parse(localStorage.getItem('atlas_account') || 'null'); } catch { return null; }
-  });
+  if (CLIENT_CONFIG_ERROR) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-100 grid place-items-center p-6">
+        <section className="max-w-xl rounded-xl border border-rose-500/50 bg-rose-950/20 p-6 shadow-2xl">
+          <h1 className="font-pixel-heading text-rose-300">Configuração do servidor ausente</h1>
+          <p className="mt-3 text-sm leading-relaxed text-slate-300">{CLIENT_CONFIG_ERROR}</p>
+        </section>
+      </main>
+    );
+  }
+  const [token, setToken] = useState<string | null>(() => readStoredToken());
+  const [account, setAccount] = useState<any>(() => readStoredAccount());
   const [character, setCharacter] = useState<any>(null);
   const [offlineData, setOfflineData] = useState<any | null>(null);
+  const [notifications, setNotifications] = useState<ImportantNotification[]>([]);
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [selectingCharacterId, setSelectingCharacterId] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
+
+  const pushNotification = useCallback((notification: ImportantNotification) => {
+    setNotifications((previous) => {
+      if (previous.some((item) => item.id === notification.id)) return previous;
+      return [{ ...notification, read: false }, ...previous].slice(0, 40);
+    });
+  }, []);
 
   // Abertura automática no primeiro acesso ao selecionar o personagem
   useEffect(() => {
@@ -31,17 +90,17 @@ export function App() {
   const handleAuthSuccess = (newToken: string, authenticatedAccount: any) => {
     setToken(newToken);
     setAccount(authenticatedAccount);
-    localStorage.setItem('atlas_token', newToken);
-    localStorage.setItem('atlas_account', JSON.stringify(authenticatedAccount || null));
+    localStorage.setItem(AUTH_TOKEN_KEY, newToken);
+    localStorage.setItem(AUTH_ACCOUNT_KEY, JSON.stringify(authenticatedAccount || null));
   };
 
   const handleLogout = () => {
     setToken(null);
     setAccount(null);
     setCharacter(null);
+    setNotifications([]);
     setSelectionError(null);
-    localStorage.removeItem('atlas_token');
-    localStorage.removeItem('atlas_account');
+    clearStoredAuth();
   };
 
   const handleSelectCharacter = async (char: any) => {
@@ -53,10 +112,34 @@ export function App() {
     setSelectionError(null);
     setOfflineData(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/expedition/claim?character_id=${char.id}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      let res: Response | null = null;
+      let responseData: any = {};
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        res = await fetch(`${API_BASE_URL}/api/v1/expedition/claim?character_id=${char.id}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const responseText = await res.text();
+        responseData = {};
+        if (responseText) {
+          try {
+            responseData = JSON.parse(responseText);
+          } catch {
+            responseData = {};
+          }
+        }
+
+        // Durante refresh/rebuild o WebSocket anterior pode levar alguns
+        // instantes para liberar o personagem. O claim não altera nada quando
+        // retorna 409, portanto repetir é seguro e evita erro falso de login.
+        if (res.status !== 409 || attempt === 2) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+      }
+
+      if (!res) {
+        throw new Error('Não foi possível iniciar a sessão do personagem');
+      }
 
       if (res.status === 401 || res.status === 403) {
         console.warn('Token JWT expirado durante o claim offline. Realizando logout...');
@@ -65,23 +148,38 @@ export function App() {
       }
 
       if (!res.ok) {
-        throw new Error(`Falha no claim offline (${res.status})`);
+        throw new Error(responseData.error || `Falha no claim offline (${res.status})`);
       }
 
-      const claim = await res.json();
+      const claim = responseData;
       if (!claim.character) {
         throw new Error('Resposta sem snapshot autoritativo do personagem');
       }
       setCharacter(claim.character);
       if (claim.report?.minutes_offline >= 3) {
         setOfflineData(claim.report);
+        const report = claim.report;
+        const levelMessage = report.level_after > report.level_before
+          ? ` Nível ${report.level_before} → ${report.level_after}.`
+          : '';
+        pushNotification({
+          id: `offline:${report.report_id}`,
+          category: report.defeated ? 'warning' : 'reward',
+          icon: report.defeated ? '❤️' : '🌙',
+          title: 'Expedição offline reconciliada',
+          message: report.defeated
+            ? `O herói voltou ao acampamento após ser derrotado. +${report.xp_gained || 0} XP e +${report.gold_gained || 0} ouro.${levelMessage}`
+            : `A expedição rendeu +${report.xp_gained || 0} XP, +${report.gold_gained || 0} ouro e ${report.kills || 0} abate(s).${levelMessage}`,
+          timestamp: report.period_end || new Date().toISOString(),
+          read: false,
+        });
       }
     } catch (e) {
       console.warn('Erro ao reconciliar progresso offline:', e);
       // Não abre o WebSocket sem consumir a janela offline. Entrar com um
       // snapshot antigo poderia fechar a janela e perder recompensas pendentes.
       setCharacter(null);
-      setSelectionError('Não foi possível reconciliar a expedição. Tente selecionar o personagem novamente.');
+      setSelectionError(e instanceof Error ? e.message : 'Não foi possível reconciliar a expedição. Tente selecionar o personagem novamente.');
     } finally {
       setSelectingCharacterId(null);
     }
@@ -97,6 +195,12 @@ export function App() {
 	  });
     }
   }, []);
+
+  const markNotificationsRead = useCallback(() => {
+    setNotifications((previous) => previous.map((notification) => ({ ...notification, read: true })));
+  }, []);
+
+  const clearNotifications = useCallback(() => setNotifications([]), []);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -123,40 +227,46 @@ export function App() {
           <OfflineSummaryModal data={offlineData} onClose={() => setOfflineData(null)} />
 
           {/* Header Superior com Nível em Tempo Real */}
-          <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-40 px-6 py-2.5 flex justify-between items-center shadow-lg">
+          <header className="border-b-2 border-amber-600/40 bg-slate-950/95 sticky top-0 z-40 px-6 py-2.5 flex justify-between items-center shadow-2xl backdrop-blur-md">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center font-black text-slate-950 text-lg shadow">
+              <div className="w-8 h-8 rounded pixel-slot flex items-center justify-center font-pixel-heading text-amber-400 text-base shadow border-amber-500">
                 A
               </div>
               <div>
-                <h1 className="font-bold text-base text-amber-400 leading-none">PROJECT ATLAS</h1>
-                <span className="text-[10px] text-slate-400">Standalone IDLE MMORPG</span>
+                <h1 className="font-pixel-heading text-sm text-amber-400 leading-none">PROJECT ATLAS</h1>
+                <span className="text-[9px] text-slate-400 font-pixel-body">Standalone IDLE MMORPG</span>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 text-xs font-mono">
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-800 text-slate-200 border border-slate-700 shadow-inner">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span className="font-semibold text-amber-400">{character.name}</span>
-                <span className="text-slate-400">(Lv. {character.level})</span>
+            <div className="flex items-center gap-3 text-xs font-pixel-body">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded pixel-slot text-slate-200 border-amber-600/40">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span className="font-pixel-heading text-amber-300 text-[11px]">{character.name}</span>
+                <span className="text-slate-400 text-[10px]">(Lv. {character.level})</span>
               </div>
 
-              {account?.role === 'admin' && <span className="rounded border border-fuchsia-500/40 bg-fuchsia-950/40 px-2 py-1 text-[10px] font-black text-fuchsia-300">🧪 QA ADMIN</span>}
+              {account?.role === 'admin' && <span className="rounded border border-fuchsia-500/60 bg-fuchsia-950/80 px-2 py-0.5 text-[9px] font-pixel-heading text-fuchsia-300">QA ADMIN</span>}
+
+              <NotificationBell
+                notifications={notifications}
+                onMarkAllRead={markNotificationsRead}
+                onClear={clearNotifications}
+              />
 
               {/* Botão de Ícone do Livro para o Guia do Jogo */}
               <button
                 onClick={() => setIsTutorialOpen(true)}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 border border-slate-700 hover:border-amber-500/50 transition flex items-center justify-center text-sm shadow-sm"
+                className="pixel-btn pixel-btn-dark px-2.5 py-1 text-xs"
                 title="📖 Guia do Aventureiro & Manual do Jogo"
               >
-                <span>📖</span>
+                <span>📖 Guia</span>
               </button>
 
               <button
                 onClick={handleLogout}
-                className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/60 hover:text-rose-300 text-slate-300 border border-slate-700 transition"
+                className="pixel-btn pixel-btn-crimson px-3 py-1 text-xs"
               >
-                Sair da Conta
+                Sair
               </button>
             </div>
           </header>
@@ -167,6 +277,7 @@ export function App() {
               token={token}
               character={character}
               onCharacterUpdate={handleCharacterUpdate}
+              onImportantNotification={pushNotification}
             />
           </main>
 

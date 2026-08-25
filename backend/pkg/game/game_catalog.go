@@ -1,6 +1,6 @@
 package game
 
-const GameCatalogVersion = "2026.08-settlement-v1.1-usability-growth"
+const GameCatalogVersion = "2026.08-isometric-food-v2"
 
 type ExpeditionCatalogEntry struct {
 	ID                   string   `json:"id"`
@@ -31,6 +31,7 @@ type GameCatalog struct {
 	Professions          []ProfessionDefinition          `json:"professions"`
 	GatheringExpeditions []GatheringExpeditionDefinition `json:"gathering_expeditions"`
 	Recipes              []RecipeDefinition              `json:"recipes"`
+	Consumables          []ConsumableDefinition          `json:"consumables"`
 	EconomyPolicy        EconomyPolicy                   `json:"economy_policy"`
 }
 
@@ -61,6 +62,7 @@ func BuildGameCatalog() GameCatalog {
 		Professions:          ListProfessionDefinitions(),
 		GatheringExpeditions: ListGatheringExpeditions(),
 		Recipes:              ListRecipeDefinitions(),
+		Consumables:          ListConsumableDefinitions(),
 		EconomyPolicy:        CurrentEconomyPolicy(),
 	}
 }

@@ -4,6 +4,7 @@ import { ResourceAmount } from '../../hooks/useGameSocket';
 import { ResourceDefinition } from '../../game/GameCatalog';
 import { ItemIcon, getRarityStyle } from '../Inventory/ItemIcon';
 import { formatQuantity } from '../../utils/formatters';
+import { PixelResourceSprite } from '../../game/registries/PixelResourceRegistry';
 
 interface SalvageModalProps {
   isOpen: boolean;
@@ -48,7 +49,7 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
   const maxBatchSize = workbenchLevel >= 3 ? 50 : workbenchLevel === 2 ? 15 : 5;
   const isSafeModeUnlocked = workbenchLevel >= 3;
 
-  // Filtra itens desmontáveis (não permite livros de habilidade nem manuais de construção)
+  // Filtra itens desmontáveis
   const salvageableItems = safeBackpack.filter((it) => {
     if (!it) return false;
     const slot = (it.slot_type || '').toLowerCase();
@@ -127,7 +128,9 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
 
   const inspectedItem = (lastInspectedId ? salvageableItems.find((it) => it.id === lastInspectedId) : null) || selectedItems[0] || null;
 
-  // Cálculo estimativo de materiais para o lote selecionado
+  // Replica a composição autoritativa do backend para manter a prévia do lote
+  // consistente. O resultado real ainda pode ser menor quando algum item
+  // falhar na rolagem de sucesso durante a desmontagem.
   const estimatedMaterials = useMemo(() => {
     const map = new Map<string, number>();
     for (const it of selectedItems) {
@@ -159,24 +162,50 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
       const pri = Math.max(1, Math.ceil(total * 0.6));
       const sec = Math.max(1, total - pri);
 
-      // Material principal e secundário aproximados por slot
-      let priKey = 'iron';
-      let secKey = 'stone';
-      if (it.slot_type === 'mainhand') {
-        if (it.weapon_type === 'wand') {
-          priKey = 'arcane_essence';
-          secKey = 'wood';
-        } else if (it.weapon_type === 'bow') {
-          priKey = 'wood';
-          secKey = 'fiber';
+      const slotType = (it.slot_type || '').toLowerCase();
+      const weaponType = (it.weapon_type || '').toLowerCase();
+      const itemName = (it.name || '').toLowerCase();
+      let priKey = 'metal_scrap';
+      let secKey = 'cloth_scrap';
+
+      if (slotType === 'mainhand') {
+        if (weaponType === 'wand') {
+          priKey = 'arcane_scrap';
+          secKey = 'metal_scrap';
+        } else if (weaponType === 'bow') {
+          priKey = 'cloth_scrap';
+          secKey = 'metal_scrap';
         }
-      } else if (it.slot_type === 'boots' || it.slot_type === 'bag') {
-        priKey = 'fiber';
-        secKey = 'iron';
+      } else if (slotType === 'offhand') {
+        if (itemName.includes('livro') || itemName.includes('orbe')) {
+          priKey = 'arcane_scrap';
+          secKey = 'metal_scrap';
+        }
+      } else if (slotType === 'head' || slotType === 'chest' || slotType === 'legs') {
+        if (itemName.includes('robe') || itemName.includes('saiote')) {
+          priKey = 'cloth_scrap';
+          secKey = 'arcane_scrap';
+        }
+      } else if (slotType === 'boots' || slotType === 'bag') {
+        priKey = 'cloth_scrap';
+        secKey = 'metal_scrap';
+      } else if (slotType === 'necklace' || slotType === 'ring') {
+        priKey = 'metal_scrap';
+        secKey = 'arcane_scrap';
+      } else if (slotType === 'ammo') {
+        priKey = 'metal_scrap';
+        secKey = 'cloth_scrap';
       }
 
       map.set(priKey, (map.get(priKey) || 0) + pri);
       map.set(secKey, (map.get(secKey) || 0) + sec);
+
+      if (tier >= 4 && it.rarity !== 'Comum') {
+        map.set('glacial_crystal', (map.get('glacial_crystal') || 0) + 1);
+      }
+      if (tier >= 5 && (it.rarity === 'Épico' || it.rarity === 'Lendário')) {
+        map.set('abyssal_ember', (map.get('abyssal_ember') || 0) + 1);
+      }
     }
     return Array.from(map.entries()).map(([key, quantity]) => ({ key, quantity }));
   }, [selectedItems, efficiencyPercent]);
@@ -195,10 +224,13 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
   const handleConfirmSalvage = () => {
     if (selectedIds.length === 0 || !hasStorageSpace) return;
 
-    if (selectedIds.length === 1 && onSalvageItem) {
-      onSalvageItem(selectedIds[0]);
-    } else if (onSalvageBatch) {
+    // O fluxo em lote também é o autoritativo para um único item: ele aplica
+    // a chance da bancada e o modo seguro exibidos nesta tela.
+    if (onSalvageBatch) {
       onSalvageBatch(selectedIds, safeMode);
+    } else if (selectedIds.length === 1 && onSalvageItem) {
+      // Compatibilidade com consumidores antigos que ainda não suportam lote.
+      onSalvageItem(selectedIds[0]);
     }
     setSelectedIds([]);
     if (onClearPreview) onClearPreview();
@@ -214,29 +246,29 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in font-sans">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-3xl w-full p-5 shadow-2xl space-y-4 text-slate-100 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in font-pixel-body">
+      <div className="pixel-card-gold rounded-2xl max-w-3xl w-full p-5 shadow-2xl space-y-4 text-slate-100 max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex justify-between items-start border-b border-slate-800 pb-3 shrink-0">
+        <div className="pixel-card-header pixel-card-header-gold pb-3 shrink-0 flex justify-between items-start">
           <div className="flex items-center gap-3">
-            <span className="text-3xl p-2.5 bg-slate-950 rounded-xl border border-slate-800 shadow-inner">⚒️</span>
+            <span className="text-2xl p-2 pixel-slot rounded bg-slate-950 border-amber-500/40">⚒️</span>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-base text-amber-400">Bancada de Desmontagem</h3>
-                <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full">
-                  Nível {workbenchLevel}
+                <h3 className="font-pixel-heading text-sm text-amber-400">Bancada de Desmontagem</h3>
+                <span className="px-2 py-0.5 text-[9px] font-pixel-heading bg-amber-950 text-amber-300 border border-amber-500/40 rounded">
+                  Nv. {workbenchLevel}
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
                 Desmonte equipamentos para recuperar matérias-primas nobres. Rendimento:{' '}
-                <strong className="text-emerald-400 font-mono">+{efficiencyPercent}%</strong> • Lote Máx:{' '}
-                <strong className="text-amber-300 font-mono">{maxBatchSize} itens</strong>
+                <strong className="text-emerald-400 font-pixel-heading">+{efficiencyPercent}%</strong> • Lote:{' '}
+                <strong className="text-amber-300 font-pixel-heading">{maxBatchSize} itens</strong>
               </p>
             </div>
           </div>
           <button
             onClick={handleClose}
-            className="text-slate-400 hover:text-slate-200 text-lg p-1 transition"
+            className="pixel-btn pixel-btn-crimson px-2.5 py-1 text-xs"
           >
             ✕
           </button>
@@ -247,27 +279,27 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
           {/* Coluna da Esquerda: Seleção de Itens e Ações Rápidas */}
           <div className="flex flex-col space-y-2 min-h-0">
             <div className="flex flex-wrap items-center justify-between gap-1 shrink-0">
-              <h4 className="text-xs font-bold text-slate-300">
-                Mochila ({salvageableItems.length} desmontáveis):
+              <h4 className="text-xs font-pixel-heading text-slate-300">
+                Mochila ({salvageableItems.length}):
               </h4>
-              <div className="flex gap-1">
+              <div className="flex gap-1 text-[9px] font-pixel-heading">
                 <button
                   onClick={() => handleSelectByRarity('Comum')}
-                  className="px-2 py-0.5 text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition"
+                  className="pixel-btn pixel-btn-dark px-2 py-0.5"
                   title="Selecionar todos os itens comuns"
                 >
                   +Comuns
                 </button>
                 <button
                   onClick={() => handleSelectByRarity('Incomum')}
-                  className="px-2 py-0.5 text-[10px] font-mono bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 rounded border border-emerald-700/60 transition"
+                  className="pixel-btn pixel-btn-dark px-2 py-0.5 text-emerald-300"
                   title="Selecionar itens incomuns"
                 >
                   +Incomuns
                 </button>
                 <button
                   onClick={handleSelectAll}
-                  className="px-2 py-0.5 text-[10px] font-mono bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded border border-amber-500/40 font-bold transition"
+                  className="pixel-btn pixel-btn-gold px-2 py-0.5 text-slate-950 font-bold"
                 >
                   {selectedIds.length > 0 ? `Limpar (${selectedIds.length})` : `+Tudo (${Math.min(salvageableItems.length, maxBatchSize)})`}
                 </button>
@@ -275,16 +307,16 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
             </div>
 
             {selectedIds.length >= maxBatchSize && salvageableItems.length > maxBatchSize && (
-              <div className="p-1.5 px-2 bg-amber-950/50 border border-amber-500/40 rounded-lg text-[10px] text-amber-300 flex items-center gap-1.5 font-mono shadow-sm">
+              <div className="p-1.5 px-2 pixel-slot rounded text-[10px] text-amber-300 flex items-center gap-1.5 bg-amber-950/40 border-amber-500/40">
                 <span>⚠️</span>
-                <span>Lote máximo de {maxBatchSize} itens atingido (Aprimore a Bancada ao Nv. {workbenchLevel + 1} para expandir o limite).</span>
+                <span>Lote máximo de {maxBatchSize} itens atingido.</span>
               </div>
             )}
 
             {/* Lista com Checkboxes e Chance de Sucesso */}
-            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 bg-slate-950/90 p-2.5 rounded-xl border border-slate-800">
+            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 pixel-slot rounded-xl p-2.5 bg-slate-950/90">
               {salvageableItems.length === 0 ? (
-                <div className="text-center py-12 text-xs text-slate-500">
+                <div className="text-center py-12 text-xs text-slate-500 font-pixel-body">
                   Nenhum equipamento desmontável na mochila.
                 </div>
               ) : (
@@ -297,10 +329,10 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
                     <div
                       key={it.id}
                       onClick={() => handleToggleSelect(it)}
-                      className={`w-full text-left p-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
+                      className={`w-full text-left p-2 rounded pixel-slot transition-all flex items-center justify-between cursor-pointer ${
                         isSelected
-                          ? 'bg-amber-500/15 border-amber-400 shadow-md ring-1 ring-amber-400/40'
-                          : `${style.bg} ${style.border} hover:brightness-110`
+                          ? 'bg-amber-950/60 border-amber-400 ring-1 ring-amber-400'
+                          : `${style.bg} ${style.border}`
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -321,7 +353,7 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
 
                       <div className="text-right shrink-0">
                         <span
-                          className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                          className={`text-[9px] font-pixel-heading px-1.5 py-0.5 rounded border ${
                             chance >= 80
                               ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
                               : chance >= 65
@@ -340,11 +372,11 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
           </div>
 
           {/* Coluna da Direita: Preview do Lote / Modo Seguro / Confirmação */}
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-3 min-h-0 overflow-y-auto">
+          <div className="pixel-slot rounded-xl p-4 flex flex-col justify-between space-y-3 min-h-0 overflow-y-auto bg-slate-950/90">
             <div className="space-y-3">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <h4 className="text-xs font-bold text-slate-300">
-                  Resumo do Desmonte ({selectedIds.length}/{maxBatchSize} itens)
+                <h4 className="text-xs font-pixel-heading text-slate-300">
+                  Resumo ({selectedIds.length}/{maxBatchSize} un.)
                 </h4>
                 {isSafeModeUnlocked && (
                   <label className="flex items-center gap-1.5 text-xs text-amber-300 cursor-pointer select-none">
@@ -354,7 +386,7 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
                       onChange={(e) => setSafeMode(e.target.checked)}
                       className="rounded border-amber-500 text-amber-500 focus:ring-amber-400"
                     />
-                    <span className="font-bold">🛡️ Modo Seguro (100%)</span>
+                    <span className="font-pixel-heading text-[10px]">🛡️ Seguro (100%)</span>
                   </label>
                 )}
               </div>
@@ -362,10 +394,10 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
               {selectedIds.length > 0 ? (
                 <div className="space-y-3">
                   {selectedIds.length === 1 && inspectedItem && (
-                    <div className="flex items-center gap-3 p-2 bg-slate-900/90 rounded-lg border border-slate-800">
+                    <div className="flex items-center gap-3 p-2 pixel-slot rounded bg-slate-900/90 border-slate-800">
                       <ItemIcon name={inspectedItem.name} slotType={inspectedItem.slot_type} weaponType={inspectedItem.weapon_type} size="md" />
                       <div>
-                        <p className={`text-xs font-bold ${getRarityStyle(inspectedItem.rarity).text}`}>
+                        <p className={`text-xs font-pixel-heading ${getRarityStyle(inspectedItem.rarity).text}`}>
                           {inspectedItem.name}
                         </p>
                         <p className="text-[10px] text-slate-400">
@@ -377,8 +409,10 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
 
                   {/* Materiais Estimados ou Preview Exato */}
                   <div className="space-y-1.5">
-                    <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-                      <span>✨ Materiais obtidos na desmontagem:</span>
+                    <p className="text-[11px] text-emerald-400 font-pixel-heading flex items-center gap-1">
+                      <span>
+                        ✨ {selectedIds.length > 1 ? 'Materiais estimados (se todos tiverem sucesso):' : 'Materiais obtidos:'}
+                      </span>
                     </p>
                     <div className="grid grid-cols-2 gap-2">
                       {(selectedIds.length === 1 && salvagePreview?.yield && Array.isArray(salvagePreview.yield) ? salvagePreview.yield : estimatedMaterials).map((m) => {
@@ -386,13 +420,13 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
                         return (
                           <div
                             key={m.key}
-                            className="flex items-center justify-between p-2 bg-slate-900 border border-emerald-500/30 rounded-lg text-xs"
+                            className="flex items-center justify-between p-2 pixel-slot rounded text-xs bg-slate-900 border-emerald-500/40"
                           >
                             <span className="flex items-center gap-1.5 min-w-0">
-                              <span>{def?.icon || '📦'}</span>
+                              <PixelResourceSprite resourceKey={m.key} name={def?.name || m.key} size="sm" />
                               <span className="text-slate-200 truncate">{def?.name || m.key}</span>
                             </span>
-                            <span className="font-mono font-bold text-emerald-400 shrink-0 ml-1">+{formatQuantity(m.quantity)}</span>
+                            <span className="font-pixel-heading text-emerald-400 shrink-0 ml-1">+{formatQuantity(m.quantity)}</span>
                           </div>
                         );
                       })}
@@ -401,22 +435,22 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
 
                   {/* Alerta de Capacidade do Armazém */}
                   {!hasStorageSpace ? (
-                    <div className="p-2.5 bg-rose-950/40 border border-rose-500/60 rounded-lg text-[10px] text-rose-300 leading-relaxed space-y-1">
-                      <p className="font-bold flex items-center gap-1">
+                    <div className="pixel-alert-frame pixel-alert-critical p-2.5 rounded text-[10px] text-rose-300 leading-relaxed space-y-1">
+                      <p className="font-pixel-heading flex items-center gap-1">
                         <span>⚠️</span> Espaço Insuficiente no Armazém!
                       </p>
                       <p>
                         Necessário: <strong>{totalMaterialNeeded}</strong> materiais livres. Disponível:{' '}
-                        <strong>{availableStorage}</strong> unidades. Descarte itens no depósito antes de desmontar.
+                        <strong>{availableStorage}</strong> un.
                       </p>
                     </div>
                   ) : (
-                    <div className="p-2.5 bg-amber-950/30 border border-amber-500/40 rounded-lg text-[10px] text-amber-200 leading-relaxed space-y-1">
-                      <p className="font-bold flex items-center gap-1">
+                    <div className="p-2.5 bg-amber-950/30 border border-amber-500/40 rounded text-[10px] text-amber-200 leading-relaxed space-y-1">
+                      <p className="font-pixel-heading flex items-center gap-1">
                         <span>⚠️</span> Risco de Perda em Falha:
                       </p>
                       <p>
-                        Se a desmontagem falhar na bancada, o item correspondente será consumido sem gerar matérias-primas.
+                        Se a desmontagem falhar, o item será consumido sem gerar matérias-primas.
                         {workbenchLevel < 3 && ' Aprimore a Bancada ao Nível 3 para liberar o Modo Seguro.'}
                       </p>
                     </div>
@@ -425,21 +459,21 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
               ) : (
                 <div className="text-center py-12 text-xs text-slate-500 space-y-2">
                   <span className="text-3xl block">⚒️</span>
-                  <span>Selecione um ou mais equipamentos da lista ao lado para desmontar em lote.</span>
+                  <span>Selecione equipamentos da lista para desmontar em lote.</span>
                 </div>
               )}
             </div>
 
             {/* Footer com Botão de Confirmação */}
             <div className="pt-2 border-t border-slate-800 flex justify-between items-center gap-2 shrink-0">
-              <span className="text-[11px] font-mono text-slate-400">
+              <span className="text-[10px] text-slate-400 font-pixel-body">
                 Armazém: {storageUsed}/{storageCapacity} ({availableStorage} livres)
               </span>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 font-pixel-heading">
                 <button
                   onClick={handleClose}
-                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition"
+                  className="pixel-btn pixel-btn-dark px-3.5 py-1.5 text-xs"
                 >
                   Cancelar
                 </button>
@@ -447,10 +481,10 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
                 <button
                   onClick={handleConfirmSalvage}
                   disabled={selectedIds.length === 0 || !hasStorageSpace}
-                  className={`px-5 py-1.5 font-bold text-xs rounded-xl shadow-lg transition flex items-center gap-1.5 ${
+                  className={`px-4 py-1.5 text-xs flex items-center gap-1.5 ${
                     selectedIds.length > 0 && hasStorageSpace
-                      ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/40'
-                      : 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700'
+                      ? 'pixel-btn pixel-btn-crimson'
+                      : 'pixel-btn pixel-btn-dark opacity-50 cursor-not-allowed'
                   }`}
                 >
                   <span>⚒️</span>
@@ -458,8 +492,8 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
                     {!hasStorageSpace
                       ? 'Armazém Cheio'
                       : selectedIds.length > 1
-                      ? `Desmontar ${selectedIds.length} Itens em Lote`
-                      : 'Desmontar Equipamento'}
+                      ? `Desmontar ${selectedIds.length} Itens`
+                      : 'Desmontar Item'}
                   </span>
                 </button>
               </div>

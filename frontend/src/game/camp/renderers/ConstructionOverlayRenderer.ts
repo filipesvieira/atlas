@@ -1,10 +1,11 @@
 import { drawPixelHammer } from './PixelHammerRenderer';
+import { drawIsoFootprint } from './IsoBuildingPrimitives';
 import { BuildingFootprint } from '../types';
 
 export interface ConstructionOverlayOptions {
   currentLevel: number;
   targetLevel?: number;
-  progress: number; // 0 a 100
+  progress: number;
   footprint: BuildingFootprint;
   x: number;
   groundY: number;
@@ -14,68 +15,71 @@ export interface ConstructionOverlayOptions {
 export class ConstructionOverlayRenderer {
   public render(ctx: CanvasRenderingContext2D, opts: ConstructionOverlayOptions) {
     const { currentLevel, targetLevel = currentLevel + 1, progress, footprint, x, groundY, time } = opts;
-
-    const halfW = Math.max(24, footprint.width / 2);
-    const height = Math.max(30, footprint.height);
-    const topY = groundY - height;
+    const baseWidth = Math.max(30, footprint.width);
+    const baseDepth = Math.max(18, Math.round(footprint.height * 0.38));
+    const scaffoldHeight = Math.max(30, Math.round(footprint.height * 0.78));
+    const topY = groundY - scaffoldHeight;
 
     ctx.save();
+    ctx.globalAlpha = 0.82;
+    ctx.translate(x, groundY);
 
-    // 1. Andaimes laterais de madeira (Scaffolding)
-    const scaffoldLeft = x - halfW - 4;
-    const scaffoldRight = x + halfW + 4;
+    // Piso, postes e travessas seguem o losango da construção, mantendo o
+    // andaime coerente com a mesma perspectiva usada pelos prédios prontos.
+    drawIsoFootprint(ctx, baseWidth, baseDepth, 'rgba(120,53,15,0.25)', '#f59e0b');
+    const west = { x: -baseWidth / 2, y: 0 };
+    const east = { x: baseWidth / 2, y: 0 };
+    const north = { x: 0, y: -baseDepth / 4 };
+    const south = { x: 0, y: baseDepth / 4 };
+    const topWest = { x: west.x, y: -scaffoldHeight };
+    const topEast = { x: east.x, y: -scaffoldHeight };
+    const topNorth = { x: north.x, y: north.y - scaffoldHeight };
+    const topSouth = { x: south.x, y: south.y - scaffoldHeight };
 
-    ctx.fillStyle = '#78350f';
-    // Postes verticais
-    ctx.fillRect(scaffoldLeft, topY - 10, 4, height + 10);
-    ctx.fillRect(scaffoldRight - 4, topY - 10, 4, height + 10);
-
-    // Vigas horizontais
-    const beamCount = Math.max(2, Math.floor(height / 25));
-    ctx.fillStyle = '#92400e';
-    for (let i = 0; i <= beamCount; i++) {
-      const by = topY + (height / beamCount) * i;
-      ctx.fillRect(scaffoldLeft, by - 2, (scaffoldRight - scaffoldLeft), 3);
-    }
-
-    // Travessas diagonais do andaime
     ctx.strokeStyle = '#78350f';
+    ctx.lineWidth = 3;
+    [west, east, north, south].forEach((post) => {
+      ctx.beginPath();
+      ctx.moveTo(post.x, post.y);
+      ctx.lineTo(post.x === 0 ? post.x : post.x, post.y - scaffoldHeight);
+      ctx.stroke();
+    });
+    ctx.strokeStyle = '#92400e';
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(scaffoldLeft, topY);
-    ctx.lineTo(scaffoldRight, groundY);
-    ctx.moveTo(scaffoldRight, topY);
-    ctx.lineTo(scaffoldLeft, groundY);
-    ctx.stroke();
+    [
+      [topWest, topNorth], [topNorth, topEast], [topEast, topSouth], [topSouth, topWest],
+      [west, north], [north, east], [east, south], [south, west],
+      [topWest, south], [topEast, south],
+    ].forEach(([from, to]) => {
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+    });
+    ctx.restore();
 
-    // 2. Fagulhas / Poeira de construção animada
+    // Fagulhas / poeira de obra no volume da construção.
+    ctx.save();
     ctx.fillStyle = '#fbbf24';
     for (let i = 0; i < 4; i++) {
-      const pTime = (time * 0.0015 + i * 0.4) % 1;
-      const px = x - halfW * 0.6 + ((i * 37 + Math.floor(time * 0.01)) % Math.max(1, Math.floor(halfW * 1.2)));
-      const py = groundY - height * 0.2 - pTime * (height * 0.6);
-      const alpha = Math.sin(pTime * Math.PI);
+      const particleProgress = (time * 0.0015 + i * 0.4) % 1;
+      const px = x - baseWidth * 0.32 + ((i * 37 + Math.floor(time * 0.01)) % Math.max(1, Math.floor(baseWidth * 0.64)));
+      const py = groundY - scaffoldHeight * 0.2 - particleProgress * (scaffoldHeight * 0.6);
+      const alpha = Math.sin(particleProgress * Math.PI);
       ctx.fillStyle = `rgba(251, 191, 36, ${alpha * 0.8})`;
       ctx.fillRect(px, py, 2, 2);
     }
 
-    // 3. Martelo animado no topo direito da construção
-    const hammerX = scaffoldRight - 2;
-    const hammerY = topY - 8;
-    drawPixelHammer(ctx, hammerX, hammerY, time);
+    drawPixelHammer(ctx, x + baseWidth / 2 + 5, topY - 8, time);
 
-    // 4. Barra de Progresso e Badge de Nível Flutuante
-    const barW = Math.max(50, Math.min(100, halfW * 1.6));
+    const barW = Math.max(50, Math.min(100, baseWidth * 0.72));
     const barX = x - barW / 2;
     const barY = topY - 24;
-
-    // Fundo da barra
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(barX - 1, barY - 1, barW + 2, 7);
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(barX, barY, barW, 5);
 
-    // Progresso preenchido
     const fillW = (barW * Math.min(100, Math.max(0, progress))) / 100;
     const grad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
     grad.addColorStop(0, '#f59e0b');
@@ -83,18 +87,14 @@ export class ConstructionOverlayRenderer {
     ctx.fillStyle = grad;
     ctx.fillRect(barX, barY, fillW, 5);
 
-    // Badge Nv. Atual -> Nv. Alvo
     ctx.font = 'bold 8px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-
     const label = `Nv. ${currentLevel} ➔ Nv. ${targetLevel}`;
     ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
     ctx.fillRect(x - 28, barY - 10, 56, 9);
-
     ctx.fillStyle = '#fef08a';
     ctx.fillText(label, x, barY - 5);
-
     ctx.restore();
   }
 }

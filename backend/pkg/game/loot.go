@@ -21,39 +21,40 @@ const (
 )
 
 type Item struct {
-	ID                string    `json:"id"`
-	Name              string    `json:"name"`
-	Attack            int       `json:"attack"`
-	PhysicalAttack    int       `json:"physical_attack"`
-	MagicAttack       int       `json:"magic_attack"`
-	Defense           int       `json:"defense"`
-	Hands             int       `json:"hands"` // 1 or 2
-	ValueGold         int64     `json:"value_gold"`
-	Rarity            string    `json:"rarity"`
-	Weight            float64   `json:"weight"`
-	RequiredLevel     int       `json:"required_level"`
-	BonusSTR          int       `json:"bonus_str,omitempty"`
-	BonusDEX          int       `json:"bonus_dex,omitempty"`
-	BonusINT          int       `json:"bonus_int,omitempty"`
-	BonusHP           int       `json:"bonus_hp,omitempty"`
-	BonusMP           int       `json:"bonus_mp,omitempty"`
-	GoldBonus         float64   `json:"gold_bonus,omitempty"`
-	CritChance        float64   `json:"crit_chance,omitempty"`
-	Lifesteal         float64   `json:"lifesteal,omitempty"`
-	ManaRegen         int       `json:"mana_regen,omitempty"`
-	WeaponType        string    `json:"weapon_type,omitempty"`
-	SkillKey          string    `json:"skill_key,omitempty"`
-	SpecialEffect     string    `json:"special_effect"`
-	SlotType          string    `json:"slot_type"`
-	ItemKind          ItemKind  `json:"item_kind,omitempty"`
-	UnlockBuildingKey string    `json:"unlock_building_key,omitempty"`
-	UnlockMaxLevel    int       `json:"unlock_max_level,omitempty"`
-	TemplateKey       string    `json:"template_key,omitempty"`
-	Tier              int       `json:"tier"`
-	ItemPower         int       `json:"item_power"`
-	BalanceVersion    int       `json:"balance_version"`
-	Source            string    `json:"source,omitempty"`
-	CreatedAt         time.Time `json:"created_at,omitempty"`
+	ID                 string    `json:"id"`
+	Name               string    `json:"name"`
+	Attack             int       `json:"attack"`
+	PhysicalAttack     int       `json:"physical_attack"`
+	MagicAttack        int       `json:"magic_attack"`
+	Defense            int       `json:"defense"`
+	Hands              int       `json:"hands"` // 1 or 2
+	ValueGold          int64     `json:"value_gold"`
+	Rarity             string    `json:"rarity"`
+	Weight             float64   `json:"weight"`
+	RequiredLevel      int       `json:"required_level"`
+	BonusSTR           int       `json:"bonus_str,omitempty"`
+	BonusDEX           int       `json:"bonus_dex,omitempty"`
+	BonusINT           int       `json:"bonus_int,omitempty"`
+	BonusHP            int       `json:"bonus_hp,omitempty"`
+	BonusMP            int       `json:"bonus_mp,omitempty"`
+	GoldBonus          float64   `json:"gold_bonus,omitempty"`
+	CritChance         float64   `json:"crit_chance,omitempty"`
+	Lifesteal          float64   `json:"lifesteal,omitempty"`
+	ManaRegen          int       `json:"mana_regen,omitempty"`
+	MovementSpeedBonus float64   `json:"movement_speed_bonus,omitempty"`
+	WeaponType         string    `json:"weapon_type,omitempty"`
+	SkillKey           string    `json:"skill_key,omitempty"`
+	SpecialEffect      string    `json:"special_effect"`
+	SlotType           string    `json:"slot_type"`
+	ItemKind           ItemKind  `json:"item_kind,omitempty"`
+	UnlockBuildingKey  string    `json:"unlock_building_key,omitempty"`
+	UnlockMaxLevel     int       `json:"unlock_max_level,omitempty"`
+	TemplateKey        string    `json:"template_key,omitempty"`
+	Tier               int       `json:"tier"`
+	ItemPower          int       `json:"item_power"`
+	BalanceVersion     int       `json:"balance_version"`
+	Source             string    `json:"source,omitempty"`
+	CreatedAt          time.Time `json:"created_at,omitempty"`
 }
 
 type ItemSlot string
@@ -83,30 +84,31 @@ const (
 )
 
 type LootTemplate struct {
-	Key               string
-	Name              string
-	Slot              ItemSlot
-	ItemKind          ItemKind
-	UnlockBuildingKey string
-	UnlockMaxLevel    int
-	WeaponType        string
-	SkillKey          string
-	RequiredLevel     int
-	Tier              int
-	BaseAtk           int
-	BaseMagic         int
-	BaseDef           int
-	BaseWeight        float64
-	Hands             int
-	BaseSTR           int
-	BaseDEX           int
-	BaseINT           int
-	BaseHP            int
-	BaseMP            int
-	GoldBonus         float64
-	Lifesteal         float64
-	ManaRegen         int
-	CritChance        float64
+	Key                    string
+	Name                   string
+	Slot                   ItemSlot
+	ItemKind               ItemKind
+	UnlockBuildingKey      string
+	UnlockMaxLevel         int
+	WeaponType             string
+	SkillKey               string
+	RequiredLevel          int
+	Tier                   int
+	BaseAtk                int
+	BaseMagic              int
+	BaseDef                int
+	BaseWeight             float64
+	Hands                  int
+	BaseSTR                int
+	BaseDEX                int
+	BaseINT                int
+	BaseHP                 int
+	BaseMP                 int
+	GoldBonus              float64
+	Lifesteal              float64
+	ManaRegen              int
+	CritChance             float64
+	BaseMovementSpeedBonus float64
 }
 
 var lootTemplates = []LootTemplate{
@@ -120,7 +122,7 @@ var lootTemplates = []LootTemplate{
 	{Key: "capacete_de_couro", Name: "Capacete de Couro", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 3, BaseWeight: 12.0, Hands: 0},
 	{Key: "tunica_de_couro", Name: "Túnica de Couro", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 4, BaseWeight: 25.0, Hands: 0, BaseHP: 5},
 	{Key: "calca_de_tecido", Name: "Calça de Tecido", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 2, BaseWeight: 10.0, Hands: 0},
-	{Key: "sandalias_ageis", Name: "Sandálias Ágeis", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 1, BaseWeight: 5.0, Hands: 0, BaseDEX: 1},
+	{Key: "sandalias_ageis", Name: "Sandálias Ágeis", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 1, BaseWeight: 5.0, Hands: 0, BaseDEX: 1, BaseMovementSpeedBonus: 8.0},
 	{Key: "broquel_de_madeira", Name: "Broquel de Madeira", Slot: SlotOffHand, WeaponType: WeaponTypeShield, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 6, BaseWeight: 14.0, Hands: 1, BaseHP: 5},
 	{Key: "pequena_bolsa", Name: "Pequena Bolsa", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 5.0, Hands: 0},
 	{Key: "flechas_de_madeira", Name: "Flechas de Madeira", Slot: SlotAmmo, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 4, BaseMagic: 0, BaseDef: 0, BaseWeight: 1.5, Hands: 0},
@@ -137,7 +139,7 @@ var lootTemplates = []LootTemplate{
 	{Key: "coifa_de_prata", Name: "Coifa de Prata", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 7, BaseWeight: 25.0, Hands: 0, BaseHP: 10},
 	{Key: "cota_de_malha", Name: "Cota de Malha", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 10, BaseWeight: 75.0, Hands: 0, BaseHP: 15},
 	{Key: "calca_de_couro", Name: "Calça de Couro", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 5, BaseWeight: 18.0, Hands: 0, BaseSTR: 1},
-	{Key: "botas_de_couro", Name: "Botas de Couro", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 3, BaseWeight: 9.0, Hands: 0, BaseDEX: 1},
+	{Key: "botas_de_couro", Name: "Botas de Couro", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 3, BaseWeight: 9.0, Hands: 0, BaseDEX: 1, BaseMovementSpeedBonus: 10.0},
 	{Key: "escudo_de_madeira", Name: "Escudo de Madeira", Slot: SlotOffHand, WeaponType: WeaponTypeShield, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 9, BaseWeight: 30.0, Hands: 1, BaseHP: 10},
 	{Key: "mochila_de_aventureiro", Name: "Mochila de Aventureiro", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 1, BaseWeight: 15.0, Hands: 0, BaseHP: 15, GoldBonus: 5.0},
 	{Key: "flechas_de_aco", Name: "Flechas de Aço", Slot: SlotAmmo, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 9, BaseMagic: 0, BaseDef: 0, BaseWeight: 2.0, Hands: 0},
@@ -151,7 +153,7 @@ var lootTemplates = []LootTemplate{
 	{Key: "boina_tatica_da_pulica", Name: "Boina Tática da Puliça", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 1, BaseMagic: 0, BaseDef: 8, BaseWeight: 15.0, Hands: 0, BaseHP: 12, BaseDEX: 1},
 	{Key: "toga_da_inviolabilidade", Name: "Toga da Inviolabilidade", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 2, BaseDef: 12, BaseWeight: 35.0, Hands: 0, BaseHP: 20, BaseMP: 15, BaseINT: 1},
 	{Key: "calca_social_engomada", Name: "Calça Social Engomada", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 6, BaseWeight: 12.0, Hands: 0, BaseSTR: 1, BaseINT: 1},
-	{Key: "coturno_da_lei", Name: "Coturno da Lei", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 4, BaseWeight: 14.0, Hands: 0, BaseHP: 10, BaseDEX: 1},
+	{Key: "coturno_da_lei", Name: "Coturno da Lei", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 4, BaseWeight: 14.0, Hands: 0, BaseHP: 10, BaseDEX: 1, BaseMovementSpeedBonus: 8.0},
 	{Key: "cordao_da_estrela_rubra", Name: "Cordão da Estrela Rubra", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 2, BaseMagic: 0, BaseDef: 2, BaseWeight: 1.2, Hands: 0, BaseHP: 15, BaseSTR: 1, Lifesteal: 1.5},
 	{Key: "anel_do_supremo_relator", Name: "Anel do Supremo Relator", Slot: SlotRing, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 3, BaseDef: 2, BaseWeight: 0.6, Hands: 0, BaseMP: 20, BaseINT: 2, GoldBonus: 5.0},
 	{Key: "pasta_executiva_presidencial", Name: "Pasta Executiva Presidencial", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 2, BaseWeight: 8.0, Hands: 0, BaseHP: 25, GoldBonus: 10.0},
@@ -167,7 +169,7 @@ var lootTemplates = []LootTemplate{
 	{Key: "elmo_runico", Name: "Elmo Rúnico", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 2, BaseMagic: 0, BaseDef: 13, BaseWeight: 32.0, Hands: 0, BaseHP: 20, BaseSTR: 2},
 	{Key: "peitoral_de_platina", Name: "Peitoral de Platina", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 0, BaseDef: 18, BaseWeight: 110.0, Hands: 0, BaseHP: 30},
 	{Key: "grevas_de_aco", Name: "Grevas de Aço", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 0, BaseDef: 10, BaseWeight: 45.0, Hands: 0, BaseSTR: 2},
-	{Key: "botas_de_ferro", Name: "Botas de Ferro", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 0, BaseDef: 6, BaseWeight: 22.0, Hands: 0, BaseSTR: 2, BaseHP: 10},
+	{Key: "botas_de_ferro", Name: "Botas de Ferro", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 0, BaseDef: 6, BaseWeight: 22.0, Hands: 0, BaseSTR: 2, BaseHP: 10, BaseMovementSpeedBonus: 9.0},
 	{Key: "escudo_de_batalha", Name: "Escudo de Batalha", Slot: SlotOffHand, WeaponType: WeaponTypeShield, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 0, BaseDef: 16, BaseWeight: 55.0, Hands: 1, BaseHP: 25},
 	{Key: "bolsa_runica", Name: "Bolsa Rúnica", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 2, BaseDef: 2, BaseWeight: 8.0, Hands: 0, BaseMP: 30, BaseINT: 3, GoldBonus: 10.0},
 	{Key: "virotes_perfurantes", Name: "Virotes Perfurantes", Slot: SlotAmmo, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 14, BaseMagic: 0, BaseDef: 0, BaseWeight: 3.5, Hands: 0},
@@ -184,7 +186,7 @@ var lootTemplates = []LootTemplate{
 	{Key: "coroa_de_ouro", Name: "Coroa de Ouro", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 5, BaseMagic: 0, BaseDef: 20, BaseWeight: 18.0, Hands: 0, BaseHP: 40, BaseINT: 3},
 	{Key: "robe_mistico", Name: "Robe Místico", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 6, BaseMagic: 0, BaseDef: 22, BaseWeight: 30.0, Hands: 0, BaseMP: 50, BaseINT: 5},
 	{Key: "saiote_dos_magos", Name: "Saiote dos Magos", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 3, BaseMagic: 0, BaseDef: 14, BaseWeight: 14.0, Hands: 0, BaseMP: 30, BaseINT: 4},
-	{Key: "botas_de_aco_runico", Name: "Botas de Aço Rúnico", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 0, BaseMagic: 0, BaseDef: 10, BaseWeight: 22.0, Hands: 0, BaseDEX: 5, BaseHP: 20},
+	{Key: "botas_de_aco_runico", Name: "Botas de Aço Rúnico", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 0, BaseMagic: 0, BaseDef: 10, BaseWeight: 22.0, Hands: 0, BaseDEX: 5, BaseHP: 20, BaseMovementSpeedBonus: 14.0},
 	{Key: "orbe_protetor", Name: "Orbe Protetor", Slot: SlotOffHand, WeaponType: WeaponTypeShield, RequiredLevel: 25, Tier: 4, BaseAtk: 4, BaseMagic: 8, BaseDef: 22, BaseWeight: 10.0, Hands: 1, BaseMP: 30, BaseINT: 3},
 	{Key: "mochila_dragonica", Name: "Mochila Dragônica", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 2, BaseMagic: 0, BaseDef: 3, BaseWeight: 15.0, Hands: 0, BaseHP: 50, BaseSTR: 4, GoldBonus: 15.0},
 	{Key: "flechas_incendiarias", Name: "Flechas Incendiárias", Slot: SlotAmmo, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 22, BaseMagic: 0, BaseDef: 0, BaseWeight: 2.0, Hands: 0},
@@ -200,7 +202,7 @@ var lootTemplates = []LootTemplate{
 	{Key: "elmo_do_zodiaco", Name: "Elmo do Zodíaco", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 4, BaseMagic: 0, BaseDef: 28, BaseWeight: 28.0, Hands: 0, BaseHP: 60, BaseSTR: 5},
 	{Key: "armadura_de_ouro", Name: "Armadura de Ouro", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 8, BaseMagic: 0, BaseDef: 35, BaseWeight: 130.0, Hands: 0, BaseHP: 80, BaseSTR: 6},
 	{Key: "grevas_celestiais", Name: "Grevas Celestiais", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 4, BaseMagic: 0, BaseDef: 24, BaseWeight: 35.0, Hands: 0, BaseHP: 50, BaseSTR: 5},
-	{Key: "botas_celestiais", Name: "Botas Celestiais", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 0, BaseMagic: 0, BaseDef: 15, BaseWeight: 18.0, Hands: 0, BaseDEX: 8, BaseHP: 40},
+	{Key: "botas_celestiais", Name: "Botas Celestiais", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 0, BaseMagic: 0, BaseDef: 15, BaseWeight: 18.0, Hands: 0, BaseDEX: 8, BaseHP: 40, BaseMovementSpeedBonus: 20.0},
 	{Key: "escudo_do_zodiaco", Name: "Escudo do Zodíaco", Slot: SlotOffHand, WeaponType: WeaponTypeShield, RequiredLevel: 40, Tier: 5, BaseAtk: 5, BaseMagic: 0, BaseDef: 34, BaseWeight: 80.0, Hands: 1, BaseHP: 80},
 	{Key: "mochila_do_zodiaco", Name: "Mochila do Zodíaco", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 5, BaseMagic: 5, BaseDef: 5, BaseWeight: 10.0, Hands: 0, BaseHP: 80, BaseMP: 60, BaseSTR: 5, BaseDEX: 5, BaseINT: 5, GoldBonus: 25.0},
 	{Key: "flechas_divinas", Name: "Flechas Divinas", Slot: SlotAmmo, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 38, BaseMagic: 0, BaseDef: 0, BaseWeight: 2.0, Hands: 0},
@@ -335,6 +337,7 @@ func applyRarityBudget(template *LootTemplate, rarity string, r *rand.Rand) *Ite
 	lifeS := scaleFloat(template.Lifesteal, profile.PassiveMultiplier)
 	manaR := scaleStat(template.ManaRegen, profile.PassiveMultiplier)
 	critC := scaleFloat(template.CritChance, profile.PassiveMultiplier)
+	moveSpeedB := scaleFloat(template.BaseMovementSpeedBonus, profile.BonusMultiplier)
 
 	flat := profile.PrimaryFlat
 	switch template.Slot {
@@ -404,31 +407,32 @@ func applyRarityBudget(template *LootTemplate, rarity string, r *rand.Rand) *Ite
 	}
 
 	item := &Item{
-		ID:             fmt.Sprintf("item_%016x", r.Uint64()),
-		Name:           template.Name,
-		TemplateKey:    tplKey,
-		Attack:         pAtk + mAtk,
-		PhysicalAttack: pAtk,
-		MagicAttack:    mAtk,
-		Defense:        def,
-		Hands:          template.Hands,
-		Rarity:         rarity,
-		Weight:         template.BaseWeight,
-		RequiredLevel:  template.RequiredLevel,
-		BonusSTR:       bStr,
-		BonusDEX:       bDex,
-		BonusINT:       bInt,
-		BonusHP:        bHP,
-		BonusMP:        bMP,
-		GoldBonus:      goldB,
-		Lifesteal:      lifeS,
-		ManaRegen:      manaR,
-		CritChance:     critC,
-		WeaponType:     template.WeaponType,
-		SlotType:       string(template.Slot),
-		Tier:           template.Tier,
-		BalanceVersion: CurrentItemBalanceVersion,
-		CreatedAt:      time.Now().UTC(),
+		ID:                 fmt.Sprintf("item_%016x", r.Uint64()),
+		Name:               template.Name,
+		TemplateKey:        tplKey,
+		Attack:             pAtk + mAtk,
+		PhysicalAttack:     pAtk,
+		MagicAttack:        mAtk,
+		Defense:            def,
+		Hands:              template.Hands,
+		Rarity:             rarity,
+		Weight:             template.BaseWeight,
+		RequiredLevel:      template.RequiredLevel,
+		BonusSTR:           bStr,
+		BonusDEX:           bDex,
+		BonusINT:           bInt,
+		BonusHP:            bHP,
+		BonusMP:            bMP,
+		GoldBonus:          goldB,
+		Lifesteal:          lifeS,
+		ManaRegen:          manaR,
+		CritChance:         critC,
+		MovementSpeedBonus: moveSpeedB,
+		WeaponType:         template.WeaponType,
+		SlotType:           string(template.Slot),
+		Tier:               template.Tier,
+		BalanceVersion:     CurrentItemBalanceVersion,
+		CreatedAt:          time.Now().UTC(),
 	}
 	item.ItemPower = CalculateItemPower(item)
 	item.ValueGold = int64(math.Max(5, math.Round(float64(item.ItemPower*item.Tier)*profile.SaleMultiplier)))
@@ -446,7 +450,7 @@ func CalculateItemPower(item *Item) int {
 		float64(item.BonusSTR+item.BonusDEX+item.BonusINT)*6.0 +
 		float64(item.BonusHP)/8.0 + float64(item.BonusMP)/10.0 +
 		item.CritChance*3.0 + item.Lifesteal*4.0 +
-		float64(item.ManaRegen)*8.0 + item.GoldBonus*0.35
+		float64(item.ManaRegen)*8.0 + item.GoldBonus*0.35 + item.MovementSpeedBonus*4.0
 	return int(math.Round(power))
 }
 
@@ -591,12 +595,28 @@ func lootTableForMonster(monsterName string) ([]string, string) {
 }
 
 // RebalanceExistingItem identifica itens JSONB anteriores à Economia V2 sem
-// recalcular ou alterar nome, raridade, atributos, efeito, uso ou valor. O nome
-// foi mantido para compatibilidade com os pontos de carga existentes.
+// recalcular ou alterar nome, raridade, atributos, efeito, uso ou valor. Campos
+// novos e determinísticos, como o bônus de movimento das botas, são hidratados
+// a partir do template original para manter compatibilidade com itens legados.
 func RebalanceExistingItem(existing Item) Item {
 	if existing.Source == "" {
 		existing.Source = ItemSourceLegacyDrop
 	}
+
+	// O bônus de movimento foi adicionado depois que parte dos itens já estava
+	// persistida. Esses itens chegam com o campo zerado, mas ainda conservam a
+	// chave do template (ou, em versões mais antigas, apenas o nome).
+	if existing.MovementSpeedBonus <= 0 {
+		template := findLootTemplate(existing.TemplateKey)
+		if template == nil {
+			template = findLootTemplate(existing.Name)
+		}
+		if template != nil && template.Slot == SlotBoots && template.BaseMovementSpeedBonus > 0 {
+			rarity := rarityProfiles[normalizeRarity(existing.Rarity)]
+			existing.MovementSpeedBonus = scaleFloat(template.BaseMovementSpeedBonus, rarity.BonusMultiplier)
+		}
+	}
+
 	return existing
 }
 

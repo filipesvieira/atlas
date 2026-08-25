@@ -47,6 +47,19 @@ func ReleaseCharacterSessionLease(charID, leaseID string) error {
 	return err
 }
 
+// ClearDevelopmentSessionLeases removes leases left behind when the local
+// server is rebuilt or terminated without running the WebSocket cleanup path.
+// Session leases are ephemeral coordination records, not player data. This is
+// intentionally exposed as a development-only operation and must not be used
+// during a production startup, where another server instance may be active.
+func ClearDevelopmentSessionLeases() error {
+	if DB == nil {
+		return fmt.Errorf("banco de dados não inicializado")
+	}
+	_, err := DB.Exec(`DELETE FROM character_session_leases`)
+	return err
+}
+
 func HasActiveCharacterSessionLeaseTx(tx *sql.Tx, charID string) (bool, error) {
 	var active bool
 	err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM character_session_leases WHERE character_id=$1 AND expires_at>NOW())`, charID).Scan(&active)

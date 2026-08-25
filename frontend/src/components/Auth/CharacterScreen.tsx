@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../../config';
+import { PixelItemSprite } from '../../game/registries/PixelArtItemRegistry';
 
 interface CharacterScreenProps {
   token: string;
@@ -30,8 +31,7 @@ export function CharacterScreen({ token, isAdmin = false, onSelectCharacter, onL
       });
 
       if (res.status === 401 || res.status === 403) {
-        // Sessão expirada ou token inválido: limpa o storage e retorna ao login
-        console.warn('Token JWT expirado ou inválido ao buscar personagens. Realizando logout...');
+        console.warn('Token JWT expirado ao buscar personagens. Realizando logout...');
         onLogout();
         return;
       }
@@ -75,7 +75,7 @@ export function CharacterScreen({ token, isAdmin = false, onSelectCharacter, onL
       });
 
       if (res.status === 401 || res.status === 403) {
-        console.warn('Token JWT expirado ou inválido ao criar personagem. Realizando logout...');
+        console.warn('Token JWT expirado ao criar personagem. Realizando logout...');
         onLogout();
         return;
       }
@@ -122,80 +122,106 @@ export function CharacterScreen({ token, isAdmin = false, onSelectCharacter, onL
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center px-4 py-8 relative">
-      <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl relative">
+      <div className="w-full max-w-2xl pixel-card-gold rounded-2xl p-8 shadow-2xl relative">
         {/* Top bar com logout */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-6 border-b border-amber-600/30 pb-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center font-black text-slate-950 text-base shadow">
+            <div className="w-8 h-8 rounded pixel-slot flex items-center justify-center font-pixel-heading text-amber-400 text-base shadow border-amber-500">
               A
             </div>
-            <span className="font-bold text-sm text-amber-400">PROJECT ATLAS</span>
+            <span className="font-pixel-heading text-sm text-amber-400">PROJECT ATLAS</span>
           </div>
           <button
             onClick={onLogout}
-            className="px-3 py-1.5 rounded-lg bg-slate-950 hover:bg-rose-950/60 hover:text-rose-300 text-slate-400 text-xs border border-slate-800 transition"
+            className="pixel-btn pixel-btn-crimson px-3 py-1 text-xs"
           >
             ← Trocar de Conta
           </button>
         </div>
 
         <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold text-amber-400">
+          <h2 className="text-xl font-pixel-heading text-amber-400">
             {isCreating ? 'Crie seu Aventureiro' : 'Selecione seu Personagem'}
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-400 mt-1 font-pixel-body">
             Project Atlas — Crie sua jornada (Sistema Classless)
           </p>
         </div>
 
         {error && (
-          <div className="mb-6 p-3 bg-rose-950/80 border border-rose-800 rounded-xl text-rose-300 text-xs font-mono text-center">
+          <div className="pixel-alert-frame pixel-alert-critical mb-6 rounded-lg p-3 text-center text-rose-300 text-xs font-pixel-body">
             ⚠️ {error}
           </div>
         )}
-        {notice && <div className="mb-6 rounded-xl border border-fuchsia-500/40 bg-fuchsia-950/35 p-3 text-center text-xs text-fuchsia-200">{notice}</div>}
+        {notice && (
+          <div className="mb-6 rounded-lg border-2 border-fuchsia-500/60 bg-fuchsia-950/60 p-3 text-center text-xs font-pixel-body text-fuchsia-200">
+            {notice}
+          </div>
+        )}
 
         {loading ? (
-          <div className="text-center text-slate-400 text-sm py-12">Carregando personagens...</div>
+          <div className="text-center text-slate-400 text-sm py-12 font-pixel-heading">Carregando personagens...</div>
         ) : !isCreating && characters.length > 0 ? (
           <div className="space-y-4">
             {characters.map((char) => (
               <div
                 key={char.id}
-                onClick={() => onSelectCharacter(char)}
-                className="p-5 bg-slate-950 border border-slate-800 hover:border-amber-500 rounded-xl cursor-pointer transition-all flex justify-between items-center group shadow-md"
+                onClick={() => { if (!char.progression_blocked) onSelectCharacter(char); }}
+                className={`p-4 pixel-slot rounded-xl transition-all flex justify-between items-center group shadow-md ${char.progression_blocked ? 'pixel-alert-frame pixel-alert-critical opacity-80' : 'cursor-pointer hover:border-amber-400'}`}
               >
-                <div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-bold text-lg text-amber-400 group-hover:text-amber-300">
-                      {char.name}
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-xs font-mono">
-                      Lv. {char.level}
-                    </span>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 pixel-slot rounded flex items-center justify-center bg-slate-900 border-amber-500/40">
+                    <PixelItemSprite slotType="chest" size="sm" />
                   </div>
-                  <div className="text-xs text-slate-400 mt-1 capitalize">
-                    Origem: <span className="text-slate-200">{char.origin || 'Wanderer'}</span> • {char.vocation}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-pixel-heading text-base text-amber-400 group-hover:text-amber-300">
+                        {char.name}
+                      </span>
+                      <span className="px-2 py-0.5 rounded font-pixel-heading bg-slate-900 text-amber-300 text-[10px] border border-amber-600/40">
+                        Lv. {char.level}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-400 mt-0.5 capitalize font-pixel-body">
+                      Origem: <span className="text-slate-200">{char.origin || 'Wanderer'}</span> • {char.vocation}
+                    </div>
+                    {char.progression_blocked && (
+                      <div className="mt-1 text-[10px] text-rose-300">
+                        ⚠️ Progressão legada requer revisão antes de entrar
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  {isAdmin && <button onClick={(event) => { event.stopPropagation(); prepareTestCharacter(char); }} disabled={preparingId === char.id} className="rounded-lg border border-fuchsia-500/50 bg-fuchsia-950/50 px-3 py-2 text-[10px] font-black text-fuchsia-200 transition hover:bg-fuchsia-900/60 disabled:opacity-40">{preparingId === char.id ? 'Preparando…' : '🧪 Preparar QA'}</button>}
-                  <button className="px-4 py-2 bg-amber-500 text-slate-950 font-bold text-xs rounded-lg group-hover:bg-amber-400 transition">Entrar no Mundo</button>
+                  {isAdmin && !char.progression_blocked && (
+                    <button
+                      onClick={(event) => { event.stopPropagation(); prepareTestCharacter(char); }}
+                      disabled={preparingId === char.id}
+                      className="pixel-btn pixel-btn-purple px-3 py-1.5 text-xs font-pixel-body"
+                    >
+                      {preparingId === char.id ? 'Preparando…' : '🧪 Preparar QA'}
+                    </button>
+                  )}
+                  {!char.progression_blocked && (
+                    <button className="pixel-btn pixel-btn-gold px-4 py-1.5 text-xs font-pixel-heading">
+                      Entrar no Mundo
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
 
             <button
               onClick={() => { setIsCreating(true); setName(''); }}
-              className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl transition mt-4"
+              className="w-full py-3 pixel-btn pixel-btn-dark font-pixel-heading text-xs rounded mt-4"
             >
               + Criar Novo Aventureiro
             </button>
           </div>
         ) : (
-          <form onSubmit={handleCreateCharacter} className="space-y-6">
+          <form onSubmit={handleCreateCharacter} className="space-y-6 font-pixel-body">
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">
+              <label className="block text-xs font-pixel-heading text-slate-400 mb-1">
                 Nome do Aventureiro
               </label>
               <input
@@ -204,7 +230,7 @@ export function CharacterScreen({ token, isAdmin = false, onSelectCharacter, onL
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Ex: Valerius"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+                className="w-full bg-slate-950 border-2 border-slate-800 rounded px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-400 transition-colors"
               />
             </div>
 
@@ -213,14 +239,14 @@ export function CharacterScreen({ token, isAdmin = false, onSelectCharacter, onL
                 <button
                   type="button"
                   onClick={() => setIsCreating(false)}
-                  className="w-1/3 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition"
+                  className="w-1/3 py-3 pixel-btn pixel-btn-dark font-pixel-heading text-xs rounded"
                 >
                   Voltar
                 </button>
               )}
               <button
                 type="submit"
-                className="flex-1 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm rounded-xl transition shadow-lg"
+                className="flex-1 py-3 pixel-btn pixel-btn-gold font-pixel-heading text-xs rounded"
               >
                 Confirmar & Iniciar Aventura
               </button>

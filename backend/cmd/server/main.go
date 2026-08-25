@@ -80,6 +80,15 @@ func main() {
 		// claims e ledgers são parte das garantias econômicas também em dev.
 		log.Fatalf("Erro fatal ao inicializar PostgreSQL: %v", err)
 	}
+	if cfg.Environment == "development" {
+		// Um encerramento abrupto deixa apenas o lease efêmero no banco. Em
+		// desenvolvimento há uma única instância local; limpá-los no startup
+		// evita que um rebuild impeça o próximo login por até 60 segundos.
+		if err := db.ClearDevelopmentSessionLeases(); err != nil {
+			log.Fatalf("Erro fatal ao limpar leases de sessão locais: %v", err)
+		}
+		log.Printf("🧹 Leases de sessões locais anteriores foram limpos")
+	}
 	if cfg.DevToolsEnabled {
 		if err := bootstrapDeveloperAdmin(cfg.DevAdminEmail, cfg.DevAdminPassword); err != nil {
 			log.Fatalf("Erro fatal ao preparar administrador de testes: %v", err)
@@ -299,6 +308,10 @@ func HandleClaimOfflineProgress(w http.ResponseWriter, r *http.Request) {
 	claim, err := db.ClaimOfflineProgress(claims.AccountID, charID, time.Now().UTC())
 	if err != nil {
 		log.Printf("Erro no claim offline do personagem %s: %v", charID, err)
+		if strings.Contains(strings.ToLower(err.Error()), "sessão ativa") {
+			jsonError(w, http.StatusConflict, "Este personagem ainda possui uma sessão ativa. Feche a janela anterior e tente novamente.")
+			return
+		}
 		jsonError(w, http.StatusInternalServerError, "Não foi possível reconciliar o progresso offline")
 		return
 	}

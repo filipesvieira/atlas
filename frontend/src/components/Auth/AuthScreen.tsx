@@ -39,7 +39,7 @@ export function AuthScreen({ onSuccess }: AuthScreenProps) {
 
       if (!res.ok) {
         if (res.status === 409) {
-          throw new Error('Este e-mail já possui cadastro no banco de dados! Clique na aba "Entrar na Conta" acima para fazer login.');
+          throw new Error('Este e-mail já possui cadastro! Clique na aba "Entrar na Conta" acima para fazer login.');
         }
         throw new Error(data.error || `Erro de conexão (${res.status})`);
       }
@@ -57,79 +57,79 @@ export function AuthScreen({ onSuccess }: AuthScreenProps) {
       {/* Dynamic Background Effects */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-amber-500/10 blur-[120px] rounded-full pointer-events-none"></div>
 
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl relative z-10">
+      <div className="w-full max-w-md pixel-card-gold rounded-2xl p-8 shadow-2xl relative z-10">
         {/* Header */}
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-amber-500 flex items-center justify-center font-black text-slate-950 text-2xl shadow-lg mb-4 border border-amber-300/40">
+          <div className="w-14 h-14 rounded-lg pixel-slot flex items-center justify-center font-pixel-heading text-amber-400 text-3xl shadow-lg mb-4 border-amber-500">
             A
           </div>
-          <h1 className="text-2xl font-black tracking-wide text-amber-400">PROJECT ATLAS</h1>
-          <p className="text-xs text-slate-400 mt-1">Standalone IDLE MMORPG Assíncrono</p>
+          <h1 className="font-pixel-heading text-xl text-amber-400">PROJECT ATLAS</h1>
+          <p className="font-pixel-body text-xs text-slate-400 mt-1.5">Standalone IDLE MMORPG Assíncrono</p>
         </div>
 
         {/* Tab Selector */}
-        <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-xl mb-6 border border-slate-800">
+        <div className="grid grid-cols-2 gap-2 p-1 rounded-lg mb-6 bg-slate-950/80 border border-slate-800">
           <button
             onClick={() => { setIsLogin(true); setError(null); }}
-            className={`py-2 text-xs font-semibold rounded-lg transition-all ${
-              isLogin ? 'bg-amber-500 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-slate-200'
+            className={`py-2 text-xs rounded transition-all font-pixel-heading ${
+              isLogin ? 'pixel-btn pixel-btn-gold text-slate-950 font-bold' : 'pixel-btn pixel-btn-dark text-slate-400'
             }`}
           >
             Entrar na Conta
           </button>
           <button
             onClick={() => { setIsLogin(false); setError(null); }}
-            className={`py-2 text-xs font-semibold rounded-lg transition-all ${
-              !isLogin ? 'bg-amber-500 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-slate-200'
+            className={`py-2 text-xs rounded transition-all font-pixel-heading ${
+              !isLogin ? 'pixel-btn pixel-btn-gold text-slate-950 font-bold' : 'pixel-btn pixel-btn-dark text-slate-400'
             }`}
           >
-            Criar Nova Conta
+            Criar Conta
           </button>
         </div>
 
         {/* Error Alert */}
         {error && (
-          <div className="mb-4 p-3 bg-rose-950/80 border border-rose-800 rounded-xl text-rose-300 text-xs font-mono text-center">
+          <div className="pixel-alert-frame pixel-alert-critical mb-4 rounded-lg p-3 text-center text-rose-300 text-xs font-pixel-body">
             ⚠️ {error}
           </div>
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 font-pixel-body">
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">E-mail</label>
+            <label className="block text-xs font-pixel-heading text-slate-400 mb-1">E-mail</label>
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="aventureiro@projectatlas.com"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+              className="w-full bg-slate-950 border-2 border-slate-800 rounded px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-400 transition-colors"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Senha</label>
+            <label className="block text-xs font-pixel-heading text-slate-400 mb-1">Senha</label>
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+              className="w-full bg-slate-950 border-2 border-slate-800 rounded px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-400 transition-colors"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm rounded-xl transition-all shadow-lg hover:shadow-amber-500/20 disabled:opacity-50 mt-2"
+            className="w-full py-3.5 pixel-btn pixel-btn-gold font-pixel-heading text-sm rounded mt-3 disabled:opacity-50"
           >
-            {loading ? 'Processando...' : isLogin ? 'Entrar no Jogo' : 'Criar Conta Grátis'}
+            {loading ? 'Conectando...' : isLogin ? 'Entrar no Jogo' : 'Criar Conta'}
           </button>
         </form>
 
-        <div className="mt-6 pt-6 border-t border-slate-800 text-center text-xs text-slate-500">
+        <div className="mt-6 pt-5 border-t border-slate-800/80 text-center text-xs text-slate-500 font-pixel-body">
           Servidor Autoral Go • Conexão Segura JWT
         </div>
       </div>

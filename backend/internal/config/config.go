@@ -47,7 +47,7 @@ func LoadConfig() (*Config, error) {
 		dbURL = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", dbHost, dbPort, dbUser, dbPass, dbName, dbSSL)
 	}
 
-	originsRaw := getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173")
+	originsRaw := getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173,http://tauri.localhost,tauri://localhost")
 	var allowedOrigins []string
 	for _, o := range strings.Split(originsRaw, ",") {
 		trimmed := strings.TrimSpace(o)

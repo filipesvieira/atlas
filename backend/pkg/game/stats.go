@@ -4,26 +4,39 @@ import (
 	"math"
 )
 
+const (
+	// BaseHeroMovementSpeedMultiplier representa 100% da velocidade natural do
+	// herói. Bônus de botas são somados sobre este valor (ex.: +16,5% = 1,165x).
+	BaseHeroMovementSpeedMultiplier = 1.5
+	// MaxHeroMovementSpeedMultiplier impede combinações futuras de equipamentos
+	// de tornarem a simulação de movimentação instável.
+	MaxHeroMovementSpeedMultiplier = 2.5
+	// ManualHeroControlSpeedMultiplier recompensa o controle ativo por teclado
+	// ou clique. Ele é aplicado sobre a velocidade já calculada pelas botas.
+	ManualHeroControlSpeedMultiplier = 2.5
+)
+
 // DerivedStats encapsula todas as propriedades de combate calculadas
 // de forma autoritativa pelo backend para uso no combate e transmissão à UI.
 type DerivedStats struct {
-	EffectiveSTR       int     `json:"effective_str"`
-	EffectiveDEX       int     `json:"effective_dex"`
-	EffectiveINT       int     `json:"effective_int"`
-	EffectiveVIT       int     `json:"effective_vit"`
-	TotalAttack        int     `json:"total_attack"`
-	TotalDefense       int     `json:"total_defense"`
-	MaxHealth          int     `json:"max_health"`
-	MaxMana            int     `json:"max_mana"`
-	TotalCapacity      int     `json:"total_capacity"`
-	MaxSlots           int     `json:"max_slots"`
-	CritChance         float64 `json:"crit_chance"`
-	ManaRegenPerSecond float64 `json:"mana_regen_per_second"`
-	CurrentDPS         int     `json:"current_dps"`
-	SpeedMultiplier    float64 `json:"speed_multiplier"`
-	PrimaryArchetype   string  `json:"primary_archetype"`
-	AttackSpeedSeconds float64 `json:"attack_speed_seconds"`
-	AttackSpeedBonus   float64 `json:"attack_speed_bonus"`
+	EffectiveSTR            int     `json:"effective_str"`
+	EffectiveDEX            int     `json:"effective_dex"`
+	EffectiveINT            int     `json:"effective_int"`
+	EffectiveVIT            int     `json:"effective_vit"`
+	TotalAttack             int     `json:"total_attack"`
+	TotalDefense            int     `json:"total_defense"`
+	MaxHealth               int     `json:"max_health"`
+	MaxMana                 int     `json:"max_mana"`
+	TotalCapacity           int     `json:"total_capacity"`
+	MaxSlots                int     `json:"max_slots"`
+	CritChance              float64 `json:"crit_chance"`
+	ManaRegenPerSecond      float64 `json:"mana_regen_per_second"`
+	CurrentDPS              int     `json:"current_dps"`
+	SpeedMultiplier         float64 `json:"speed_multiplier"`
+	MovementSpeedMultiplier float64 `json:"movement_speed_multiplier"`
+	PrimaryArchetype        string  `json:"primary_archetype"`
+	AttackSpeedSeconds      float64 `json:"attack_speed_seconds"`
+	AttackSpeedBonus        float64 `json:"attack_speed_bonus"`
 }
 
 // CalculateDerivedStats calcula os atributos derivados do aventureiro a partir
@@ -34,7 +47,7 @@ func CalculateDerivedStats(char *CharacterData, inv *InventoryData, stance strin
 			EffectiveSTR: 5, EffectiveDEX: 5, EffectiveINT: 5, EffectiveVIT: 5,
 			MaxHealth: 235, MaxMana: 95, TotalCapacity: 1085, MaxSlots: 20,
 			CritChance: 5.41, ManaRegenPerSecond: 1.60,
-			SpeedMultiplier: 1.0, PrimaryArchetype: "melee",
+			SpeedMultiplier: 1.0, MovementSpeedMultiplier: BaseHeroMovementSpeedMultiplier, PrimaryArchetype: "melee",
 			AttackSpeedSeconds: 2.20, AttackSpeedBonus: 0.0,
 		}
 	}
@@ -64,6 +77,21 @@ func CalculateDerivedStats(char *CharacterData, inv *InventoryData, stance strin
 	if inv != nil {
 		eq = inv.Equipment
 	}
+	if eq.Boots != nil {
+		// Também normaliza o item em memória para que sessões/testes que não
+		// passaram pelo carregador do banco aproveitem a compatibilidade legada.
+		normalizedBoots := RebalanceExistingItem(*eq.Boots)
+		eq.Boots = &normalizedBoots
+	}
+
+	// A velocidade de movimento vem exclusivamente do slot de botas. DEX,
+	// armas e os demais equipamentos continuam afetando apenas seus atributos
+	// próprios, mantendo o papel das botas claro para o jogador.
+	movementSpeedMultiplier := BaseHeroMovementSpeedMultiplier
+	if eq.Boots != nil && eq.Boots.MovementSpeedBonus > 0 {
+		movementSpeedMultiplier += eq.Boots.MovementSpeedBonus / 100.0
+	}
+	movementSpeedMultiplier = math.Max(BaseHeroMovementSpeedMultiplier, math.Min(MaxHeroMovementSpeedMultiplier, movementSpeedMultiplier))
 
 	equippedList := []*Item{
 		eq.Head, eq.Chest, eq.Legs, eq.Boots,
@@ -273,26 +301,34 @@ func CalculateDerivedStats(char *CharacterData, inv *InventoryData, stance strin
 		totalAtk = int(float64(totalAtk) * 0.75)
 	}
 
-	// 8. Cálculo de DPS dinâmico autoritativo baseado no intervalo real de ataque
-	currentDPS := int((float64(totalAtk) / attackSpeedSeconds) * speedMultiplier)
+	// 8. Cálculo de DPS básico esperado baseado no intervalo real de ataque.
+	//
+	// O combate agenda o ataque básico usando apenas attackSpeedSeconds. O
+	// speedMultiplier do arquétipo é um dado legado/descritivo e não altera o
+	// cooldown real; aplicá-lo aqui inflava o DPS de arcos (1,40x) e varinhas
+	// (1,25x). A variância normal do golpe tem média 1,0x, enquanto o crítico
+	// esperado acrescenta 50% do dano na proporção da chance de crítico.
+	critDamageMultiplier := 1.0 + (critChance/100.0)*0.50
+	currentDPS := int(math.Round((float64(totalAtk) / attackSpeedSeconds) * critDamageMultiplier))
 
 	return DerivedStats{
-		EffectiveSTR:       effectiveSTR,
-		EffectiveDEX:       effectiveDEX,
-		EffectiveINT:       effectiveINT,
-		EffectiveVIT:       effectiveVIT,
-		TotalAttack:        totalAtk,
-		TotalDefense:       totalDef,
-		MaxHealth:          maxHealth,
-		MaxMana:            maxMana,
-		TotalCapacity:      totalCapacity,
-		MaxSlots:           maxSlots,
-		CritChance:         critChance,
-		ManaRegenPerSecond: manaRegenPerSecond,
-		CurrentDPS:         currentDPS,
-		SpeedMultiplier:    speedMultiplier,
-		PrimaryArchetype:   primaryArchetype,
-		AttackSpeedSeconds: attackSpeedSeconds,
-		AttackSpeedBonus:   equipSpeedBonus,
+		EffectiveSTR:            effectiveSTR,
+		EffectiveDEX:            effectiveDEX,
+		EffectiveINT:            effectiveINT,
+		EffectiveVIT:            effectiveVIT,
+		TotalAttack:             totalAtk,
+		TotalDefense:            totalDef,
+		MaxHealth:               maxHealth,
+		MaxMana:                 maxMana,
+		TotalCapacity:           totalCapacity,
+		MaxSlots:                maxSlots,
+		CritChance:              critChance,
+		ManaRegenPerSecond:      manaRegenPerSecond,
+		CurrentDPS:              currentDPS,
+		SpeedMultiplier:         speedMultiplier,
+		MovementSpeedMultiplier: movementSpeedMultiplier,
+		PrimaryArchetype:        primaryArchetype,
+		AttackSpeedSeconds:      attackSpeedSeconds,
+		AttackSpeedBonus:        equipSpeedBonus,
 	}
 }

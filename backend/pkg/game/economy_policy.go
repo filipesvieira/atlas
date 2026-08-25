@@ -54,7 +54,7 @@ func floatEnv(key string, fallback float64) float64 {
 
 func CurrentEconomyPolicy() EconomyPolicy {
 	craftingFirst := boolEnv("ATLAS_CRAFTING_FIRST_LOOT", true)
-	commonMultiplier := floatEnv("ATLAS_COMMON_EQUIPMENT_DROP_MULTIPLIER", 1.0)
+	commonMultiplier := floatEnv("ATLAS_COMMON_EQUIPMENT_DROP_MULTIPLIER", 0)
 	if !craftingFirst && strings.TrimSpace(os.Getenv("ATLAS_COMMON_EQUIPMENT_DROP_MULTIPLIER")) == "" {
 		commonMultiplier = 1.0
 	}
@@ -65,6 +65,6 @@ func CurrentEconomyPolicy() EconomyPolicy {
 		CraftingEnabled:               boolEnv("ATLAS_CRAFTING_ENABLED", true),
 		CraftingFirstLootEnabled:      craftingFirst,
 		CommonEquipmentDropMultiplier: commonMultiplier,
-		BossArtifactDropMultiplier:    floatEnv("ATLAS_BOSS_ARTIFACT_DROP_MULTIPLIER", 1.0),
+		BossArtifactDropMultiplier:    floatEnv("ATLAS_BOSS_ARTIFACT_DROP_MULTIPLIER", 0.02),
 	}
 }

@@ -12,19 +12,22 @@ var (
 	buildingRegistry   = map[string]BuildingDefinition{
 		// 1. FOGUEIRA (center)
 		"campfire": {
-			Key:         "campfire",
-			Name:        "Fogueira do Acampamento",
-			Icon:        "🔥",
-			Description: "Proporciona calor, conforto e cicatrização acelerada enquanto o herói descansa.",
-			SlotType:    "center",
-			MaxLevel:    3,
+			Key:             "campfire",
+			Name:            "Fogueira do Acampamento",
+			Icon:            "🔥",
+			Description:     "Proporciona calor, conforto e cicatrização acelerada enquanto o herói descansa.",
+			SlotType:        "center",
+			DefaultUnlocked: true,
+			MaxLevel:        3,
 			Levels: []BuildingLevelDefinition{
 				{
-					Level:                1,
-					GoldCost:             3000,
-					Costs:                []ResourceAmount{{Key: "wood", Quantity: 80}, {Key: "stone", Quantity: 40}},
-					BuildDuration:        10 * time.Minute,
-					BuildDurationSeconds: 600,
+					Level:    1,
+					GoldCost: 50,
+					Costs:    []ResourceAmount{{Key: "wood", Quantity: 20}, {Key: "stone", Quantity: 10}},
+					// A primeira evolução da fogueira faz parte do onboarding e
+					// conclui no mesmo comando, sem remover seus custos.
+					BuildDuration:        0,
+					BuildDurationSeconds: 0,
 					Effects:              []BuildingEffect{{Key: "camp_hp_regen_percent", Value: 25}},
 				},
 				{
@@ -33,8 +36,8 @@ var (
 					Costs:                []ResourceAmount{{Key: "wood", Quantity: 400}, {Key: "stone", Quantity: 250}, {Key: "fiber", Quantity: 150}},
 					RequiredTrophies:     []ResourceAmount{{Key: "trophy_forest_bear", Quantity: 5}},
 					RequiredBuildings:    []BuildingRequirement{{BuildingKey: "warehouse", MinLevel: 1}, {BuildingKey: "adventurer_hut", MinLevel: 1}},
-					BuildDuration:        2 * time.Hour,
-					BuildDurationSeconds: 7200,
+					BuildDuration:        30 * time.Minute,
+					BuildDurationSeconds: 1800,
 					Effects:              []BuildingEffect{{Key: "camp_hp_regen_percent", Value: 50}},
 				},
 				{
@@ -43,8 +46,8 @@ var (
 					Costs:                []ResourceAmount{{Key: "wood", Quantity: 1500}, {Key: "stone", Quantity: 900}, {Key: "iron", Quantity: 600}, {Key: "arcane_essence", Quantity: 200}},
 					RequiredTrophies:     []ResourceAmount{{Key: "trophy_orcruins_skeleton", Quantity: 12}},
 					RequiredBuildings:    []BuildingRequirement{{BuildingKey: "warehouse", MinLevel: 2}, {BuildingKey: "adventurer_hut", MinLevel: 2}},
-					BuildDuration:        18 * time.Hour,
-					BuildDurationSeconds: 64800,
+					BuildDuration:        4 * time.Hour,
+					BuildDurationSeconds: 14400,
 					Effects:              []BuildingEffect{{Key: "camp_hp_regen_percent", Value: 85}},
 				},
 			},
@@ -74,8 +77,8 @@ var (
 					Costs:                []ResourceAmount{{Key: "wood", Quantity: 500}, {Key: "stone", Quantity: 350}, {Key: "iron", Quantity: 250}},
 					RequiredTrophies:     []ResourceAmount{{Key: "trophy_esgotos_destroyer", Quantity: 8}},
 					RequiredBuildings:    []BuildingRequirement{{BuildingKey: "campfire", MinLevel: 2}, {BuildingKey: "adventurer_hut", MinLevel: 1}, {BuildingKey: "workbench", MinLevel: 1}},
-					BuildDuration:        4 * time.Hour,
-					BuildDurationSeconds: 14400,
+					BuildDuration:        30 * time.Minute,
+					BuildDurationSeconds: 1800,
 					Effects:              []BuildingEffect{{Key: "resource_storage", Value: 100000}},
 				},
 				{
@@ -84,8 +87,8 @@ var (
 					Costs:                []ResourceAmount{{Key: "wood", Quantity: 1800}, {Key: "stone", Quantity: 1200}, {Key: "iron", Quantity: 1000}, {Key: "arcane_essence", Quantity: 300}},
 					RequiredTrophies:     []ResourceAmount{{Key: "trophy_planalto_xandaum", Quantity: 15}},
 					RequiredBuildings:    []BuildingRequirement{{BuildingKey: "campfire", MinLevel: 3}, {BuildingKey: "adventurer_hut", MinLevel: 2}, {BuildingKey: "workbench", MinLevel: 2}},
-					BuildDuration:        24 * time.Hour,
-					BuildDurationSeconds: 86400,
+					BuildDuration:        4 * time.Hour,
+					BuildDurationSeconds: 14400,
 					Effects:              []BuildingEffect{{Key: "resource_storage", Value: 500000}},
 				},
 			},
@@ -115,8 +118,8 @@ var (
 					Costs:                []ResourceAmount{{Key: "wood", Quantity: 600}, {Key: "fiber", Quantity: 350}, {Key: "stone", Quantity: 250}},
 					RequiredTrophies:     []ResourceAmount{{Key: "trophy_shereque_fiona", Quantity: 8}},
 					RequiredBuildings:    []BuildingRequirement{{BuildingKey: "warehouse", MinLevel: 1}, {BuildingKey: "campfire", MinLevel: 2}},
-					BuildDuration:        3 * time.Hour,
-					BuildDurationSeconds: 10800,
+					BuildDuration:        30 * time.Minute,
+					BuildDurationSeconds: 1800,
 					Effects:              []BuildingEffect{{Key: "camp_all_regen_percent", Value: 20}},
 				},
 				{
@@ -125,8 +128,8 @@ var (
 					Costs:                []ResourceAmount{{Key: "wood", Quantity: 2200}, {Key: "fiber", Quantity: 1200}, {Key: "iron", Quantity: 900}},
 					RequiredTrophies:     []ResourceAmount{{Key: "trophy_planalto_xandaum", Quantity: 15}},
 					RequiredBuildings:    []BuildingRequirement{{BuildingKey: "warehouse", MinLevel: 2}, {BuildingKey: "campfire", MinLevel: 3}, {BuildingKey: "arcane_spring", MinLevel: 2}},
-					BuildDuration:        20 * time.Hour,
-					BuildDurationSeconds: 72000,
+					BuildDuration:        4 * time.Hour,
+					BuildDurationSeconds: 14400,
 					Effects:              []BuildingEffect{{Key: "camp_all_regen_percent", Value: 35}},
 				},
 			},
@@ -146,8 +149,8 @@ var (
 					GoldCost:             5000,
 					Costs:                []ResourceAmount{{Key: "stone", Quantity: 120}, {Key: "arcane_essence", Quantity: 40}},
 					RequiredBuildings:    []BuildingRequirement{{BuildingKey: "campfire", MinLevel: 1}},
-					BuildDuration:        20 * time.Minute,
-					BuildDurationSeconds: 1200,
+					BuildDuration:        30 * time.Minute,
+					BuildDurationSeconds: 1800,
 					Effects:              []BuildingEffect{{Key: "camp_mana_regen_percent", Value: 25}},
 				},
 				{
@@ -156,8 +159,8 @@ var (
 					Costs:                []ResourceAmount{{Key: "stone", Quantity: 500}, {Key: "arcane_essence", Quantity: 250}, {Key: "fiber", Quantity: 150}},
 					RequiredTrophies:     []ResourceAmount{{Key: "trophy_chapolin_alma", Quantity: 8}},
 					RequiredBuildings:    []BuildingRequirement{{BuildingKey: "warehouse", MinLevel: 2}, {BuildingKey: "campfire", MinLevel: 2}},
-					BuildDuration:        4 * time.Hour,
-					BuildDurationSeconds: 14400,
+					BuildDuration:        30 * time.Minute,
+					BuildDurationSeconds: 1800,
 					Effects:              []BuildingEffect{{Key: "camp_mana_regen_percent", Value: 55}},
 				},
 				{
@@ -166,9 +169,84 @@ var (
 					Costs:                []ResourceAmount{{Key: "stone", Quantity: 1500}, {Key: "arcane_essence", Quantity: 800}, {Key: "glacial_crystal", Quantity: 200}},
 					RequiredTrophies:     []ResourceAmount{{Key: "trophy_frozen_master", Quantity: 15}},
 					RequiredBuildings:    []BuildingRequirement{{BuildingKey: "warehouse", MinLevel: 3}, {BuildingKey: "campfire", MinLevel: 3}, {BuildingKey: "adventurer_hut", MinLevel: 3}},
-					BuildDuration:        24 * time.Hour,
-					BuildDurationSeconds: 86400,
+					BuildDuration:        4 * time.Hour,
+					BuildDurationSeconds: 14400,
 					Effects:              []BuildingEffect{{Key: "camp_mana_regen_percent", Value: 100}},
+				},
+			},
+		},
+
+		// 5. COZINHA DE CAMPANHA (layout livre)
+		"kitchen": {
+			Key:             "kitchen",
+			Name:            "Cozinha de Campanha",
+			Icon:            "🍳",
+			Description:     "Transforma pesca, caça, colheita e farinha em refeições que preparam o herói para expedições.",
+			SlotType:        "free",
+			DefaultUnlocked: true,
+			MaxLevel:        3,
+			Levels: []BuildingLevelDefinition{
+				{
+					// Primeira estação de onboarding: mantém a construção como
+					// requisito real, mas não cria uma barreira econômica para
+					// o jogador começar a cozinhar.
+					Level: 1, GoldCost: 50,
+					Costs:             []ResourceAmount{{Key: "wood", Quantity: 20}, {Key: "stone", Quantity: 10}},
+					RequiredBuildings: []BuildingRequirement{{BuildingKey: "campfire", MinLevel: 1}},
+					// A Cozinha inicial é uma das três fundações do onboarding.
+					BuildDuration: 0, BuildDurationSeconds: 0,
+					Effects: []BuildingEffect{{Key: "cooking_unlock", Value: 1}},
+				},
+				{
+					Level: 2, GoldCost: 30000,
+					Costs:             []ResourceAmount{{Key: "wood", Quantity: 500}, {Key: "stone", Quantity: 300}, {Key: "iron", Quantity: 150}},
+					RequiredBuildings: []BuildingRequirement{{BuildingKey: "campfire", MinLevel: 2}, {BuildingKey: "warehouse", MinLevel: 1}},
+					BuildDuration:     30 * time.Minute, BuildDurationSeconds: 1800,
+					Effects: []BuildingEffect{{Key: "cooking_unlock", Value: 1}, {Key: "cooking_speed_percent", Value: 10}},
+				},
+				{
+					Level: 3, GoldCost: 150000,
+					Costs:             []ResourceAmount{{Key: "wood", Quantity: 1600}, {Key: "stone", Quantity: 1000}, {Key: "iron", Quantity: 700}, {Key: "arcane_essence", Quantity: 150}},
+					RequiredBuildings: []BuildingRequirement{{BuildingKey: "campfire", MinLevel: 3}, {BuildingKey: "warehouse", MinLevel: 2}},
+					BuildDuration:     4 * time.Hour, BuildDurationSeconds: 14400,
+					Effects: []BuildingEffect{{Key: "cooking_unlock", Value: 1}, {Key: "cooking_speed_percent", Value: 20}},
+				},
+			},
+		},
+
+		// 6. BANCADA DE ALQUIMIA (layout livre)
+		"alchemy_bench": {
+			Key:             "alchemy_bench",
+			Name:            "Bancada de Alquimia",
+			Icon:            "🧪",
+			Description:     "Permite destilar poções e elixires que fortalecem o herói durante as expedições.",
+			SlotType:        "free",
+			DefaultUnlocked: true,
+			MaxLevel:        3,
+			Levels: []BuildingLevelDefinition{
+				{
+					// Mesmo custo de entrada da Cozinha para que as duas
+					// profissões básicas possam ser habilitadas no onboarding.
+					Level: 1, GoldCost: 50,
+					Costs:             []ResourceAmount{{Key: "wood", Quantity: 20}, {Key: "stone", Quantity: 10}},
+					RequiredBuildings: []BuildingRequirement{{BuildingKey: "campfire", MinLevel: 1}},
+					// A Bancada de Alquimia inicial segue a mesma regra da Cozinha.
+					BuildDuration: 0, BuildDurationSeconds: 0,
+					Effects: []BuildingEffect{{Key: "alchemy_unlock", Value: 1}},
+				},
+				{
+					Level: 2, GoldCost: 25000,
+					Costs:             []ResourceAmount{{Key: "wood", Quantity: 450}, {Key: "stone", Quantity: 250}, {Key: "iron", Quantity: 120}},
+					RequiredBuildings: []BuildingRequirement{{BuildingKey: "campfire", MinLevel: 2}, {BuildingKey: "warehouse", MinLevel: 1}},
+					BuildDuration:     30 * time.Minute, BuildDurationSeconds: 1800,
+					Effects: []BuildingEffect{{Key: "alchemy_unlock", Value: 1}, {Key: "alchemy_speed_percent", Value: 10}},
+				},
+				{
+					Level: 3, GoldCost: 125000,
+					Costs:             []ResourceAmount{{Key: "wood", Quantity: 1400}, {Key: "stone", Quantity: 900}, {Key: "iron", Quantity: 600}, {Key: "arcane_essence", Quantity: 120}},
+					RequiredBuildings: []BuildingRequirement{{BuildingKey: "campfire", MinLevel: 3}, {BuildingKey: "warehouse", MinLevel: 2}},
+					BuildDuration:     4 * time.Hour, BuildDurationSeconds: 14400,
+					Effects: []BuildingEffect{{Key: "alchemy_unlock", Value: 1}, {Key: "alchemy_speed_percent", Value: 20}},
 				},
 			},
 		},
@@ -200,8 +278,8 @@ var (
 					Costs:                []ResourceAmount{{Key: "wood", Quantity: 600}, {Key: "stone", Quantity: 400}, {Key: "iron", Quantity: 350}, {Key: "fiber", Quantity: 100}},
 					RequiredTrophies:     []ResourceAmount{{Key: "trophy_chapolin_alma", Quantity: 8}},
 					RequiredBuildings:    []BuildingRequirement{{BuildingKey: "warehouse", MinLevel: 2}, {BuildingKey: "adventurer_hut", MinLevel: 1}},
-					BuildDuration:        6 * time.Hour,
-					BuildDurationSeconds: 21600,
+					BuildDuration:        30 * time.Minute,
+					BuildDurationSeconds: 1800,
 					Effects: []BuildingEffect{
 						{Key: "salvage_unlock", Value: 1},
 						{Key: "salvage_efficiency_percent", Value: 15},
@@ -215,8 +293,8 @@ var (
 					Costs:                []ResourceAmount{{Key: "wood", Quantity: 2300}, {Key: "stone", Quantity: 1400}, {Key: "iron", Quantity: 1200}, {Key: "arcane_essence", Quantity: 500}, {Key: "glacial_crystal", Quantity: 200}},
 					RequiredTrophies:     []ResourceAmount{{Key: "trophy_rogartes_darkmage", Quantity: 18}},
 					RequiredBuildings:    []BuildingRequirement{{BuildingKey: "warehouse", MinLevel: 3}, {BuildingKey: "adventurer_hut", MinLevel: 3}},
-					BuildDuration:        30 * time.Hour,
-					BuildDurationSeconds: 108000,
+					BuildDuration:        4 * time.Hour,
+					BuildDurationSeconds: 14400,
 					Effects: []BuildingEffect{
 						{Key: "salvage_unlock", Value: 1},
 						{Key: "salvage_efficiency_percent", Value: 30},

@@ -172,11 +172,11 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		RequiresUnlockFrom: "",
 		DropsPreview:       []string{"Espada do Aprendiz", "Arco Curvo", "Capacete de Couro", "Broquel de Madeira", "Amuleto do Lobo", "Manual: Armazém de Recursos"},
 		Monsters: []Monster{
-			{Key: "forest_goblin", VisualKey: "forest_goblin", Name: "Goblin Salteador", Level: 1, Health: 60, MaxHealth: 60, Attack: 7, AttackType: AttackTypeMelee},
-			{Key: "forest_wolf", VisualKey: "forest_wolf", Name: "Lobo Selvagem", Level: 3, Health: 90, MaxHealth: 90, Attack: 11, AttackType: AttackTypeMelee},
-			{Key: "forest_spider", VisualKey: "forest_spider", Name: "Aranha de Espinhos", Level: 4, Health: 110, MaxHealth: 110, Attack: 13, AttackType: AttackTypeRanged},
+			{Key: "forest_goblin", VisualKey: "forest_goblin", Name: "Goblin Salteador", Level: 1, Health: 60, MaxHealth: 60, Attack: 7, AttackType: AttackTypeMelee, LowHealthBehavior: LowHealthBehaviorStandGround},
+			{Key: "forest_wolf", VisualKey: "forest_wolf", Name: "Lobo Selvagem", Level: 3, Health: 90, MaxHealth: 90, Attack: 11, AttackType: AttackTypeMelee, MovementSpeedMultiplier: 1.20, LowHealthBehavior: LowHealthBehaviorFlee},
+			{Key: "forest_spider", VisualKey: "forest_spider", Name: "Aranha de Espinhos", Level: 4, Health: 110, MaxHealth: 110, Attack: 13, AttackType: AttackTypeRanged, MovementSpeedMultiplier: 1.10, LowHealthBehavior: LowHealthBehaviorFlee},
 		},
-		Boss: Monster{Key: "forest_boss_bear", VisualKey: "forest_boss_bear", IsBoss: true, Name: "Urso Ranzinza dos Carinhosos 🐻", Level: 5, Health: 520, MaxHealth: 520, Attack: 28, AttackType: AttackTypeMelee},
+		Boss: Monster{Key: "forest_boss_bear", VisualKey: "forest_boss_bear", IsBoss: true, Name: "Urso Ranzinza dos Carinhosos 🐻", Level: 5, Health: 520, MaxHealth: 520, Attack: 28, AttackType: AttackTypeMelee, MovementSpeedMultiplier: 0.85, LowHealthBehavior: LowHealthBehaviorStandGround},
 	},
 	"shereque": {
 		ID:                 "shereque",
@@ -372,18 +372,24 @@ func GetRandomMonsterForRegion(regionID string, r *rand.Rand) Monster {
 	if spd <= 0 {
 		spd = DefaultMonsterAttackSpeed
 	}
+	movementSpeed := mTemplate.MovementSpeedMultiplier
+	if movementSpeed <= 0 {
+		movementSpeed = 1.0
+	}
 
 	return Monster{
-		Key:                mTemplate.Key,
-		VisualKey:          mTemplate.VisualKey,
-		IsBoss:             mTemplate.IsBoss,
-		Name:               mTemplate.Name,
-		Level:              mTemplate.Level,
-		Health:             mTemplate.Health,
-		MaxHealth:          mTemplate.MaxHealth,
-		Attack:             mTemplate.Attack,
-		AttackType:         mTemplate.AttackType,
-		AttackSpeedSeconds: spd,
-		AttackCooldownSec:  spd,
+		Key:                     mTemplate.Key,
+		VisualKey:               mTemplate.VisualKey,
+		IsBoss:                  mTemplate.IsBoss,
+		Name:                    mTemplate.Name,
+		Level:                   mTemplate.Level,
+		Health:                  mTemplate.Health,
+		MaxHealth:               mTemplate.MaxHealth,
+		Attack:                  mTemplate.Attack,
+		AttackType:              mTemplate.AttackType,
+		LowHealthBehavior:       mTemplate.LowHealthBehavior,
+		MovementSpeedMultiplier: movementSpeed,
+		AttackSpeedSeconds:      spd,
+		AttackCooldownSec:       spd,
 	}
 }

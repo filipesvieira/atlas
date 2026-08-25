@@ -1,46 +1,36 @@
 import React from 'react';
+import { PixelItemSprite } from '../../game/registries/PixelArtItemRegistry';
 
 interface ResourceDepotButtonProps {
   storageUsed: number;
   storageCapacity: number;
   onClick: () => void;
+  compact?: boolean;
 }
 
 export const ResourceDepotButton: React.FC<ResourceDepotButtonProps> = ({
   storageUsed,
   storageCapacity,
   onClick,
+  compact = false,
 }) => {
   const percent = storageCapacity > 0 ? Math.min(100, Math.round((storageUsed / storageCapacity) * 100)) : 0;
-
-  let badgeColor = 'text-amber-300 border-amber-500/30 bg-amber-950/40';
-  let isFull = false;
-
-  if (percent >= 90) {
-    badgeColor = 'text-rose-400 border-rose-500/40 bg-rose-950/50 animate-pulse';
-    isFull = true;
-  }
+  let isFull = percent >= 90;
 
   return (
     <button
       onClick={onClick}
-      className={`w-full py-2 px-3 rounded-lg border flex items-center justify-between gap-2 text-xs font-semibold transition-all duration-200 shadow-sm group ${
-        isFull
-          ? 'bg-rose-950/40 hover:bg-rose-900/50 border-rose-600/60 shadow-rose-950/50'
-          : 'bg-slate-900/90 hover:bg-slate-800 border-slate-700/80 hover:border-amber-500/50 hover:shadow-amber-950/20'
-      }`}
+      className={`w-full pixel-btn ${isFull ? 'pixel-btn-crimson' : 'pixel-btn-dark'} flex items-center justify-between text-xs ${compact ? 'py-1.5 px-2 gap-1' : 'py-2 px-3 gap-2'}`}
       title="Abrir Depósito de Recursos e Troféus do Acampamento"
     >
-      <div className="flex items-center gap-2 text-slate-200 group-hover:text-amber-300 transition-colors">
-        <span className="text-base group-hover:scale-110 transition-transform">📦</span>
-        <span>Depósito de Recursos</span>
+      <div className="flex items-center gap-1.5 font-pixel-body">
+        <PixelItemSprite name="minério" size="sm" />
+        <span>{compact ? 'Depósito' : 'Depósito de Recursos'}</span>
       </div>
 
-      <div className="flex items-center gap-1.5 font-mono text-[11px]">
-        <span className="text-slate-400 group-hover:text-slate-300">
-          {storageUsed}/{storageCapacity}
-        </span>
-        <span className={`px-1.5 py-0.2 rounded border text-[10px] font-bold ${badgeColor}`}>
+      <div className="flex items-center gap-1 font-pixel-body text-[9px]">
+        {!compact && <span className="text-slate-300">{storageUsed}/{storageCapacity}</span>}
+        <span className={`px-1.5 py-0.2 rounded font-pixel-heading text-[9px] ${isFull ? 'bg-rose-950 text-rose-200' : 'bg-slate-950 text-amber-300'}`}>
           {percent}%
         </span>
       </div>

@@ -72,6 +72,9 @@ func ApplyExperienceGain(char *CharacterData, xpGained int64) (bool, int, int) {
 		char.Mana = char.MaxMana
 		EnsureUnlockedRegionsForLevel(char)
 	}
+	// Também cobre progressão offline e personagens que cruzam o marco em um
+	// ganho grande de experiência. A operação é idempotente para saves antigos.
+	UnlockInitialCombatSkills(char)
 	// A revisão é incrementada atomicamente pelo repositório ao persistir este
 	// snapshot. O domínio não antecipa a versão esperada.
 	if char.HighestLevelEver < char.Level {

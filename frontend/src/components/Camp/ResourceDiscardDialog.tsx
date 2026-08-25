@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ResourceDefinition } from '../../game/GameCatalog';
+import { PixelResourceSprite } from '../../game/registries/PixelResourceRegistry';
 
 interface ResourceDiscardDialogProps {
   resource: ResourceDefinition;
@@ -36,36 +37,38 @@ export const ResourceDiscardDialog: React.FC<ResourceDiscardDialogProps> = ({
   const remainingQty = Math.max(0, currentQuantity - discardQty);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-      <div className="bg-slate-900 border-2 border-rose-500/50 rounded-xl p-5 max-w-sm w-full shadow-2xl space-y-4 text-slate-200">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in font-pixel-body">
+      <div className="pixel-card-crimson rounded-xl p-5 max-w-sm w-full shadow-2xl space-y-4 text-slate-200">
+        <div className="flex items-center justify-between border-b border-rose-800/80 pb-3">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">{resource.icon}</span>
+            <div className="w-8 h-8 pixel-slot rounded flex items-center justify-center bg-slate-900 border-rose-600/50">
+              <PixelResourceSprite resourceKey={resource.key} name={resource.name || resource.key} size="sm" />
+            </div>
             <div>
-              <h3 className="font-bold text-slate-100 text-sm">{resource.name}</h3>
-              <span className="text-xs text-rose-400 font-medium">Descartar Recurso</span>
+              <h3 className="font-pixel-heading text-slate-100 text-xs">{resource.name}</h3>
+              <span className="text-[10px] text-rose-400 font-pixel-body">Descartar Recurso</span>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-200 text-lg leading-none p-1 rounded"
+            className="pixel-btn pixel-btn-crimson px-2 py-0.5 text-xs"
           >
             ✕
           </button>
         </div>
 
-        <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-3 space-y-2 text-xs">
+        <div className="pixel-slot rounded p-3 space-y-2 text-xs bg-slate-950/80">
           <div className="flex justify-between text-slate-300">
             <span>Estoque no Armazém:</span>
-            <span className="font-bold font-mono text-slate-100">{currentQuantity.toLocaleString()}</span>
+            <span className="font-pixel-heading text-slate-100">{currentQuantity.toLocaleString()}</span>
           </div>
           <div className="flex justify-between text-rose-400 font-medium">
             <span>Quantidade a Descartar:</span>
-            <span className="font-bold font-mono">-{discardQty.toLocaleString()}</span>
+            <span className="font-pixel-heading">-{discardQty.toLocaleString()}</span>
           </div>
-          <div className="flex justify-between text-slate-400 border-t border-slate-800/80 pt-1.5">
+          <div className="flex justify-between text-slate-400 border-t border-slate-800 pt-1.5">
             <span>Saldo Restante:</span>
-            <span className="font-mono font-bold text-emerald-400">{remainingQty.toLocaleString()}</span>
+            <span className="font-pixel-heading text-emerald-400">{remainingQty.toLocaleString()}</span>
           </div>
         </div>
 
@@ -85,40 +88,40 @@ export const ResourceDiscardDialog: React.FC<ResourceDiscardDialogProps> = ({
               max={currentQuantity}
               value={discardQty}
               onChange={handleInputChange}
-              className="w-20 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-center font-mono text-sm text-slate-100 focus:border-rose-500 focus:outline-none"
+              className="w-20 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-center font-pixel-body text-xs text-slate-100 focus:border-rose-500 focus:outline-none"
             />
           </div>
 
-          <div className="flex gap-1.5 justify-end text-[10px]">
+          <div className="flex gap-1.5 justify-end text-[9px] font-pixel-heading">
             <button
               onClick={() => setDiscardQty(Math.max(1, Math.floor(currentQuantity * 0.25)))}
-              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded border border-slate-700 font-semibold"
+              className="pixel-btn pixel-btn-dark px-2 py-1"
             >
               25%
             </button>
             <button
               onClick={() => setDiscardQty(Math.max(1, Math.floor(currentQuantity * 0.5)))}
-              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded border border-slate-700 font-semibold"
+              className="pixel-btn pixel-btn-dark px-2 py-1"
             >
               50%
             </button>
             <button
               onClick={() => setDiscardQty(currentQuantity)}
-              className="px-2 py-1 bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 rounded border border-rose-800 font-semibold"
+              className="pixel-btn pixel-btn-crimson px-2 py-1 text-rose-200"
             >
-              Tudo (100%)
+              100%
             </button>
           </div>
         </div>
 
-        <p className="text-[11px] text-slate-400 italic">
+        <p className="text-[10px] text-slate-400 italic">
           ⚠️ Esta ação é irreversível. O recurso descartado será liberado do seu Armazém.
         </p>
 
         <div className="flex gap-2 pt-2">
           <button
             onClick={onClose}
-            className="flex-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-lg text-xs border border-slate-700 transition"
+            className="flex-1 pixel-btn pixel-btn-dark py-2 text-xs font-pixel-heading"
           >
             Cancelar
           </button>
@@ -127,7 +130,7 @@ export const ResourceDiscardDialog: React.FC<ResourceDiscardDialogProps> = ({
               onConfirm(discardQty);
               onClose();
             }}
-            className="flex-1 px-3 py-2 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white font-bold rounded-lg text-xs border border-rose-500/80 shadow-lg shadow-rose-900/40 transition"
+            className="flex-1 pixel-btn pixel-btn-crimson py-2 text-xs font-pixel-heading"
           >
             Confirmar Descarte
           </button>

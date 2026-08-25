@@ -1,5 +1,61 @@
 # Refatoração modular — changelog
 
+## [V7.6.0] - 2026-08-21 (Histórico de Expedição e Recuperação Offline)
+
+- A simulação e o combate online passam a persistir expedições concluídas, bosses derrotados, mortes, maior fase alcançada e a fase da última derrota.
+- A migration `000019_expedition_history.sql` adiciona os campos com defaults compatíveis para personagens existentes.
+- A recuperação pós-derrota possui uma fronteira persistida; o auto-retorno offline só começa após o término do descanso.
+- Relatórios offline preservam `failure_stage`, sem confundir a fase em que a morte ocorreu com a fase 1 usada no reset.
+
+## [V7.5.0] - 2026-08-20 (Cozinha, Refeições Persistentes & Layout Personalizável)
+
+- Nova profissão `cook` (Cozinheiro) e nova construção livre `kitchen` (Cozinha de Campanha), criada como fundação nível 0 para poder ser posicionada antes da primeira obra.
+- Cozinha possui três níveis, footprint 3x2 e renderer pixel-art próprio; receitas exigem nível da profissão e da Cozinha.
+- Seis refeições iniciais transformam peixe, carne, trigo/farinha, ervas e flor arcana em bônus de preparação: Peixe Assado, Espeto do Caçador, Ensopado do Explorador, Torta do Rastreador, Banquete Arcano e Banquete do Guerreiro.
+- Refeições usam efeitos de 20 minutos, 5 horas e 24 horas em tempo real; inicialmente existe uma categoria exclusiva `meal`, então uma nova refeição substitui a anterior mediante confirmação do cliente.
+- Migration `000016_character_food_buffs.sql` mantém histórico dos intervalos de buffs e transações idempotentes de consumo. O histórico permite aplicar corretamente apenas a parte do bônus que realmente esteve ativa durante progresso offline.
+- O motor de combate aplica bônus de XP/ataque online; a simulação offline recalcula o efeito no instante de cada onda/abate em vez de congelar o buff ao desconectar.
+- `CONSUME_FOOD` consome recurso, avança revisão do acampamento, registra ledger e persiste o resultado por `request_id`; retries simultâneos são serializados pelo lock do personagem.
+- O grid isométrico ganhou rotação durante drag-and-drop (`R`), trocando footprints 3x2/2x3 e validando limites/colisões no frontend e novamente no backend.
+- Financiamento automático da Tesouraria passa a ser opt-in para novos assentamentos (`000017_treasury_auto_fund_opt_in.sql`), sem sobrescrever a configuração de saves existentes.
+- Catálogo expõe consumíveis e efeitos para a UI; o Hub Econômico recebe aba `Cozinha`, despensa, refeição ativa e consumo com confirmação de substituição.
+- Sprites dedicados para as seis refeições complementam a identidade visual por recurso/material e preservam a leitura de materiais dos equipamentos.
+- Auditorias de conteúdo, acampamento e economia permanecem zeradas; testes puros de layout e buffs passam.
+
+## [V7.4.0] - 2026-08-20 (Tauri Hardening, Layout Isométrico Livre & Identidade Visual)
+
+- Cliente Tauri deixa de inferir o backend por `window.location`; releases exigem `VITE_API_BASE_URL`/`VITE_WS_BASE_URL` e o workflow aceita as variáveis `ATLAS_API_BASE_URL`/`ATLAS_WS_BASE_URL`.
+- Removidos Google Fonts e Tailwind CDN do HTML empacotado; Tailwind passa a usar o pipeline local e o Tauri recebe CSP explícita.
+- Origem de desenvolvimento do Tauri adicionada à allowlist padrão sem abrir CORS para `*`.
+- Falha ao carregar o Baú de Achados agora interrompe a criação da sessão, evitando que um erro transitório de leitura seja salvo como baú vazio no logout.
+- Migration `000015_isometric_camp_layout.sql` adiciona `tile_x`, `tile_y` e `rotation`, migrando os cinco prédios atuais para posições equivalentes sem alterar nível, recursos ou timers.
+- `slot_key` deixa de ser tratado como posição física no fluxo de upgrade e passa a funcionar como identificador legado/instância; novos projetos podem receber fundações nível 0 no grid.
+- Ao aprender um novo blueprint de construção, a fundação é posicionada automaticamente em um espaço livre e pode ser arrastada antes da primeira obra; se a posição legada estiver ocupada, ela é realocada com segurança.
+- Novo comando `MOVE_CAMP_BUILDING` valida ownership, `state_revision`, limites 16x12, footprint, colisão e bloqueia mudanças durante obras.
+- Cena do acampamento recebe terreno isométrico e drag-and-drop com prévia verde/vermelha; a posição só é confirmada após validação autoritativa do backend.
+- `PixelItemSprite` volta a respeitar raridade e diferencia materiais como madeira, couro, tecido, osso, pedra, cobre, bronze, prata e ferro. Broquéis/escudos de madeira possuem silhueta e tábuas próprias.
+- Novo `PixelResourceSprite` cria identidade dedicada para peixes, carnes, trigo, farinha, madeira, minério, carvão, ervas, couro, troféus e partes de monstros, reutilizado no depósito, custos, descarte, crafting e desmonte.
+- `image-rendering: pixelated` deixa de ser global e passa a se aplicar apenas aos sprites/canvas.
+- Auditorias de conteúdo, acampamento e economia permanecem com zero erros; testes puros de layout do backend passam.
+
+## [V7.3.0] - 2026-08-20 (Tesouraria, Folha Automática & Progressão Segura)
+
+- Tesouraria do assentamento separada do ouro pessoal, com depósito, retirada, saldo disponível e folha reservada.
+- Financiamento automático transfere somente o déficit necessário e preserva uma reserva pessoal configurável do herói.
+- Salários de coleta são calculados por duração, nível profissional e tier, salvos no snapshot e reservados antes da saída.
+- O início permanece protegido: a folha só é desbloqueada em 25 de Prosperidade; ordens existentes e saves legados custam zero.
+- Retorno online/offline liquida salário automaticamente; cancelamento paga somente o tempo trabalhado e devolve o restante.
+- Ledger de ouro e folha idempotente impedem duplicação em reconexões e repetição de comandos.
+- Novo painel `Tesouraria & Folha` explica saldos, política automática e custo de cada turno antes da confirmação.
+- Turno curto de 3 minutos foi adicionado ao onboarding de coleta sem remover opções de 15 min, 1 h, 4 h e 8 h.
+- Novos personagens já entram com espada e broquel equipados, evitando a primeira expedição sem atributos de equipamento; os demais estilos continuam na mochila.
+- Política `crafting-first` corrigida: monstros comuns voltam a entregar materiais por padrão e chefes mantêm somente uma chance pequena de artefato direto, preservando valor da produção do acampamento.
+- Bônus de construções passam a usar o total do nível atual, corrigindo a soma indevida de níveis anteriores.
+- Migrador agora usa advisory lock e checksum SHA-256 para impedir execução concorrente e alteração silenciosa de SQL publicado.
+- Eventos econômicos completam campos não opcionais com o snapshot autoritativo da sessão, evitando zerar atributos, expedição ou carga segura ao movimentar a Tesouraria.
+- Migration aditiva `000014_settlement_treasury_payroll.sql`; nenhum ouro, recurso, morador ou progresso existente é convertido.
+- Catálogo atualizado para `2026.08-settlement-v1.2-treasury-payroll`.
+
 ## [V7.2.0] - 2026-08-18 (Profissões Especializadas, Raridade de Trabalhadores & Simulação Offline Contínua)
 
 - **Profissões Especializadas de Artesanato**: Registradas as 6 profissões de manufatura (`blacksmith`, `jeweler`, `leatherworker`, `tailor`, `woodworker`, `alchemist`) separadas das 6 profissões de coleta bruta.
@@ -466,3 +522,130 @@
 
 - Os pioneiros recebem nomes determinísticos por personagem e aparecem no Canvas do acampamento com visuais de pescador, extrator e cultivadora.
 - O ambiente Docker local oferece conta de QA protegida por papel `admin` e feature flag. O preset de testes libera conteýo e recursos usando as tabelas reais e é recusado em staging/produção.
+---
+
+## 2026-08-21 — Settlement View V3: HUD Game-First, Terreno 24x18 e Escala Visual
+
+### HUD / Viewport
+- O dashboard passa a usar, em telas `xl`, **2/12 + 8/12 + 2/12** para painéis esquerdo, jogo e painel direito. O breakpoint intermediário continua 3/12 + 6/12 + 3/12 para não quebrar notebooks menores.
+- O canvas lógico foi ampliado de **680x300 para 960x420**, preservando mapeamento de ponteiro para drag-and-drop.
+- `Dados do Aventureiro` mantém nível, XP, ataque e defesa sempre visíveis; atributos primários ficam recolhíveis.
+- `Maestrias & Habilidades` possui resumo compacto com expansão sob demanda. Equipamentos, expedição e botões laterais usam espaçamento reduzido.
+- O painel de notificações foi reduzido para não competir verticalmente com a cena principal.
+
+### Vila Isométrica V3
+- Terreno autoritativo ampliado de **16x12 para 24x18 tiles** no backend e frontend.
+- Migration `000018_expand_settlement_space.sql` expande constraints e desloca layouts V2 em **+4 X / +3 Y**, preservando a disposição relativa montada por cada jogador.
+- Novos projetos procuram espaço livre a partir do centro do assentamento, e não mais do canto superior.
+- Construções usam `BuildingVisualProfiles`: footprint de colisão e escala visual são conceitos separados. Isso permite reduzir Cabana/Armazém/etc. sem alterar regras de posicionamento ou quebrar saves.
+- Os renderers Canvas passaram a respeitar `scale`, e a miniatura dos cards de construção usa o **mesmo renderer da vila** (`BuildingScenePreview`).
+
+### Moradores / Profundidade
+- Prédios e moradores são enviados para uma fila única ordenada por profundidade do chão (`depth`), permitindo que NPCs passem atrás de construções.
+- No máximo **10 moradores** são desenhados simultaneamente; trabalhadores em coleta permanecem fora da vila e moradores ociosos revezam visualmente a cada 30 segundos.
+- Rotas foram redistribuídas pelo novo terreno 24x18. Trabalhadores em produção se aproximam da Cozinha, Fonte Arcana ou Bancada conforme sua profissão.
+- Nameplates deixam de aparecer durante caminhada normal, reduzindo sobreposição de texto.
+
+### Validação
+- `go test ./pkg/game`: OK.
+- `tools/audit-content.mjs`: 0 erros.
+- `tools/audit-camp-content.mjs`: 0 erros e verificação explícita de grid 24x18 frontend/backend.
+- `tools/audit-economy.mjs`: 0 erros.
+- Checagem sintática TypeScript/TSX via TypeScript `transpileModule`: 88 arquivos, 0 erros de sintaxe.
+- `go test ./...` continua bloqueado pela ausência de `backend/go.sum` no pacote de origem.
+- `npm run build` não foi homologado porque o pacote de origem não contém `node_modules`/`package-lock.json`; tentativa de `npm install` excedeu o tempo disponível sem gerar lockfile.
+
+---
+
+## 2026-08-21 — Primeira arena isométrica de expedição
+
+- A Floresta passou a reutilizar a malha 24x18 do acampamento, com grama,
+  caminhos, árvores, pedras, fogueira ornamental e rio animado.
+- O protocolo WebSocket ganhou `arena`, contendo dimensões, posição do herói,
+  estado de movimento e alvo atual. A interpolação permanece no cliente; a
+  decisão de alcance e movimento permanece no backend.
+- O motor passou a mover herói e monstros em X/Y: melee persegue, distância
+  faz kite, monstros ranged mantêm faixa e criaturas feridas fogem.
+- O renderer da floresta ordena os atores pelo pé projetado no terreno e os
+  projéteis continuam acompanhando `target_id` em tempo real.
+- As demais regiões permanecem no renderer legado. Colisões ambientais,
+  obstáculos, pontes e linha de visão serão adicionados junto ao catálogo de
+  mapas, antes de converter os outros biomas.
+- Validação: `GOCACHE=/tmp/atlas-go-cache go test ./...` e `npm run build` OK.
+
+## 2026-08-21 — Arena: formação, kite de borda e reaquisição
+
+- Pontos de spawn autoritativos foram distribuídos pelos quatro cantos da
+  malha, evitando o nascimento de toda a horda na mesma faixa visual.
+- O kite do herói possui fallback lateral/diagonal quando o vetor contrário
+  encontra uma borda, mantendo o movimento sem sair do cenário.
+- O alvo vivo em fuga ou com pouca vida mantém prioridade de finalização; se o
+  alvo anterior morrer, o motor reaquisição automaticamente outro monstro vivo.
+- Dano recebido passou a usar a posição interpolada atual do herói, aparecendo
+  acima da cabeça também na projeção isométrica.
+- Validação: `GOCACHE=/tmp/atlas-go-cache go test ./...` e `npm run build` OK.
+
+## 2026-08-21 — Combate isométrico: perseguição, dispersão e teleporte
+
+- Alvos em fuga agora são perseguidos também por arqueiros e magos; o guerreiro
+  recebe margem de alcance durante a perseguição para não perder ataques quando
+  o monstro se move no mesmo tick.
+- A fuga de monstros é encerrada quando a criatura é encurralada ou alcança o
+  limite da arena. O estado não é rearmado a cada tick, evitando combates
+  presos com inimigos de pouca vida.
+- Habilidades ofensivas só consomem mana quando existe alvo alcançável; a lista
+  é ordenada pelo inimigo mais próximo. Tiles duplicados são separados após o
+  movimento para manter leitura das áreas e dos grupos.
+- O spawn visual deixou de entrar pela lateral: cada monstro nasce no tile
+  autoritativo com portal azul, escala e partículas de teleporte.
+- O herói do acampamento passou a usar uma rota isométrica compartilhada com os
+  moradores. Eventos atrasados de combate são descartados ao retornar ao
+  acampamento, evitando investidas diagonais e projéteis fora de contexto.
+- Validação: `GOCACHE=/tmp/atlas-go-cache go test ./...` e `npm run build` OK.
+
+## 2026-08-21 — Combate: recuperação automática do ataque básico
+
+- O alcance usado para decidir `ATTACK` agora é o mesmo alcance efetivo do
+  ataque básico, eliminando estados visuais de ataque sem golpe possível.
+- Arqueiros e magos avançam contra alvos ranged fora do próprio alcance; o kite
+  só assume prioridade quando existe uma ameaça melee próxima.
+- O ataque básico procura o inimigo vivo mais próximo que esteja alcançável no
+  tick. Um alvo ferido/em fuga continua sendo prioridade de perseguição, mas
+  não bloqueia o dano em outro monstro que já esteja ao alcance.
+- Foram adicionados testes para a faixa morta do mago contra inimigo ranged e
+  para a retomada do ataque quando o alvo de finalização está distante.
+- Validação: `GOCACHE=/tmp/atlas-go-cache go test ./...` e `npm run build` OK.
+
+## 2026-08-21 — Arena: orientação visual dos atores
+
+- O herói agora espelha para o lado do alvo atual na projeção isométrica, em
+  vez de permanecer sempre voltado para a direita.
+- Cada monstro passa a olhar para o herói durante perseguição e ataque; no
+  estado `FLEE`, ele inverte a orientação para correr de costas para o herói.
+- Flechas e projéteis mágicos nascem no lado da arma correspondente à direção
+  atual do ator, evitando disparos visuais pelas costas.
+- Validação: `npm run build` OK.
+
+## 2026-08-21 — Combate: último golpe mantém o alvo correto
+
+- A posição do alvo é preservada durante o evento em que ele morre, permitindo
+  que dash, magia, impacto e texto de dano terminem no monstro correto.
+- Um `target_id` explícito não pode mais cair no primeiro monstro sobrevivente
+  como fallback visual, evitando ataques fictícios em alvos distantes.
+- Ataques básicos não herdam a animação de uma magia emitida anteriormente no
+  mesmo tick.
+- A fuga de criaturas próximas não é mais cancelada por distância curta; Lobo
+  e Aranha continuam abrindo espaço até a malha realmente bloquear o recuo.
+- Validação: `npm run build` OK.
+
+## 2026-08-21 — Arena: comportamento de fuga por espécie
+
+- A regra de vida crítica passou a ser configurável por monstro, com
+  `low_health_behavior: "flee"` ou `"stand_ground"`.
+- Na Floresta, o Lobo e a Aranha fogem ao atingir 20% de vida; o Goblin e o
+  Urso chefe permanecem lutando até morrer.
+- A transição para `FLEE` ocorre no mesmo tick em que o dano cruza o limiar,
+  evitando que um golpe forte mate a criatura antes de o estado ser emitido.
+- Valores vazios mantêm o comportamento legado de fuga, permitindo configurar
+  novos monstros gradualmente sem alterar regiões existentes.
+- Validação: `GOCACHE=/tmp/atlas-go-cache go test ./...` e `npm run build` OK.

@@ -2,7 +2,20 @@
 
 Este documento serve como a **Fonte da Verdade (Single Source of Truth)** do projeto **Atlas MMORPG Idle**. Ele documenta em detalhes a arquitetura técnica, as regras de negócio, as mecânicas de combate, a estrutura do banco de dados, as tabelas de loot e a organização do código para orientar futuras implementações e guiar assistentes de IA.
 
-## 🏘️ Assentamento Vivo V1.2 (Sistema Especializado de Profissões e Artesanato)
+## 🏦 Economia do Acampamento V1.2 — Tesouraria e Folha
+
+- O ouro pessoal continua intacto e financia o caixa somente por transferência manual ou política automática autorizada.
+- Salários são cobrados por ordem produtiva, nunca por calendário ou tempo offline sem trabalho.
+- A folha é subsidiada até 25 de Prosperidade para não bloquear o onboarding.
+- Toda ordem reserva o salário antes de começar; sem caixa, ela não começa e nunca cria saldo negativo.
+- A reposição automática preserva `treasury_personal_gold_reserve` e transfere somente o déficit.
+- Coletas concluídas liquidam a folha no mesmo fluxo transacional que entrega recursos e libera o morador.
+- Cancelamento paga proporcionalmente ao tempo trabalhado e devolve a parte não utilizada.
+- Ordens antigas recebem `wage_reserved=0`, preservando integralmente saves já existentes.
+- O ledger `settlement_gold_ledger` e a tabela `settlement_payroll` são a trilha auditável da economia do assentamento.
+- Custos são snapshots com `economy_version`; mudanças futuras não alteram trabalhos em andamento.
+
+## 🏘️ Assentamento Vivo V1.3 (Profissões, Cozinha e Layout Isométrico)
 
 O personagem é o herói e proprietário do assentamento. Ele decide construções e permanece focado em combate; moradores persistentes com especialidades individuais assumem coleta e artesanato automático.
 
@@ -17,7 +30,7 @@ O personagem é o herói e proprietário do assentamento. Ele decide construçõ
 | Guardar produção automática | Arsenal do assentamento |
 
 ### Sistema de Profissões Especializadas (Coleta vs Artesanato)
-O jogo possui **12 profissões canônicas** divididas rigorosamente entre extração e manufatura:
+O jogo possui **13 profissões canônicas** divididas entre extração e manufatura:
 - **🌲 6 Profissões de Coleta (*Gathering*)**:
   - 🪓 `lumberjack` (Lenhador): Madeira, resina e sementes em bosques.
   - ⛏️ `miner` (Minerador): Minérios de ferro, carvão e pedras.
@@ -25,22 +38,31 @@ O jogo possui **12 profissões canônicas** divididas rigorosamente entre extra�
   - 🌾 `farmer` (Agricultor): Trigo, fibras e sementes.
   - 🐾 `tracker` (Rastreador): Couros crus, peles e carnes.
   - 🌿 `herbalist` (Herbalista): Ervas medicinais e essências naturais.
-- **⚒️ 6 Profissões de Artesanato (*Crafting*)**:
+- **⚒️ 7 Profissões de Artesanato (*Crafting*)**:
   - ⚔️ `blacksmith` (Ferreiro): Armas corpo a corpo (espadas, machados, clavas), escudos e fundição de lingotes.
   - 💎 `jeweler` (Joalheiro): Anéis, amuletos, colares e lapidação de joias.
   - 🧥 `leatherworker` (Coureiro / Sapateiro): Botas, sandálias, mochilas, bolsas e curtume.
   - 🧵 `tailor` (Alfaiate): Armaduras (peitorais, robes, túnicas), calças, capacetes e tecelagem.
   - 🪵 `woodworker` (Marceneiro): Arcos, varinhas mágicas, cajados, flechas, virotes e tábuas tratadas.
   - 🧪 `alchemist` (Alquimista): Elixires, poções, pós e refinamentos arcanos.
+  - 🍳 `cook` (Cozinheiro): Refeições persistentes de preparação, usando peixe, carne, farinha, ervas e ingredientes raros.
+
+### Alquimia e progressão inicial de consumíveis
+
+- A **Bancada de Alquimia** (`alchemy_bench`) nasce descoberta, assim como a Cozinha, mas precisa ser construída. O nível 1 exige Fogueira nível 1, 100 Madeira, 50 Pedra, 2.500 gold e 15 minutos.
+- A aba **Alquimia** fica ao lado da Cozinha e usa a mesma fila de produção autoritativa, prévia de requisitos e consumo persistente de recursos.
+- As poções básicas começam no **Alquimista nível 1 + Bancada nível 1**: Tônico de Força (+5% ataque por 30 min) e Tônico de Foco (+5% XP de combate por 30 min). Elas usam categorias de buff próprias e não substituem uma refeição ativa.
+- O Elixir Arcano é uma receita intermediária (**Alquimista nível 8 + Bancada nível 2**) e usa Pó Arcano Residual, mantendo os catalisadores raros fora da entrada da progressão.
+- A curva inicial de equipamentos foi suavizada somente no Tier 1: a quantidade-base de materiais processados caiu de 4 para 3. A parte de monstro, o ouro, a profissão, a estação e os drops permanecem exigidos. Tiers 2+ não foram alterados e os drops da primeira região não foram aumentados.
 
 ### Os 7 Pioneiros Iniciais (Dupla Profissão Garantida)
-Para assegurar que nenhum jogador fique bloqueado no início do jogo, os 7 pioneiros cobrem 100% das 6 coletas e 100% dos 6 artesanatos desde o nível 1:
+Para assegurar que nenhum jogador fique bloqueado no início do jogo, os 7 pioneiros cobrem 100% das 6 coletas e 100% dos 7 artesanatos desde o nível 1; Aurora também assume a cozinha inicial:
 1. **Tonho Três-Machados**: `lumberjack` (Lenhador) + `blacksmith` (Ferreiro)
 2. **Jurema Puxa-Rede**: `fisher` (Pescadora) + `leatherworker` (Coureira / Sapateira)
 3. **Dona Cida do Chá Suspeito**: `farmer` (Agricultora) + `jeweler` (Joalheira)
 4. **Mestre Alencastro**: `miner` (Minerador) + `tailor` (Alfaiate)
 5. **Seu Barnabé das Vigas**: `tracker` (Rastreador) + `woodworker` (Marceneiro)
-6. **Aurora dos Elixires**: `herbalist` (Herbalista) + `alchemist` (Alquimista)
+6. **Aurora dos Elixires**: `herbalist` (Herbalista) + `alchemist` (Alquimista) + `cook` (Cozinheira)
 7. **Dona Elena Pé-de-Trilha**: `fisher` (Pescadora) + `tracker` (Rastreadora) — Suporte de coleta rápida
 
 ### Sistema de Raridade Procedimental de Novos Moradores (*Arrivals*)
@@ -431,7 +453,7 @@ Ao passar o mouse sobre qualquer slot equipado na tela principal ou dentro da mo
 
 ### Filtros e Gerenciamento do "Conteúdo da Mochila"
 Para suportar inventários em larga escala, a mochila conta com:
-- **Filtro de Categoria por Tipo de Slot**: Abas com ícones e contadores (`Todos`, `Armas ⚔️`, `Escudos 🛡️`, `Elmos 🪖`, `Armaduras 🥋`, `Calças 👖`, `Botas 🥾`, `Acessórios 📿`, `Mochilas 🎒`, `Munições 🏹`).
+- **Filtro de Categoria por Tipo de Slot**: Abas com ícones e contadores (`Todos`, `Armas ⚔️`, `Escudos 🛡️`, `Elmos 🪖`, `Armaduras 🥋`, `Calças 👖`, `Botas 🥾`, `Acessórios 📿`, `Mochilas 🎒`). Dentro de **Acessórios**, subcategorias separam `Anéis`, `Amuletos/Colares` e `Munições`.
 - **Filtro por Raridade**: Botões rápidos para isolar tiers de raridade específicos.
 - **Busca por Nome em Tempo Real**: Campo de pesquisa dinâmico com botão de limpeza rápida.
 - **Seleção Inteligente para Venda**: O botão `Selecionar Todos` opera sobre os itens filtrados, facilitando a venda em lote por tipo ou raridade (ex: filtrar por "Comum" e vender todos os comuns em um único clique).
@@ -459,7 +481,28 @@ O Sistema de Acampamento introduz um ciclo completo de **Progressão Meta**, **E
 | 🔥 **Brasa Abissal** | `abyssal_ember` | 🔥 | Lendário | `material` | Sim (1 esp./un.) | Sim |
 | 🏆 **Troféus de Chefão (9)** | `trophy_*` | 🏆 | Mítico | `trophy` | **Não (Livre)** | **Não** |
 
-### As 5 Construções do Acampamento (Níveis 1 a 3)
+### Recursos Especiais: Catalisadores e Essência Arcana
+
+Estes recursos têm impacto direto na progressão e não devem ser tratados como materiais comuns:
+
+| Recurso | Como obter | Para que serve | Impacto estratégico |
+|---|---|---|---|
+| ✨ **Pó de Qualidade** (`quality_dust`) | Drop de chefes com chance de 10%; também pode ser produzido em **Purificar Emblema Negro** com 1 Lasca do Brasão da Alma Negra + 2 Fibra, 50 ouro e Alquimista Nv. 1. | Catalisador de craft: 1 unidade por item/tentativa. Move parte da chance de Comum para Incomum, Raro e Épico. | Opção intermediária para buscar melhorias sem depender do Núcleo Prismático. Não garante raridade. |
+| 💠 **Núcleo Prismático** (`prismatic_core`) | Drop raro de **Mestre do Santuário** e **Vingador de Chifres**, com chance de 5%. | Catalisador avançado: 1 unidade por item/tentativa. Aumenta fortemente as chances de Raro, Épico e Lendário. | Recurso de alto risco/alto valor para crafts avançados. Não garante raridade. |
+| 🟣 **Pó Arcano Residual** (`arcane_scrap`) | Recuperado ao desmontar equipamentos. | Ingrediente de **Refinar Resíduo Arcano**: 8 unidades + 2 Ervas + 90 ouro produzem 1 Essência Arcana em 45s, exigindo Alquimista Nv. 5. | Converte excedentes de equipamentos em progresso de acampamento. |
+| 🔮 **Essência Arcana** (`arcane_essence`) | Resultado de **Refinar Resíduo Arcano**. | Material de construções: alimenta principalmente a **Fonte Arcana** e também upgrades avançados de Fogueira, Armazém, Cozinha e outras estruturas. | Recurso de progressão de alto nível; guardar para upgrades evita bloquear a evolução do assentamento. |
+
+#### Distribuição de raridade dos catalisadores
+
+| Configuração | Comum | Incomum | Raro | Épico | Lendário |
+|---|---:|---:|---:|---:|---:|
+| Sem catalisador | 70% | 25% | 5% | 0% | 0% |
+| Pó de Qualidade | 45% | 35% | 17% | 3% | 0% |
+| Núcleo Prismático | 15% | 35% | 35% | 13% | 2% |
+
+O resultado é sempre limitado pela raridade mínima/máxima da receita. Profissão e estação também alteram as chances; catalisadores não transformam o craft em uma garantia.
+
+### As 6 Construções do Acampamento (Níveis 1 a 3)
 
 | Construção | Slot | Efeito Nível 1 | Efeito Nível 2 (Exige Armazém Nv. 1) | Efeito Nível 3 (Exige Armazém Nv. 2) |
 |---|---|---|---|---|
@@ -468,6 +511,7 @@ O Sistema de Acampamento introduz um ciclo completo de **Progressão Meta**, **E
 | ⛺ **Cabana do Aventureiro** (`adventurer_hut`) | `west` | +10% Regen Geral (120 Gold, 50 Madeira, 25 Fibra) | +20% Regen Geral (400 Gold, 120 Madeira, 60 Fibra, 30 Pedra) | +35% Regen Geral (1.200 Gold, 250 Madeira, 100 Fibra, 50 Ferro) |
 | 📦 **Armazém** (`warehouse`) | `east` | Capacidade total de **30.000** materiais | Capacidade total de **100.000** materiais | Capacidade total de **500.000** materiais |
 | ⚒️ **Bancada de Desmontagem** (`workbench`) | `south` | Desbloqueia Reciclagem (200 Gold, 50 Madeira, 20 Pedra, 15 Ferro) | +15% Rendimento na Reciclagem (600 Gold, 120 Madeira, 60 Pedra, 50 Ferro) | +30% Rendimento na Reciclagem (2.000 Gold, 220 Madeira, 100 Pedra, 100 Ferro, 30 Essência) |
+| 🧪 **Bancada de Alquimia** (`alchemy_bench`) | `free` | Desbloqueia poções básicas (2.500 Gold, 100 Madeira, 50 Pedra) | Poções intermediárias e +10% velocidade (25.000 Gold, 450 Madeira, 250 Pedra, 120 Ferro) | Elixires avançados e +20% velocidade (125.000 Gold, 1.400 Madeira, 900 Pedra, 600 Ferro, 120 Essência) |
 
 *Nota: O acampamento inicial (Nv. 0) possui um **Depósito Improvisado de 10.000 unidades**. Os custos, pré-requisitos e tempos canônicos de cada melhoria ficam no `BuildingRegistry`.*
 
@@ -598,3 +642,28 @@ Todos os itens iniciais vêm devidamente identificados com a propriedade `Specia
 
 ### C. Movimentação Contínua Suave de Monstros
 - A movimentação de monstros pelo grid foi convertida de saltos interpolados para avanço contínuo por delta-time (`moveSpeed * _dt`), eliminando caminhadas espaçadas e sincronizando os passos dos monstros (`walkDistance / 5.5`) de forma idêntica aos trabalhadores do acampamento.
+---
+
+## 🏘️ 16. Settlement View V3 — Layout Livre, Escala e Densidade Visual
+
+### A. Grade autoritativa 24x18
+- `backend/pkg/game/camp_layout.go` e `frontend/src/game/camp/CampLayoutRegistry.ts` devem manter os mesmos limites: **24 colunas x 18 linhas**.
+- `tile_x`, `tile_y` e `rotation` continuam sendo persistidos pelo backend; o frontend nunca decide sozinho se uma posição é válida.
+- O layout V2 16x12 é migrado para V3 com deslocamento +4/+3. Não recalcular posições por `slot_key` em saves já personalizados.
+
+### B. Footprint lógico != tamanho do sprite
+- `BuildingGridFootprints` define colisão e ocupação do terreno.
+- `BuildingVisualProfiles` define `sceneScale`, silhueta aproximada e offset visual.
+- Aumentar detalhes visuais de um prédio **não** deve aumentar automaticamente seu footprint lógico.
+- Cards e modais devem preferir `BuildingScenePreview`, que reutiliza `CampBuildingRegistry`, para evitar uma segunda identidade visual divergente.
+
+### C. Densidade de moradores
+- A população autoritativa permanece completa no estado do assentamento; o limite de 10 é apenas de **representação visual simultânea**.
+- Moradores com status `collecting` não são desenhados na vila.
+- Moradores em `crafting` têm prioridade visual; ociosos são rotacionados em janelas de 30s para que toda a população apareça ao longo do tempo.
+- Prédios e moradores compartilham o mesmo z-order pelo ponto de contato com o chão.
+
+### D. Regra Game-First da interface
+- Em telas `xl`, o dashboard deve priorizar a cena central em 8/12 colunas e usar 2/12 para cada lateral.
+- Informações secundárias devem ser recolhíveis/compactas sem remover acesso funcional.
+- O canvas lógico padrão é **960x420**; conversão de pointer deve sempre levar em conta o tamanho CSS real para drag-and-drop continuar preciso.

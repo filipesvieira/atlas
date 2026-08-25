@@ -83,7 +83,7 @@ var (
 			Name:                "Essência Arcana",
 			Icon:                "🔮",
 			Rarity:              "Raro",
-			Description:         "Concentrado puro de energia mágica emanado por criaturas místicas. Alimenta a Fonte Arcana e encantamentos.",
+			Description:         "Concentrado puro de energia mágica obtido ao refinar Pó Arcano Residual. É usado para evoluir construções do Acampamento, especialmente a Fonte Arcana, e melhorias de alto nível.",
 			MaxStack:            999999,
 			Category:            ResourceCategoryMaterial,
 			CountsTowardStorage: true,

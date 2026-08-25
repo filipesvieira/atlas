@@ -15,12 +15,21 @@ export const BackpackCapacityBar: React.FC<BackpackCapacityBarProps> = ({
   maxSlots,
   weightPercent,
 }) => {
+  const weightCritical = weightPercent > 90;
+  const slotsCritical = usedSlots >= maxSlots;
+  const capacityWarning = !weightCritical && !slotsCritical && (weightPercent > 70 || usedSlots >= maxSlots * 0.8);
+  const alertClass = weightCritical || slotsCritical
+    ? 'pixel-alert-frame pixel-alert-critical'
+    : capacityWarning
+    ? 'pixel-alert-frame pixel-alert-warning'
+    : '';
+
   return (
-    <div className="flex flex-wrap items-center gap-4 py-2.5 px-3 bg-slate-950/80 rounded-xl border border-slate-800/80 text-xs">
+    <div className={`w-full min-w-0 flex flex-col sm:flex-row items-center gap-3 py-2 px-3 bg-slate-950/80 rounded-xl border border-slate-800/80 text-xs ${alertClass}`}>
       {/* Indicador de Peso */}
-      <div className="flex-1 min-w-[140px]">
+      <div className="w-full sm:flex-1 min-w-0">
         <div className="flex justify-between text-slate-400 mb-1 font-mono text-[11px]">
-          <span>⚖️ Peso (Capacidade)</span>
+          <span>⚖️ Peso</span>
           <span className={weightPercent > 90 ? 'text-rose-400 font-bold' : 'text-slate-300'}>
             {totalWeight.toFixed(1)} / {maxCapacity} ({weightPercent}%)
           </span>
@@ -34,15 +43,15 @@ export const BackpackCapacityBar: React.FC<BackpackCapacityBarProps> = ({
                 ? 'bg-amber-500'
                 : 'bg-emerald-500'
             }`}
-            style={{ width: `${weightPercent}%` }}
+            style={{ width: `${Math.min(100, weightPercent)}%` }}
           />
         </div>
       </div>
 
       {/* Indicador de Slots */}
-      <div className="flex-1 min-w-[140px]">
+      <div className="w-full sm:flex-1 min-w-0">
         <div className="flex justify-between text-slate-400 mb-1 font-mono text-[11px]">
-          <span>📦 Espaço na Mochila</span>
+          <span>📦 Espaço</span>
           <span className={usedSlots >= maxSlots ? 'text-rose-400 font-bold' : 'text-slate-300'}>
             {usedSlots} / {maxSlots} ({Math.round((usedSlots / Math.max(1, maxSlots)) * 100)}%)
           </span>

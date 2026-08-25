@@ -886,5 +886,3 @@ export function drawBloodSplash(
 
   ctx.restore();
 }
-
-

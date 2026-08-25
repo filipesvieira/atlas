@@ -10,6 +10,7 @@ type RecipeKind string
 const (
 	RecipeKindEquipment  RecipeKind = "equipment"
 	RecipeKindProcessing RecipeKind = "processing"
+	RecipeKindConsumable RecipeKind = "consumable"
 )
 
 type RecipeDefinition struct {
@@ -49,6 +50,7 @@ type RecipeDefinition struct {
 	CritChance              float64          `json:"crit_chance,omitempty"`
 	Lifesteal               float64          `json:"lifesteal,omitempty"`
 	ManaRegen               int              `json:"mana_regen,omitempty"`
+	BaseMovementSpeedBonus  float64          `json:"base_movement_speed_bonus,omitempty"`
 }
 
 var RecipeRegistry = buildRecipeRegistry()
@@ -62,8 +64,23 @@ func buildRecipeRegistry() map[string]RecipeDefinition {
 		"process_flour":          {Key: "process_flour", Name: "Moer Farinha", Description: "Transforma trigo em farinha.", Kind: RecipeKindProcessing, OutputResourceKey: "flour", OutputQuantity: 3, ProfessionKey: "farmer", RequiredProfessionLevel: 1, Tier: 1, Ingredients: []ResourceAmount{{Key: "wheat", Quantity: 5}}, GoldCost: 10, CraftSeconds: 15, DefaultUnlocked: true, ContentVersion: 1},
 		"recycle_metal_scrap":    {Key: "recycle_metal_scrap", Name: "Reciclar Sucata Metálica", Description: "Recupera um lingote sem substituir a mineração necessária para novos crafts.", Kind: RecipeKindProcessing, OutputResourceKey: "iron_ingot", OutputQuantity: 1, ProfessionKey: "blacksmith", RequiredProfessionLevel: 3, Tier: 1, Ingredients: []ResourceAmount{{Key: "metal_scrap", Quantity: 6}, {Key: "coal", Quantity: 1}}, GoldCost: 45, CraftSeconds: 30, DefaultUnlocked: true, ContentVersion: 1},
 		"recycle_cloth_scrap":    {Key: "recycle_cloth_scrap", Name: "Reaproveitar Retalhos", Description: "Recompõe tecido a partir de retalhos e uma pequena quantidade de fibra nova.", Kind: RecipeKindProcessing, OutputResourceKey: "woven_cloth", OutputQuantity: 1, ProfessionKey: "tailor", RequiredProfessionLevel: 3, Tier: 1, Ingredients: []ResourceAmount{{Key: "cloth_scrap", Quantity: 6}, {Key: "fiber", Quantity: 1}}, GoldCost: 35, CraftSeconds: 25, DefaultUnlocked: true, ContentVersion: 1},
-		"refine_arcane_scrap":    {Key: "refine_arcane_scrap", Name: "Refinar Resíduo Arcano", Description: "Estabiliza resíduos mágicos em essência para construções e encantamentos.", Kind: RecipeKindProcessing, OutputResourceKey: "arcane_essence", OutputQuantity: 1, ProfessionKey: "alchemist", RequiredProfessionLevel: 5, Tier: 2, Ingredients: []ResourceAmount{{Key: "arcane_scrap", Quantity: 8}, {Key: "herbs", Quantity: 2}}, GoldCost: 90, CraftSeconds: 45, DefaultUnlocked: true, ContentVersion: 1},
+		"refine_arcane_scrap":    {Key: "refine_arcane_scrap", Name: "Refinar Resíduo Arcano", Description: "Converte 8 Pó Arcano Residual e 2 Ervas em 1 Essência Arcana. Use a essência para evoluir construções do Acampamento, especialmente a Fonte Arcana, e alcançar melhorias de alto nível.", Kind: RecipeKindProcessing, OutputResourceKey: "arcane_essence", OutputQuantity: 1, ProfessionKey: "alchemist", RequiredProfessionLevel: 5, Tier: 2, Ingredients: []ResourceAmount{{Key: "arcane_scrap", Quantity: 8}, {Key: "herbs", Quantity: 2}}, GoldCost: 90, CraftSeconds: 45, DefaultUnlocked: true, ContentVersion: 1},
 		"refine_black_soul":      {Key: "refine_black_soul", Name: "Purificar Emblema Negro", Description: "Purifica a essência do chefe pirata em pó de qualidade para catalisadores.", Kind: RecipeKindProcessing, OutputResourceKey: "quality_dust", OutputQuantity: 1, ProfessionKey: "alchemist", RequiredProfessionLevel: 1, Tier: 1, Ingredients: []ResourceAmount{{Key: "part_black_soul_emblem", Quantity: 1}, {Key: "fiber", Quantity: 2}}, GoldCost: 50, CraftSeconds: 30, DefaultUnlocked: true, ContentVersion: 1},
+
+		// Cozinha: refeições persistentes que transformam recursos comuns de coleta
+		// em preparação de combate. O custo em ouro também funciona como gold sink.
+		"cook_grilled_fish":    {Key: "cook_grilled_fish", Name: "Preparar Peixe Assado", Description: "Peixe fresco com ervas, leve e rápido para expedições curtas.", Kind: RecipeKindConsumable, OutputResourceKey: "grilled_fish", OutputQuantity: 1, ProfessionKey: "cook", RequiredProfessionLevel: 1, Tier: 1, StationKey: "kitchen", RequiredStationLevel: 1, Ingredients: []ResourceAmount{{Key: "raw_fish", Quantity: 2}, {Key: "herbs", Quantity: 1}}, GoldCost: 25, CraftSeconds: 30, DefaultUnlocked: true, ContentVersion: 1},
+		"cook_hunter_skewer":   {Key: "cook_hunter_skewer", Name: "Preparar Espeto do Caçador", Description: "Carne temperada para aumentar o poder ofensivo durante uma caçada curta.", Kind: RecipeKindConsumable, OutputResourceKey: "hunter_skewer", OutputQuantity: 1, ProfessionKey: "cook", RequiredProfessionLevel: 1, Tier: 1, StationKey: "kitchen", RequiredStationLevel: 1, Ingredients: []ResourceAmount{{Key: "raw_meat", Quantity: 2}, {Key: "herbs", Quantity: 1}}, GoldCost: 30, CraftSeconds: 35, DefaultUnlocked: true, ContentVersion: 1},
+		"cook_explorer_stew":   {Key: "cook_explorer_stew", Name: "Cozinhar Ensopado do Explorador", Description: "Refeição robusta para longas sessões de exploração e treinamento.", Kind: RecipeKindConsumable, OutputResourceKey: "explorer_stew", OutputQuantity: 1, ProfessionKey: "cook", RequiredProfessionLevel: 8, Tier: 2, StationKey: "kitchen", RequiredStationLevel: 2, Ingredients: []ResourceAmount{{Key: "raw_meat", Quantity: 3}, {Key: "raw_fish", Quantity: 2}, {Key: "herbs", Quantity: 3}, {Key: "flour", Quantity: 2}}, GoldCost: 120, CraftSeconds: 90, DefaultUnlocked: true, ContentVersion: 1},
+		"cook_tracker_pie":     {Key: "cook_tracker_pie", Name: "Assar Torta do Rastreador", Description: "Torta densa de carne e ervas para manter o herói forte por várias horas.", Kind: RecipeKindConsumable, OutputResourceKey: "tracker_pie", OutputQuantity: 1, ProfessionKey: "cook", RequiredProfessionLevel: 8, Tier: 2, StationKey: "kitchen", RequiredStationLevel: 2, Ingredients: []ResourceAmount{{Key: "raw_meat", Quantity: 4}, {Key: "flour", Quantity: 4}, {Key: "herbs", Quantity: 2}}, GoldCost: 140, CraftSeconds: 100, DefaultUnlocked: true, ContentVersion: 1},
+		"cook_arcane_banquet":  {Key: "cook_arcane_banquet", Name: "Servir Banquete Arcano", Description: "Banquete raro infundido com flor arcana para uma jornada de um dia inteiro.", Kind: RecipeKindConsumable, OutputResourceKey: "arcane_banquet", OutputQuantity: 1, ProfessionKey: "cook", RequiredProfessionLevel: 18, Tier: 3, StationKey: "kitchen", RequiredStationLevel: 3, Ingredients: []ResourceAmount{{Key: "raw_fish", Quantity: 6}, {Key: "raw_meat", Quantity: 4}, {Key: "flour", Quantity: 8}, {Key: "herbs", Quantity: 8}, {Key: "arcane_blossom", Quantity: 2}}, GoldCost: 650, CraftSeconds: 300, DefaultUnlocked: true, ContentVersion: 1},
+		"cook_warrior_banquet": {Key: "cook_warrior_banquet", Name: "Servir Banquete do Guerreiro", Description: "Mesa farta para preparar o herói para combates difíceis durante um dia inteiro.", Kind: RecipeKindConsumable, OutputResourceKey: "warrior_banquet", OutputQuantity: 1, ProfessionKey: "cook", RequiredProfessionLevel: 18, Tier: 3, StationKey: "kitchen", RequiredStationLevel: 3, Ingredients: []ResourceAmount{{Key: "raw_meat", Quantity: 10}, {Key: "flour", Quantity: 6}, {Key: "herbs", Quantity: 6}, {Key: "arcane_blossom", Quantity: 1}}, GoldCost: 700, CraftSeconds: 300, DefaultUnlocked: true, ContentVersion: 1},
+
+		// Alquimia: poções iniciais usam recursos comuns e ocupam uma categoria
+		// própria de buff, permitindo uma refeição e uma poção ativas ao mesmo tempo.
+		"alchemy_minor_strength": {Key: "alchemy_minor_strength", Name: "Destilar Tônico de Força", Description: "Tônico simples que aumenta o poder de ataque por uma expedição curta.", Kind: RecipeKindConsumable, OutputResourceKey: "minor_strength_elixir", OutputQuantity: 1, ProfessionKey: "alchemist", RequiredProfessionLevel: 1, Tier: 1, StationKey: "alchemy_bench", RequiredStationLevel: 1, Ingredients: []ResourceAmount{{Key: "herbs", Quantity: 2}, {Key: "seeds", Quantity: 1}}, GoldCost: 25, CraftSeconds: 35, DefaultUnlocked: true, ContentVersion: 1},
+		"alchemy_focus_tonic":    {Key: "alchemy_focus_tonic", Name: "Preparar Tônico de Foco", Description: "Infusão de ervas que melhora o aprendizado em combate por uma expedição curta.", Kind: RecipeKindConsumable, OutputResourceKey: "focus_tonic", OutputQuantity: 1, ProfessionKey: "alchemist", RequiredProfessionLevel: 1, Tier: 1, StationKey: "alchemy_bench", RequiredStationLevel: 1, Ingredients: []ResourceAmount{{Key: "herbs", Quantity: 2}, {Key: "raw_fish", Quantity: 1}}, GoldCost: 25, CraftSeconds: 35, DefaultUnlocked: true, ContentVersion: 1},
+		"alchemy_arcane_draught": {Key: "alchemy_arcane_draught", Name: "Destilar Elixir Arcano", Description: "Elixir intermediário para expedições longas, exigindo resíduo arcano refinado.", Kind: RecipeKindConsumable, OutputResourceKey: "arcane_draught", OutputQuantity: 1, ProfessionKey: "alchemist", RequiredProfessionLevel: 8, Tier: 2, StationKey: "alchemy_bench", RequiredStationLevel: 2, Ingredients: []ResourceAmount{{Key: "herbs", Quantity: 4}, {Key: "arcane_scrap", Quantity: 2}, {Key: "seeds", Quantity: 2}}, GoldCost: 140, CraftSeconds: 100, DefaultUnlocked: true, ContentVersion: 1},
 	}
 
 	tierPartCursor := map[int]int{}
@@ -88,22 +105,23 @@ func buildRecipeRegistry() map[string]RecipeDefinition {
 			Ingredients: ingredients, GoldCost: int64(150 * tier * tier), CraftSeconds: int64(30 * tier),
 			MinimumRarity: minRarity, MaximumRarity: maxRarity, DefaultUnlocked: tier == 1,
 			UnlockTrophyKey: trophyForTier(tier), ContentVersion: 1,
-			SlotType:      string(template.Slot),
-			WeaponType:    string(template.WeaponType),
-			Hands:         template.Hands,
-			RequiredLevel: template.RequiredLevel,
-			BaseAtk:       template.BaseAtk,
-			BaseMagic:     template.BaseMagic,
-			BaseDef:       template.BaseDef,
-			BaseWeight:    template.BaseWeight,
-			BaseSTR:       template.BaseSTR,
-			BaseDEX:       template.BaseDEX,
-			BaseINT:       template.BaseINT,
-			BaseHP:        template.BaseHP,
-			BaseMP:        template.BaseMP,
-			CritChance:    template.CritChance,
-			Lifesteal:     template.Lifesteal,
-			ManaRegen:     template.ManaRegen,
+			SlotType:               string(template.Slot),
+			WeaponType:             string(template.WeaponType),
+			Hands:                  template.Hands,
+			RequiredLevel:          template.RequiredLevel,
+			BaseAtk:                template.BaseAtk,
+			BaseMagic:              template.BaseMagic,
+			BaseDef:                template.BaseDef,
+			BaseWeight:             template.BaseWeight,
+			BaseSTR:                template.BaseSTR,
+			BaseDEX:                template.BaseDEX,
+			BaseINT:                template.BaseINT,
+			BaseHP:                 template.BaseHP,
+			BaseMP:                 template.BaseMP,
+			CritChance:             template.CritChance,
+			Lifesteal:              template.Lifesteal,
+			ManaRegen:              template.ManaRegen,
+			BaseMovementSpeedBonus: template.BaseMovementSpeedBonus,
 		}
 	}
 	return registry
@@ -135,6 +153,13 @@ func ingredientsForTemplate(template LootTemplate, monsterPart string) []Resourc
 		tier = 1
 	}
 	base := int64(2 + tier*2)
+	// O primeiro equipamento deve ser alcançável após a cadeia inicial de
+	// processamento, sem aumentar drops nem remover a parte de monstro.
+	// A redução é permanente e limitada ao Tier 1; tiers seguintes preservam
+	// integralmente a curva original de materiais.
+	if tier == 1 {
+		base = 3
+	}
 	switch template.Slot {
 	case SlotMainHand, SlotOffHand, SlotAmmo:
 		return []ResourceAmount{{Key: "iron_ingot", Quantity: base}, {Key: "treated_plank", Quantity: int64(tier + 1)}, {Key: monsterPart, Quantity: int64(tier)}}

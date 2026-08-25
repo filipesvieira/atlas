@@ -12,6 +12,7 @@ const (
 	ResourceCategoryCatalyst      ResourceCategory = "catalyst"
 	ResourceCategoryTrophy        ResourceCategory = "trophy"
 	ResourceCategoryScrap         ResourceCategory = "scrap"
+	ResourceCategoryConsumable    ResourceCategory = "consumable"
 )
 
 // ResourceDefinition define os atributos canônicos de um recurso coletável no jogo.

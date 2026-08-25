@@ -4,6 +4,8 @@ import { renderArcaneSpring } from './renderers/ArcaneSpringRenderer';
 import { renderHut } from './renderers/HutRenderer';
 import { renderWarehouse } from './renderers/WarehouseRenderer';
 import { renderWorkbench } from './renderers/WorkbenchRenderer';
+import { renderKitchen } from './renderers/KitchenRenderer';
+import { renderAlchemyBench } from './renderers/AlchemyBenchRenderer';
 
 type BuildingRenderer = (ctx: CanvasRenderingContext2D, renderCtx: BuildingRenderContext) => void;
 
@@ -16,6 +18,8 @@ class CampBuildingRegistryClass {
     this.register('adventurer_hut', renderHut);
     this.register('warehouse', renderWarehouse);
     this.register('workbench', renderWorkbench);
+    this.register('kitchen', renderKitchen);
+    this.register('alchemy_bench', renderAlchemyBench);
   }
 
   public register(buildingKey: string, renderer: BuildingRenderer) {

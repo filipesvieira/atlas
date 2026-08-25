@@ -9,21 +9,26 @@ export interface BuildingRenderContext {
   targetLevel?: number;
   discovered: boolean;
   isUnderConstruction: boolean;
-  constructionProgress: number; // 0 a 100
+  constructionProgress: number;
   x: number;
   y: number;
   scale: number;
-  time: number; // performance.now()
+  time: number;
   footprint: BuildingFootprint;
 }
 
 export interface CampBuildingSlotConfig {
   slotKey: string;
   buildingKey: string;
-  anchorX: number;
-  groundY: number;
   maxWidth: number;
   maxHeight: number;
-  sortY: number;
   baseScale: number;
+}
+
+export interface CampPlacementPreview {
+  slotKey: string;
+  tileX: number;
+  tileY: number;
+  rotation: number;
+  valid: boolean;
 }

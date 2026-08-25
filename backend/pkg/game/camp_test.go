@@ -2,11 +2,32 @@ package game
 
 import (
 	"testing"
+	"time"
 )
 
 func TestBuildingRegistryValidation(t *testing.T) {
 	if err := ValidateBuildingRegistry(); err != nil {
 		t.Fatalf("ValidateBuildingRegistry falhou: %v", err)
+	}
+}
+
+func TestBuildingProgressionDurations(t *testing.T) {
+	for _, key := range []string{"campfire", "kitchen", "alchemy_bench"} {
+		level, ok := GetBuildingLevelDefinition(key, 1)
+		if !ok || level.BuildDuration != 0 || level.BuildDurationSeconds != 0 {
+			t.Fatalf("%s deveria concluir o nível 1 imediatamente no onboarding", key)
+		}
+	}
+
+	for _, def := range ListBuildingDefinitions() {
+		levelTwo, ok := GetBuildingLevelDefinition(def.Key, 2)
+		if !ok || levelTwo.BuildDuration != 30*time.Minute || levelTwo.BuildDurationSeconds != 1800 {
+			t.Fatalf("%s deveria ter 30 minutos no nível 2", def.Key)
+		}
+		levelThree, ok := GetBuildingLevelDefinition(def.Key, 3)
+		if !ok || levelThree.BuildDuration != 4*time.Hour || levelThree.BuildDurationSeconds != 14400 {
+			t.Fatalf("%s deveria ter 4 horas no nível 3", def.Key)
+		}
 	}
 }
 
@@ -51,5 +72,17 @@ func TestCampBonusCalculator(t *testing.T) {
 	}
 	if wbBonuses.SalvageEfficiencyPercent != 15.0 {
 		t.Errorf("Esperada eficiência 15%% para Bancada Nv 2, recebido %.1f", wbBonuses.SalvageEfficiencyPercent)
+	}
+
+	// 4. Os registros são totais por nível, não incrementos acumuláveis.
+	levelThree := CalculateCampBonuses(map[string]BuildingSlot{
+		"center": {SlotKey: "center", BuildingKey: "campfire", Level: 3},
+		"west":   {SlotKey: "west", BuildingKey: "adventurer_hut", Level: 3},
+	})
+	if levelThree.HPRegenBonusPercent != 120 { // 85 da fogueira + 35 da cabana
+		t.Errorf("Esperado bônus total de HP 120%% no snapshot Nv 3, recebido %.1f", levelThree.HPRegenBonusPercent)
+	}
+	if levelThree.ManaRegenBonusPercent != 35 {
+		t.Errorf("Esperado bônus total de mana 35%% no snapshot Nv 3, recebido %.1f", levelThree.ManaRegenBonusPercent)
 	}
 }

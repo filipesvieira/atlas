@@ -27,7 +27,7 @@ var pioneerSeeds = []pioneerSeed{
 	{Key: "cida_suspicious_tea", Name: "Dona Cida do Chá Suspeito", Icon: "🌿", Title: "Agricultora & Joalheira", Traits: []string{"Mão boa para plantio", "Lapidação de joias finas"}, Skills: []string{"farmer", "jeweler"}},
 	{Key: "alencastro_forge", Name: "Mestre Alencastro", Icon: "⚒️", Title: "Minerador & Alfaiate", Traits: []string{"Conhece minério bruto", "Ponto e costura de armaduras"}, Skills: []string{"miner", "tailor"}},
 	{Key: "barnabe_wood", Name: "Seu Barnabé das Vigas", Icon: "🪵", Title: "Rastreador & Marceneiro", Traits: []string{"Entalhe perfeito de arcos", "Rastreia animais da mata"}, Skills: []string{"tracker", "woodworker"}},
-	{Key: "aurora_alchemy", Name: "Aurora dos Elixires", Icon: "🧪", Title: "Herbalista & Alquimista", Traits: []string{"Mente investigativa", "Destilação e elixires"}, Skills: []string{"herbalist", "alchemist"}},
+	{Key: "aurora_alchemy", Name: "Aurora dos Elixires", Icon: "🧪", Title: "Herbalista, Alquimista & Cozinheira", Traits: []string{"Mente investigativa", "Destilação, ervas e cozinha"}, Skills: []string{"herbalist", "alchemist", "cook"}},
 	{Key: "elena_gems", Name: "Dona Elena Pé-de-Trilha", Icon: "🐾", Title: "Pescadora & Rastreadora", Traits: []string{"Olhos de águia", "Coleta rápida de sustento"}, Skills: []string{"fisher", "tracker"}},
 }
 
@@ -163,7 +163,7 @@ func ensureSettlementRows(charID string) error {
 
 	allSkills := []string{
 		"lumberjack", "miner", "fisher", "farmer", "tracker", "herbalist",
-		"blacksmith", "jeweler", "leatherworker", "tailor", "woodworker", "alchemist",
+		"blacksmith", "jeweler", "leatherworker", "tailor", "woodworker", "alchemist", "cook",
 	}
 
 	for index := 0; index < arrivalCount; index++ {
@@ -283,11 +283,7 @@ func settlementHousingCapacityForLevel(level int) int {
 	if level > 3 {
 		level = 3
 	}
-	capacity := 4 + level*4
-	if capacity < game.SettlementPioneerCount {
-		capacity = game.SettlementPioneerCount
-	}
-	return capacity
+	return 7 + level*3
 }
 
 func settlementHousingCapacity(charID string) (int, error) {
@@ -307,9 +303,21 @@ func GetSettlementState(charID string) (*game.SettlementState, error) {
 		return nil, err
 	}
 	state := &game.SettlementState{Residents: []game.SettlementResident{}, Desires: []game.HeroDesire{}, Armory: []game.SettlementArmoryItem{}}
-	if err := DB.QueryRow(`SELECT id,name,stage_key,reputation,prosperity,revision FROM settlements WHERE character_id=$1`, charID).Scan(&state.ID, &state.Name, &state.StageKey, &state.Reputation, &state.Prosperity, &state.Revision); err != nil {
+	if err := DB.QueryRow(`
+		SELECT id,name,stage_key,reputation,prosperity,revision,
+		       treasury_balance,treasury_reserved_payroll,treasury_lifetime_income,
+		       treasury_lifetime_expenses,treasury_auto_fund_enabled,
+		       treasury_personal_gold_reserve,economy_version
+		FROM settlements WHERE character_id=$1`, charID).Scan(
+		&state.ID, &state.Name, &state.StageKey, &state.Reputation, &state.Prosperity, &state.Revision,
+		&state.Treasury.Balance, &state.Treasury.ReservedPayroll, &state.Treasury.LifetimeIncome,
+		&state.Treasury.LifetimeExpenses, &state.Treasury.AutoFundEnabled,
+		&state.Treasury.PersonalGoldReserve, &state.Treasury.EconomyVersion); err != nil {
 		return nil, err
 	}
+	state.Treasury.PayrollUnlocked = state.Prosperity >= game.SettlementPayrollUnlockProsperity
+	state.Treasury.UnlockProsperity = game.SettlementPayrollUnlockProsperity
+	state.Treasury.BaseHourlyWage = game.SettlementBaseHourlyWage
 	capacity, err := settlementHousingCapacity(charID)
 	if err != nil {
 		return nil, err
@@ -493,20 +501,29 @@ func CreateHeroDesire(charID, recipeKey, targetRarity, catalystKey string, maxAt
 		return nil, fmt.Errorf("request_id obrigatório ou muito longo")
 	}
 	recipe, exists := game.GetRecipeDefinition(recipeKey)
-	if !exists || recipe.Kind != game.RecipeKindEquipment {
-		return nil, fmt.Errorf("a ambição precisa apontar para uma receita de equipamento")
+	if !exists {
+		return nil, fmt.Errorf("receita de ambição não encontrada")
 	}
-	normalizedTarget, valid := game.NormalizeSettlementRarity(targetRarity)
-	if !valid {
-		return nil, fmt.Errorf("raridade desejada inválida")
-	}
-	targetRarity = normalizedTarget
-	maximum := recipe.MaximumRarity
-	if maximum == "" {
-		maximum = "Lendário"
-	}
-	if !game.RarityMeetsTarget(maximum, targetRarity) {
-		return nil, fmt.Errorf("%s não pode alcançar raridade %s", recipe.Name, targetRarity)
+	if recipe.Kind == game.RecipeKindEquipment {
+		normalizedTarget, valid := game.NormalizeSettlementRarity(targetRarity)
+		if !valid {
+			return nil, fmt.Errorf("raridade desejada inválida")
+		}
+		targetRarity = normalizedTarget
+		maximum := recipe.MaximumRarity
+		if maximum == "" {
+			maximum = "Lendário"
+		}
+		if !game.RarityMeetsTarget(maximum, targetRarity) {
+			return nil, fmt.Errorf("%s não pode alcançar raridade %s", recipe.Name, targetRarity)
+		}
+	} else {
+		// A coluna é obrigatória por compatibilidade com as migrations antigas,
+		// mas recursos processados, alimentos e poções não possuem raridade.
+		targetRarity = "Comum"
+		if catalystKey != "" {
+			return nil, fmt.Errorf("catalisadores só podem ser usados em equipamentos")
+		}
 	}
 	if catalystKey != "" && game.CatalystCost(catalystKey) == 0 {
 		return nil, fmt.Errorf("catalisador inválido")
@@ -645,7 +662,7 @@ func startNextHeroDesire(charID string, now time.Time) (*game.SettlementAutomati
 
 	type desireCandidate struct {
 		id, settlementID, recipeKey, recipeSnapshot, targetRarity, catalystKey, currentState, currentReason string
-		maxAttempts, attempts                                                                                int
+		maxAttempts, attempts                                                                               int
 	}
 
 	rows, err := tx.Query(`
@@ -692,7 +709,7 @@ func startNextHeroDesire(charID string, now time.Time) (*game.SettlementAutomati
 		if !exists {
 			recipe, exists = game.GetRecipeDefinition(recipeKey)
 		}
-		if !exists || recipe.Kind != game.RecipeKindEquipment {
+		if !exists || (recipe.Kind != game.RecipeKindEquipment && recipe.Kind != game.RecipeKindProcessing && recipe.Kind != game.RecipeKindConsumable) {
 			changed, _ := markDesireBlockedTx(tx, desireID, "Receita removida ou incompatível com produção automática")
 			if changed {
 				anyChanged = true
@@ -706,6 +723,12 @@ func startNextHeroDesire(charID string, now time.Time) (*game.SettlementAutomati
 			continue
 		}
 
+		// Mantém a mesma ordem de locks da Tesouraria/coleta antes de tocar o
+		// ouro pessoal e o morador selecionado.
+		var lockedSettlementID string
+		if err := tx.QueryRow(`SELECT id::text FROM settlements WHERE id=$1 FOR UPDATE`, settlementID).Scan(&lockedSettlementID); err != nil {
+			return nil, err
+		}
 		var gold int64
 		if err := tx.QueryRow(`SELECT gold_bank FROM characters WHERE id=$1 FOR UPDATE`, charID).Scan(&gold); err != nil {
 			return nil, err
@@ -913,17 +936,87 @@ func finalizeReadyHeroDesire(charID string, now time.Time) (*game.SettlementAuto
 	if err != nil {
 		return nil, err
 	}
-	item, rarity, err := game.GenerateCraftedItem(recipe, catalystKey, seed, residentProgress.Level, stationLevel)
-	if err != nil {
-		return nil, err
-	}
-	itemJSON, err := json.Marshal(item)
-	if err != nil {
-		return nil, err
-	}
 	attemptNumber := attempts + 1
-	if _, err := tx.Exec(`INSERT INTO settlement_armory(settlement_id,item,source_kind,reference_key) VALUES($1,$2,'hero_desire',$3) ON CONFLICT DO NOTHING`, settlementID, string(itemJSON), desireID); err != nil {
-		return nil, err
+	isEquipment := recipe.Kind == game.RecipeKindEquipment
+	var item *game.Item
+	rarity := ""
+	var outputResources []game.ResourceAmount
+	if isEquipment {
+		item, rarity, err = game.GenerateCraftedItem(recipe, catalystKey, seed, residentProgress.Level, stationLevel)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		if recipe.OutputResourceKey == "" || recipe.OutputQuantity <= 0 {
+			return nil, fmt.Errorf("receita %s não possui uma saída de recurso válida", recipeKey)
+		}
+		outputResources = []game.ResourceAmount{{Key: recipe.OutputResourceKey, Quantity: recipe.OutputQuantity}}
+	}
+
+	// Equipamentos seguem a regra original: a raridade desejada encerra a
+	// Ambição e os demais resultados ficam protegidos no Arsenal. Produções de
+	// recursos, alimentos e poções são unidades válidas da ordem e são
+	// entregues ao Depósito (ou preservadas como pendência se ele estiver cheio).
+	reachedTarget := isEquipment && game.RarityMeetsTarget(rarity, targetRarity)
+	deliveredToBackpack := false
+	var deliveredInventory *game.InventoryData
+	if isEquipment && reachedTarget {
+		// O inventário é travado antes do personagem, mesma ordem usada pelo
+		// fluxo de craft/resgate, para que slots e capacidade sejam avaliados
+		// contra o estado persistido mais recente.
+		lockedInventory, err := GetCharacterInventoryTx(tx, charID, true)
+		if err != nil {
+			return nil, err
+		}
+		lockedCharacter, err := scanLockedCharacter(tx.QueryRow(`SELECT `+characterSnapshotColumns+` FROM characters WHERE id=$1 FOR UPDATE`, charID))
+		if err != nil {
+			return nil, err
+		}
+		capacitySession := &game.GameSession{
+			Character:    characterToGame(lockedCharacter),
+			Inventory:    inventoryToGame(lockedInventory),
+			ActiveStance: lockedCharacter.ActiveStance,
+		}
+		if len(lockedInventory.Backpack) < capacitySession.GetMaxSlotCapacity() &&
+			capacitySession.GetTotalWeight()+item.Weight <= capacitySession.GetMaxWeightCapacity() {
+			lockedInventory.Backpack = append(lockedInventory.Backpack, *item)
+			if err := SaveCharacterInventoryTx(tx, charID, lockedInventory); err != nil {
+				return nil, err
+			}
+			deliveredToBackpack = true
+			deliveredInventory = game.CloneInventorySnapshot(inventoryToGame(lockedInventory))
+		}
+	}
+	if isEquipment && !deliveredToBackpack {
+		itemJSON, err := json.Marshal(item)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(`INSERT INTO settlement_armory(settlement_id,item,source_kind,reference_key) VALUES($1,$2,'hero_desire',$3) ON CONFLICT DO NOTHING`, settlementID, string(itemJSON), desireID); err != nil {
+			return nil, err
+		}
+	}
+	var resourceInventory game.ResourceInventorySnapshot
+	sentToPending := false
+	if !isEquipment {
+		capacity, err := campStorageCapacityTx(tx, charID)
+		if err != nil {
+			return nil, err
+		}
+		mutation, err := AddCharacterResourcesTx(tx, charID, outputResources, capacity)
+		if err != nil {
+			return nil, err
+		}
+		if len(mutation.Overflow) > 0 {
+			if err := storePendingResourcesTx(tx, charID, "hero_desire", desireID, mutation.Overflow); err != nil {
+				return nil, err
+			}
+			sentToPending = true
+		}
+		resourceInventory = mutation.Inventory
+		if err := recordResourceLedgerTx(tx, charID, fmt.Sprintf("desire:%s:%d:output", desireID, attemptNumber), "hero_desire_output", desireID, mutation.Accepted); err != nil {
+			return nil, err
+		}
 	}
 
 	rows, err := tx.Query(`SELECT resource_key,quantity FROM hero_desire_resource_reservations WHERE desire_id=$1 ORDER BY resource_key FOR UPDATE`, desireID)
@@ -958,7 +1051,18 @@ func finalizeReadyHeroDesire(charID string, now time.Time) (*game.SettlementAuto
 		return nil, err
 	}
 
-	result := &game.CraftResult{RequestID: fmt.Sprintf("desire:%s:%d", desireID, attemptNumber), RecipeKey: recipeKey, Item: item, Rarity: rarity, SentToArmory: true, ProfessionProgress: residentProgress}
+	result := &game.CraftResult{
+		RequestID:          fmt.Sprintf("desire:%s:%d", desireID, attemptNumber),
+		RecipeKey:          recipeKey,
+		Item:               item,
+		Resources:          outputResources,
+		Rarity:             rarity,
+		SentToPending:      sentToPending,
+		SentToArmory:       isEquipment && !deliveredToBackpack,
+		SentToBackpack:     deliveredToBackpack,
+		ProfessionProgress: residentProgress,
+		ResourceInventory:  resourceInventory,
+	}
 	resultJSON, err := json.Marshal(result)
 	if err != nil {
 		return nil, err
@@ -986,7 +1090,11 @@ func finalizeReadyHeroDesire(charID string, now time.Time) (*game.SettlementAuto
 
 	nextState := game.SettlementDesireQueued
 	blockedReason := ""
-	if game.RarityMeetsTarget(rarity, targetRarity) {
+	resultItemID := ""
+	if item != nil {
+		resultItemID = item.ID
+	}
+	if reachedTarget || (!isEquipment && attemptNumber >= maxAttempts) {
 		nextState = game.SettlementDesireCompleted
 	} else if attemptNumber >= maxAttempts {
 		nextState = game.SettlementDesireExhausted
@@ -996,7 +1104,7 @@ func finalizeReadyHeroDesire(charID string, now time.Time) (*game.SettlementAuto
 		UPDATE hero_desires
 		SET attempts_completed=$2,state=$3,blocked_reason=$4,result_item_id=$5,assigned_resident_id=NULL,
 		    current_order_started_at=NULL,current_order_ready_at=NULL,reserved_gold=0,revision=revision+1,updated_at=NOW()
-		WHERE id=$1`, desireID, attemptNumber, nextState, blockedReason, item.ID); err != nil {
+		WHERE id=$1`, desireID, attemptNumber, nextState, blockedReason, resultItemID); err != nil {
 		return nil, err
 	}
 	if _, err := tx.Exec(`UPDATE settlement_residents SET state='idle',updated_at=NOW() WHERE id=$1`, residentID); err != nil {
@@ -1011,11 +1119,35 @@ func finalizeReadyHeroDesire(charID string, now time.Time) (*game.SettlementAuto
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	logText := fmt.Sprintf("⚒️ %s concluiu %s (%s). O item está protegido no Arsenal.", residentName, recipe.Name, rarity)
-	if nextState == game.SettlementDesireQueued {
-		logText += fmt.Sprintf(" A raridade desejada é %s; a cidade tentará novamente quando houver recursos.", targetRarity)
+	logText := fmt.Sprintf("⚒️ %s concluiu %s.", residentName, recipe.Name)
+	if isEquipment && rarity != "" {
+		logText = fmt.Sprintf("⚒️ %s concluiu %s (%s).", residentName, recipe.Name, rarity)
 	}
-	return &game.SettlementAutomationResult{Changed: true, EventType: "HERO_DESIRE_ATTEMPT_COMPLETED", LogText: logText, CraftResult: result}, nil
+	if !isEquipment {
+		outputName := recipe.OutputResourceKey
+		if resource, ok := game.GetResourceDefinition(recipe.OutputResourceKey); ok && resource.Name != "" {
+			outputName = resource.Name
+		}
+		logText += fmt.Sprintf(" +%d %s foi entregue ao Depósito.", recipe.OutputQuantity, outputName)
+		if sentToPending {
+			logText += " O excedente foi preservado nas cargas pendentes por falta de espaço."
+		}
+	} else if deliveredToBackpack {
+		logText += " O item desejado foi enviado diretamente para a mochila."
+	} else if isEquipment {
+		logText += " O resultado está protegido no Arsenal."
+		if reachedTarget {
+			logText += " A mochila estava sem espaço ou capacidade suficiente."
+		}
+	}
+	if nextState == game.SettlementDesireQueued {
+		if isEquipment {
+			logText += fmt.Sprintf(" A raridade desejada é %s; a cidade tentará novamente quando houver recursos.", targetRarity)
+		} else {
+			logText += " A cidade continuará a produção até concluir a quantidade solicitada."
+		}
+	}
+	return &game.SettlementAutomationResult{Changed: true, EventType: "HERO_DESIRE_ATTEMPT_COMPLETED", LogText: logText, CraftResult: result, Inventory: deliveredInventory}, nil
 }
 
 func AdvanceHeroDesires(charID string, now time.Time) (*game.SettlementAutomationResult, error) {

@@ -3,21 +3,24 @@ import {
   getCampBackground,
   getChapolinBackground,
   getEsgotosBackground,
-  getForestBackground,
+  getForestArenaBackground,
   getFrozenBackground,
   getOrcRuinsBackground,
   getPlanaltoBackground,
   getRogartesBackground,
   getSherequeBackground,
+  renderForestArenaDynamic,
 } from '../renderers/biomes/BiomeRenderers';
 import { Registry } from './Registry';
 
 export type BiomeRenderer = (width: number, height: number) => HTMLCanvasElement;
+export type BiomeDynamicRenderer = (ctx: CanvasRenderingContext2D, width: number, height: number, time: number) => void;
 
 export interface BiomeDefinition {
   key: string;
   aliases?: readonly string[];
   render: BiomeRenderer;
+  renderDynamic?: BiomeDynamicRenderer;
 }
 
 class GameBiomeRegistry extends Registry<BiomeDefinition> {
@@ -25,6 +28,10 @@ class GameBiomeRegistry extends Registry<BiomeDefinition> {
     const definition = this.get(biomeKey) ?? this.get('forest');
     if (!definition) throw new Error('BiomeRegistry: biome padrão forest não registrado');
     return definition.render(width, height);
+  }
+
+  public renderDynamic(biomeKey: string, ctx: CanvasRenderingContext2D, width: number, height: number, time: number): void {
+    this.get(biomeKey)?.renderDynamic?.(ctx, width, height, time);
   }
 }
 
@@ -34,7 +41,7 @@ class GameBiomeRegistry extends Registry<BiomeDefinition> {
  */
 export const biomeRegistry = new GameBiomeRegistry().registerAll([
   { key: 'camp', aliases: ['campamento', 'acampamento'], render: getCampBackground },
-  { key: 'forest', render: getForestBackground },
+  { key: 'forest', render: getForestArenaBackground, renderDynamic: renderForestArenaDynamic },
   { key: 'shereque', render: getSherequeBackground },
   { key: 'chapolin', render: getChapolinBackground },
   { key: 'orcruins', render: getOrcRuinsBackground },

@@ -29,13 +29,15 @@ var economyCommandLimiter = struct {
 
 func economyCommandLimit(action string) (int, time.Duration, bool) {
 	switch action {
+	case "MOVE_HERO":
+		return 20, time.Second, true
 	case "REQUEST_CRAFT_PREVIEW":
 		return 20, time.Second, true
 	case "REQUEST_ECONOMY_SYNC":
 		return 10, time.Second, true
 	case "CRAFT_ITEM":
 		return 50, 2 * time.Second, true
-	case "START_GATHERING", "CANCEL_GATHERING", "CLAIM_GATHERING_REWARDS", "CLAIM_PENDING_CRAFT", "CLAIM_PENDING_RESOURCES", "CREATE_HERO_DESIRE", "CANCEL_HERO_DESIRE", "CLAIM_ARMORY_ITEM":
+	case "START_GATHERING", "CANCEL_GATHERING", "CLAIM_GATHERING_REWARDS", "CLAIM_PENDING_CRAFT", "CLAIM_PENDING_RESOURCES", "CREATE_HERO_DESIRE", "CANCEL_HERO_DESIRE", "CLAIM_ARMORY_ITEM", "TRANSFER_TREASURY_GOLD", "UPDATE_TREASURY_POLICY", "MOVE_CAMP_BUILDING", "CONSUME_FOOD":
 		return 10, 2 * time.Second, true
 	default:
 		return 0, 0, false
@@ -75,40 +77,46 @@ func allowEconomyCommand(charID, action string, now time.Time) bool {
 }
 
 var commandHandlers = map[string]CommandHandler{
-	"TOGGLE_EXPEDITION":         handleToggleExpedition,
-	"EQUIP_ITEM":                handleEquipItem,
-	"UNEQUIP_ITEM":              handleUnequipItem,
-	"CHANGE_REGION":             handleChangeRegion,
-	"SET_STANCE":                handleSetStance,
-	"DISCARD_ITEM":              handleDiscardItem,
-	"TOGGLE_SKILL":              handleToggleSkill,
-	"ALLOCATE_STAT":             handleAllocateStat,
-	"CHOOSE_STARTER_PACK":       handleChooseStarterPack,
-	"BULK_SELL":                 handleBulkSell,
-	"SET_AUTO_RESUME":           handleSetAutoResume,
-	"START_BUILDING_UPGRADE":    handleStartBuildingUpgrade,
-	"DISCARD_RESOURCE":          handleDiscardResource,
-	"SALVAGE_PREVIEW":           handleSalvagePreview,
-	"SALVAGE_ITEM":              handleSalvageItem,
-	"LEARN_BUILDING_BLUEPRINT":  handleLearnBuildingBlueprint,
-	"SALVAGE_BATCH":             handleSalvageBatch,
-	"UPDATE_AUTO_SELL_SETTINGS": handleUpdateAutoSellSettings,
-	"REQUEST_AUTO_SELL_PREVIEW": handleRequestAutoSellPreview,
-	"CLAIM_OVERFLOW_ITEM":       handleClaimOverflowItem,
-	"SELL_OVERFLOW_ITEM":        handleSellOverflowItem,
-	"SELL_ALL_OVERFLOW":         handleSellAllOverflow,
-	"REQUEST_STATE_SYNC":        handleRequestStateSync,
-	"START_GATHERING":           handleStartGathering,
-	"CANCEL_GATHERING":          handleCancelGathering,
-	"CLAIM_GATHERING_REWARDS":   handleClaimGathering,
-	"REQUEST_CRAFT_PREVIEW":     handleCraftPreview,
-	"CRAFT_ITEM":                handleCraftItem,
-	"REQUEST_ECONOMY_SYNC":      handleEconomySync,
-	"CLAIM_PENDING_CRAFT":       handleClaimPendingCraft,
-	"CLAIM_PENDING_RESOURCES":   handleClaimPendingResources,
-	"CREATE_HERO_DESIRE":        handleCreateHeroDesire,
-	"CANCEL_HERO_DESIRE":        handleCancelHeroDesire,
-	"CLAIM_ARMORY_ITEM":         handleClaimArmoryItem,
+	"TOGGLE_EXPEDITION":           handleToggleExpedition,
+	"MOVE_HERO":                   handleMoveHero,
+	"EQUIP_ITEM":                  handleEquipItem,
+	"UNEQUIP_ITEM":                handleUnequipItem,
+	"CHANGE_REGION":               handleChangeRegion,
+	"SET_STANCE":                  handleSetStance,
+	"DISCARD_ITEM":                handleDiscardItem,
+	"TOGGLE_SKILL":                handleToggleSkill,
+	"ALLOCATE_STAT":               handleAllocateStat,
+	"CHOOSE_STARTER_PACK":         handleChooseStarterPack,
+	"BULK_SELL":                   handleBulkSell,
+	"SET_AUTO_RESUME":             handleSetAutoResume,
+	"START_BUILDING_UPGRADE":      handleStartBuildingUpgrade,
+	"MOVE_CAMP_BUILDING":          handleMoveCampBuilding,
+	"DISCARD_RESOURCE":            handleDiscardResource,
+	"SALVAGE_PREVIEW":             handleSalvagePreview,
+	"SALVAGE_ITEM":                handleSalvageItem,
+	"LEARN_BUILDING_BLUEPRINT":    handleLearnBuildingBlueprint,
+	"SALVAGE_BATCH":               handleSalvageBatch,
+	"UPDATE_AUTO_SELL_SETTINGS":   handleUpdateAutoSellSettings,
+	"UPDATE_AUTO_POTION_SETTINGS": handleUpdateAutoPotionSettings,
+	"REQUEST_AUTO_SELL_PREVIEW":   handleRequestAutoSellPreview,
+	"CLAIM_OVERFLOW_ITEM":         handleClaimOverflowItem,
+	"SELL_OVERFLOW_ITEM":          handleSellOverflowItem,
+	"SELL_ALL_OVERFLOW":           handleSellAllOverflow,
+	"REQUEST_STATE_SYNC":          handleRequestStateSync,
+	"START_GATHERING":             handleStartGathering,
+	"CANCEL_GATHERING":            handleCancelGathering,
+	"CLAIM_GATHERING_REWARDS":     handleClaimGathering,
+	"REQUEST_CRAFT_PREVIEW":       handleCraftPreview,
+	"CRAFT_ITEM":                  handleCraftItem,
+	"REQUEST_ECONOMY_SYNC":        handleEconomySync,
+	"CLAIM_PENDING_CRAFT":         handleClaimPendingCraft,
+	"CLAIM_PENDING_RESOURCES":     handleClaimPendingResources,
+	"CREATE_HERO_DESIRE":          handleCreateHeroDesire,
+	"CANCEL_HERO_DESIRE":          handleCancelHeroDesire,
+	"CLAIM_ARMORY_ITEM":           handleClaimArmoryItem,
+	"TRANSFER_TREASURY_GOLD":      handleTransferTreasuryGold,
+	"UPDATE_TREASURY_POLICY":      handleUpdateTreasuryPolicy,
+	"CONSUME_FOOD":                handleConsumeFood,
 }
 
 // DispatchCommand executa o handler apropriado para a ação recebida.
@@ -121,7 +129,7 @@ func DispatchCommand(ctx *CommandContext) error {
 		log.Printf("⚠️ Ação WebSocket desconhecida ou não registrada: %s (char: %s)", ctx.Action.Action, ctx.CharID)
 		return nil
 	}
-	if len(ctx.Action.RequestID) > 100 || len(ctx.Action.ExpeditionKey) > 80 || len(ctx.Action.RecipeKey) > 160 || len(ctx.Action.CatalystKey) > 80 || len(ctx.Action.ActivityID) > 64 || len(ctx.Action.DesireID) > 64 || len(ctx.Action.ArmoryID) > 64 || len(ctx.Action.TargetRarity) > 30 || len(ctx.Action.ItemIDs) > 1000 {
+	if len(ctx.Action.RequestID) > 100 || len(ctx.Action.ExpeditionKey) > 80 || len(ctx.Action.RecipeKey) > 160 || len(ctx.Action.CatalystKey) > 80 || len(ctx.Action.ActivityID) > 64 || len(ctx.Action.DesireID) > 64 || len(ctx.Action.ArmoryID) > 64 || len(ctx.Action.TargetRarity) > 30 || len(ctx.Action.Direction) > 16 || len(ctx.Action.SlotKey) > 40 || len(ctx.Action.BuildingKey) > 80 || len(ctx.Action.ResourceKey) > 80 || len(ctx.Action.ItemIDs) > 1000 {
 		return sendEconomyError(ctx, fmt.Errorf("payload econômico excede os limites permitidos"))
 	}
 	if !allowEconomyCommand(ctx.CharID, ctx.Action.Action, time.Now().UTC()) {
@@ -132,6 +140,14 @@ func DispatchCommand(ctx *CommandContext) error {
 
 func handleToggleExpedition(ctx *CommandContext) error {
 	ctx.Session.ToggleExpedition()
+	return nil
+}
+
+func handleMoveHero(ctx *CommandContext) error {
+	// A velocidade é calculada dentro do lock da sessão para que o comando
+	// manual use exatamente os bônus de equipamento vigentes e publique a nova
+	// posição sem esperar o próximo tick de combate.
+	ctx.Session.ApplyManualMovement(ctx.Action.Direction, ctx.Action.Pressed, 0, ctx.Action.RequestID)
 	return nil
 }
 
@@ -189,18 +205,36 @@ func handleSetAutoResume(ctx *CommandContext) error {
 	return nil
 }
 
+func handleMoveCampBuilding(ctx *CommandContext) error {
+	updatedCamp, err := db.MoveCampBuilding(ctx.AccountID, ctx.CharID, ctx.Action.SlotKey, ctx.Action.TileX, ctx.Action.TileY, ctx.Action.Rotation, ctx.Action.ExpectedRevision)
+	if err != nil {
+		ctx.Session.SendMessage(game.CombatMessage{Type: "CAMP_LAYOUT_ERROR", Timestamp: time.Now().Format("15:04:05"), LogText: fmt.Sprintf("❌ Não foi possível mover a construção: %v", err)})
+		return err
+	}
+	ctx.Session.Mu.Lock()
+	ctx.Session.Camp = updatedCamp
+	ctx.Session.SendMessageLocked(game.CombatMessage{Type: "CAMP_LAYOUT_UPDATED", Timestamp: time.Now().Format("15:04:05"), Camp: game.CloneCampSnapshot(updatedCamp), LogText: "🏘️ Layout do assentamento atualizado."})
+	ctx.Session.Mu.Unlock()
+	return nil
+}
+
 func handleStartBuildingUpgrade(ctx *CommandContext) error {
 	ctx.Session.Mu.Lock()
 	defer ctx.Session.Mu.Unlock()
 	slotKey := ctx.Action.SlotKey
 	buildingKey := ctx.Action.BuildingKey
 	if slotKey == "" && buildingKey != "" {
-		if bDef, ok := game.GetBuildingDefinition(buildingKey); ok {
-			slotKey = bDef.SlotType
-		}
+		slotKey = game.CampBuildingInstanceKey(buildingKey)
 	}
 	if buildingKey == "" && slotKey != "" {
-		buildingKey = game.SlotToBuildingMap[slotKey]
+		if ctx.Session.Camp != nil {
+			if slot, ok := ctx.Session.Camp.Buildings[slotKey]; ok {
+				buildingKey = slot.BuildingKey
+			}
+		}
+		if buildingKey == "" {
+			buildingKey = game.SlotToBuildingMap[slotKey] // compatibilidade com clientes antigos
+		}
 	}
 	updatedCamp, err := db.StartBuildingUpgrade(ctx.AccountID, ctx.CharID, slotKey, buildingKey)
 	if err != nil {
@@ -245,7 +279,7 @@ func handleStartBuildingUpgrade(ctx *CommandContext) error {
 	}
 	logText := fmt.Sprintf("🔨 Melhoria de %s para o nível %d iniciada com sucesso!", buildingName, targetLevel)
 	if completedImmediately {
-		logText = fmt.Sprintf("🔨 Melhoria de %s para o nível %d concluída instantaneamente no modo QA!", buildingName, targetLevel)
+		logText = fmt.Sprintf("🔨 Melhoria de %s para o nível %d concluída imediatamente!", buildingName, targetLevel)
 	}
 	ctx.Session.SendMessageLocked(game.CombatMessage{
 		Type:              "BUILDING_UPGRADE_STARTED",
@@ -441,6 +475,13 @@ func handleUpdateAutoSellSettings(ctx *CommandContext) error {
 	return nil
 }
 
+func handleUpdateAutoPotionSettings(ctx *CommandContext) error {
+	if ctx.Action.AutoPotionSettings != nil {
+		ctx.Session.UpdateAutoPotionSettings(*ctx.Action.AutoPotionSettings)
+	}
+	return nil
+}
+
 func handleRequestAutoSellPreview(ctx *CommandContext) error {
 	if ctx.Action.AutoSellSettings != nil {
 		ctx.Session.RequestAutoSellPreview(*ctx.Action.AutoSellSettings)
@@ -487,7 +528,22 @@ func handleStartGathering(ctx *CommandContext) error {
 	if economyErr != nil {
 		log.Printf("erro ao sincronizar economia após iniciar coleta do personagem %s: %v", ctx.CharID, economyErr)
 	}
-	ctx.Session.SendMessage(game.CombatMessage{Type: "GATHERING_STARTED", RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"), Economy: economy, LogText: fmt.Sprintf("🧭 %s foi enviado para a coleta. Retorno em %s; a caçada do herói continua normalmente.", activity.ResidentName, activity.EndsAt.Local().Format("15:04"))})
+	if updatedCharacter, loadErr := db.GetCharacterByID(ctx.CharID); loadErr == nil {
+		ctx.Session.Mu.Lock()
+		ctx.Session.Character.GoldBank = updatedCharacter.GoldBank
+		ctx.Session.Character.StateRevision = updatedCharacter.StateRevision
+		ctx.Session.Mu.Unlock()
+	}
+	ctx.Session.Mu.Lock()
+	characterSnapshot := game.CloneCharacterSnapshot(ctx.Session.Character)
+	ctx.Session.Mu.Unlock()
+	logText := fmt.Sprintf("🧭 %s foi enviado para a coleta. Retorno em %s; a caçada do herói continua normalmente.", activity.ResidentName, activity.EndsAt.Local().Format("15:04"))
+	if activity.WageReserved > 0 {
+		logText += fmt.Sprintf(" Salário reservado automaticamente: %d ouro.", activity.WageReserved)
+	} else {
+		logText += " A folha ainda é subsidiada durante a formação do acampamento."
+	}
+	ctx.Session.SendMessage(game.CombatMessage{Type: "GATHERING_STARTED", RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"), Character: characterSnapshot, Economy: economy, LogText: logText})
 	return nil
 }
 
@@ -501,6 +557,9 @@ func handleCancelGathering(ctx *CommandContext) error {
 		log.Printf("erro ao sincronizar economia após cancelar coleta do personagem %s: %v", ctx.CharID, economyErr)
 	}
 	logText := fmt.Sprintf("🛑 Coleta cancelada: %d ciclos completos preservados e +%d XP de profissão.", result.CompletedCycles, result.ProfessionXP)
+	if result.WagePaid > 0 || result.WageRefunded > 0 {
+		logText += fmt.Sprintf(" Folha: %d ouro pago e %d devolvido à Tesouraria.", result.WagePaid, result.WageRefunded)
+	}
 	if len(result.Pending) > 0 {
 		logText += " Parte dos recursos aguarda espaço no depósito."
 	}
@@ -534,10 +593,62 @@ func handleClaimGathering(ctx *CommandContext) error {
 		}
 	}
 	logText := fmt.Sprintf("📦 Coleta concluída: %d ciclos e +%d XP de profissão.", result.CompletedCycles, result.ProfessionXP)
+	if result.WagePaid > 0 {
+		logText += fmt.Sprintf(" Salário liquidado automaticamente: %d ouro.", result.WagePaid)
+	}
 	if len(result.Pending) > 0 {
 		logText += " Parte dos recursos ficou pendente por falta de espaço."
 	}
 	ctx.Session.SendMessageLocked(game.CombatMessage{Type: "GATHERING_CLAIMED", RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"), Economy: economy, GatheringResult: result, ResourceInventory: snapshot, Camp: game.CloneCampSnapshot(ctx.Session.Camp), LogText: logText})
+	return nil
+}
+
+func handleTransferTreasuryGold(ctx *CommandContext) error {
+	settlement, heroGold, err := db.TransferSettlementGold(ctx.CharID, ctx.Action.Direction, ctx.Action.Quantity, ctx.Action.RequestID)
+	if err != nil {
+		return sendEconomyError(ctx, err)
+	}
+	updatedCharacter, loadErr := db.GetCharacterByID(ctx.CharID)
+	ctx.Session.Mu.Lock()
+	ctx.Session.Character.GoldBank = heroGold
+	if loadErr == nil {
+		ctx.Session.Character.GoldBank = updatedCharacter.GoldBank
+		ctx.Session.Character.StateRevision = updatedCharacter.StateRevision
+	}
+	character := game.CloneCharacterSnapshot(ctx.Session.Character)
+	ctx.Session.Mu.Unlock()
+	economy, err := db.GetCharacterEconomyState(ctx.CharID)
+	if err != nil {
+		return sendEconomyError(ctx, err)
+	}
+	if economy != nil {
+		economy.Settlement = settlement
+	}
+	actionText := "depositado na"
+	if ctx.Action.Direction == "withdraw" {
+		actionText = "retirado da"
+	}
+	ctx.Session.SendMessage(game.CombatMessage{Type: "TREASURY_UPDATED", RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"), Character: character, Economy: economy, LogText: fmt.Sprintf("🏦 %d ouro %s Tesouraria.", ctx.Action.Quantity, actionText)})
+	return nil
+}
+
+func handleUpdateTreasuryPolicy(ctx *CommandContext) error {
+	settlement, err := db.UpdateSettlementTreasuryPolicy(ctx.CharID, ctx.Action.Enabled, ctx.Action.PersonalReserve, ctx.Action.RequestID)
+	if err != nil {
+		return sendEconomyError(ctx, err)
+	}
+	economy, err := db.GetCharacterEconomyState(ctx.CharID)
+	if err != nil {
+		return sendEconomyError(ctx, err)
+	}
+	if economy != nil {
+		economy.Settlement = settlement
+	}
+	status := "desabilitado"
+	if ctx.Action.Enabled {
+		status = "habilitado"
+	}
+	ctx.Session.SendMessage(game.CombatMessage{Type: "TREASURY_POLICY_UPDATED", RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"), Economy: economy, LogText: fmt.Sprintf("🏦 Financiamento automático %s; reserva pessoal definida em %d ouro.", status, ctx.Action.PersonalReserve)})
 	return nil
 }
 
@@ -624,6 +735,46 @@ func handleCraftItem(ctx *CommandContext) error {
 		logText += " O restante não foi produzido: " + batch.StopReason + "."
 	}
 	ctx.Session.SendMessageLocked(game.CombatMessage{Type: eventType, RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"), Character: game.CloneCharacterSnapshot(ctx.Session.Character), Inventory: game.CloneInventorySnapshot(ctx.Session.Inventory), Economy: economy, CraftResult: result, CraftBatchResult: batch, ResourceInventory: resourceInventory, LogText: logText})
+	return nil
+}
+
+func handleConsumeFood(ctx *CommandContext) error {
+	result, err := db.ConsumeCharacterConsumable(ctx.AccountID, ctx.CharID, ctx.Action.ResourceKey, ctx.Action.RequestID, ctx.Action.ExpectedRevision)
+	if err != nil {
+		return sendEconomyError(ctx, err)
+	}
+	economy, err := db.GetCharacterEconomyState(ctx.CharID)
+	if err != nil {
+		return sendEconomyError(ctx, err)
+	}
+
+	ctx.Session.Mu.Lock()
+	ctx.Session.ActiveBuffs = append([]game.ActiveBuff(nil), economy.ActiveBuffs...)
+	ctx.Session.Resources = map[string]int64{}
+	for _, resource := range result.ResourceInventory.Items {
+		ctx.Session.Resources[resource.Key] = resource.Quantity
+	}
+	if ctx.Session.Camp != nil {
+		ctx.Session.Camp.StorageUsed = result.ResourceInventory.StorageUsed
+		ctx.Session.Camp.StorageCapacity = result.ResourceInventory.StorageCapacity
+		ctx.Session.Camp.StateRevision = result.ResourceInventory.Revision
+	}
+	stats := ctx.Session.CalculateDerivedStats()
+	consumableIcon := "🍽️"
+	if result.ActiveBuff.Category == game.BuffCategoryPotion {
+		consumableIcon = "🧪"
+	}
+	logText := fmt.Sprintf("%s %s consumido: efeito ativo até %s.", consumableIcon, result.ActiveBuff.SourceName, result.ActiveBuff.ExpiresAt.Local().Format("02/01 15:04"))
+	if result.ReplacedBuff != nil {
+		logText = fmt.Sprintf("%s %s substituiu %s. Novo efeito ativo até %s.", consumableIcon, result.ActiveBuff.SourceName, result.ReplacedBuff.SourceName, result.ActiveBuff.ExpiresAt.Local().Format("02/01 15:04"))
+	}
+	ctx.Session.SendMessageLocked(game.CombatMessage{
+		Type: "CONSUMABLE_USED", RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"),
+		Character: game.CloneCharacterSnapshot(ctx.Session.Character), Economy: economy, ConsumeResult: result,
+		ResourceInventory: &result.ResourceInventory, Camp: game.CloneCampSnapshot(ctx.Session.Camp),
+		TotalAttack: stats.TotalAttack, TotalDefense: stats.TotalDefense, DerivedStats: stats, LogText: logText,
+	})
+	ctx.Session.Mu.Unlock()
 	return nil
 }
 
@@ -719,11 +870,14 @@ func handleCreateHeroDesire(ctx *CommandContext) error {
 	if err != nil {
 		return sendEconomyError(ctx, err)
 	}
+	ctx.Session.Mu.Lock()
+	inventorySnapshot := game.CloneInventorySnapshot(ctx.Session.Inventory)
+	ctx.Session.Mu.Unlock()
 	logText := "👑 Nova Ambição registrada. Os moradores organizarão materiais, artesão e tempo de produção automaticamente."
 	if automation != nil && automation.LogText != "" {
 		logText += " " + automation.LogText
 	}
-	ctx.Session.SendMessage(game.CombatMessage{Type: "HERO_DESIRE_CREATED", RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"), Economy: economy, LogText: logText})
+	ctx.Session.SendMessage(game.CombatMessage{Type: "HERO_DESIRE_CREATED", RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"), Inventory: inventorySnapshot, Economy: economy, LogText: logText})
 	return nil
 }
 
@@ -779,5 +933,8 @@ func applySettlementAutomationUpdate(session *game.GameSession, update *game.Set
 			session.Camp.StorageCapacity = update.ResourceInventory.StorageCapacity
 			session.Camp.StateRevision = update.ResourceInventory.Revision
 		}
+	}
+	if update.Inventory != nil && (session.Inventory == nil || update.Inventory.Revision >= session.Inventory.Revision) {
+		session.Inventory = game.CloneInventorySnapshot(update.Inventory)
 	}
 }

@@ -1,6 +1,7 @@
 package game
 
 import (
+	"math/rand"
 	"testing"
 )
 
@@ -93,6 +94,95 @@ func TestCalculateDerivedStats_AttackSpeedScaling(t *testing.T) {
 	}
 }
 
+func TestCalculateDerivedStats_DPSUsesRealAttackInterval(t *testing.T) {
+	char := &CharacterData{Level: 1, DEX: 5, INT: 5}
+	inv := &InventoryData{Equipment: EquipmentSlots{
+		MainHand: &Item{WeaponType: "wand", Hands: 1, MagicAttack: 20},
+	}}
+
+	stats := CalculateDerivedStats(char, inv, "balanced")
+
+	// A varinha causa 21 de ataque, ataca a cada 1,99s e tem ~5,41% de
+	// crítico. O DPS esperado arredonda para 11. O antigo multiplicador de
+	// arquétipo produziria 14 e não correspondia ao cooldown real.
+	if stats.CurrentDPS != 11 {
+		t.Fatalf("DPS de varinha deveria refletir o intervalo real de ataque: esperado 11, obtido %d (stats=%+v)", stats.CurrentDPS, stats)
+	}
+}
+
+func TestCalculateDerivedStats_MovementSpeedComesOnlyFromBoots(t *testing.T) {
+	char := &CharacterData{Level: 1, STR: 5, DEX: 5, INT: 5, VIT: 5}
+
+	withoutBoots := CalculateDerivedStats(char, &InventoryData{Equipment: EquipmentSlots{}}, "balanced")
+	if withoutBoots.MovementSpeedMultiplier != BaseHeroMovementSpeedMultiplier {
+		t.Fatalf("velocidade base esperada %.2f, obtida %.2f", BaseHeroMovementSpeedMultiplier, withoutBoots.MovementSpeedMultiplier)
+	}
+
+	// Um bônus acidental em arma não pode alterar deslocamento.
+	withWeaponOnly := CalculateDerivedStats(char, &InventoryData{Equipment: EquipmentSlots{
+		MainHand: &Item{MovementSpeedBonus: 50},
+	}}, "balanced")
+	if withWeaponOnly.MovementSpeedMultiplier != BaseHeroMovementSpeedMultiplier {
+		t.Fatalf("bônus fora das botas alterou movimento: %.2f", withWeaponOnly.MovementSpeedMultiplier)
+	}
+
+	withBoots := CalculateDerivedStats(char, &InventoryData{Equipment: EquipmentSlots{
+		Boots: &Item{MovementSpeedBonus: 12.5},
+	}}, "balanced")
+	expectedBootSpeed := BaseHeroMovementSpeedMultiplier + .125
+	if withBoots.MovementSpeedMultiplier < expectedBootSpeed-.001 || withBoots.MovementSpeedMultiplier > expectedBootSpeed+.001 {
+		t.Fatalf("bônus das botas deveria resultar em %.3fx, obtido %.3f", expectedBootSpeed, withBoots.MovementSpeedMultiplier)
+	}
+
+	legacyBoots := CalculateDerivedStats(char, &InventoryData{Equipment: EquipmentSlots{
+		Boots: &Item{TemplateKey: "botas_de_couro", Rarity: "Raro"},
+	}}, "balanced")
+	expectedLegacyBootSpeed := BaseHeroMovementSpeedMultiplier + .165
+	if legacyBoots.MovementSpeedMultiplier < expectedLegacyBootSpeed-.001 || legacyBoots.MovementSpeedMultiplier > expectedLegacyBootSpeed+.001 {
+		t.Fatalf("bota legada deveria resultar em %.3fx, obtido %.3f", expectedLegacyBootSpeed, legacyBoots.MovementSpeedMultiplier)
+	}
+
+	generatedBoots := GenerateItemFromTemplate("Sandálias Ágeis", "Comum", rand.New(rand.NewSource(7)))
+	if generatedBoots == nil || generatedBoots.MovementSpeedBonus != 8.0 {
+		t.Fatalf("template das sandálias deveria gerar +8%% movimento, obtido %+v", generatedBoots)
+	}
+}
+
+func TestAllBootTemplatesHaveTierScaledMovementBonus(t *testing.T) {
+	expected := map[string]struct {
+		tier  int
+		level int
+		bonus float64
+	}{
+		"sandalias_ageis":     {tier: 1, level: 1, bonus: 8},
+		"botas_de_couro":      {tier: 2, level: 8, bonus: 10},
+		"coturno_da_lei":      {tier: 2, level: 8, bonus: 8},
+		"botas_de_ferro":      {tier: 3, level: 15, bonus: 9},
+		"botas_de_aco_runico": {tier: 4, level: 25, bonus: 14},
+		"botas_celestiais":    {tier: 5, level: 40, bonus: 20},
+	}
+
+	bootCount := 0
+	for _, template := range ItemRegistry.List() {
+		if template.Slot != SlotBoots {
+			continue
+		}
+		bootCount++
+		expectation, ok := expected[template.Key]
+		if !ok {
+			t.Errorf("bota %q não possui regra de progressão registrada", template.Key)
+			continue
+		}
+		if template.Tier != expectation.tier || template.RequiredLevel != expectation.level || template.BaseMovementSpeedBonus != expectation.bonus {
+			t.Errorf("bota %s: esperado tier %d nível %d bônus %.1f%%, obtido tier %d nível %d bônus %.1f%%", template.Key, expectation.tier, expectation.level, expectation.bonus, template.Tier, template.RequiredLevel, template.BaseMovementSpeedBonus)
+		}
+	}
+
+	if bootCount != len(expected) {
+		t.Fatalf("catálogo possui %d botas, mas eram esperadas %d", bootCount, len(expected))
+	}
+}
+
 func TestMonster_AttackSpeedInitialization(t *testing.T) {
 	// 1. Testa que GetRandomMonsterForRegion retorna monstro com AttackSpeedSeconds de 2.5s
 	mob := GetRandomMonsterForRegion("forest", nil)
@@ -113,5 +203,3 @@ func TestMonster_AttackSpeedInitialization(t *testing.T) {
 		}
 	}
 }
-
-

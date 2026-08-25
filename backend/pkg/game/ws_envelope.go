@@ -50,6 +50,7 @@ func GetEventCategory(msgType string) EventCategory {
 		"BLUEPRINT_LEARNED",
 		"BUILDING_UPGRADE_STARTED",
 		"BUILDING_UPGRADE_COMPLETED",
+		"CAMP_LAYOUT_UPDATED",
 		"RESOURCE_DISCARDED",
 		"DISCOVERY_EVENT",
 		"OVERFLOW_ITEM_CLAIMED",
@@ -73,7 +74,8 @@ func GetEventCategory(msgType string) EventCategory {
 		"STANCE_UPDATE",
 		"EXPEDITION_STATUS",
 		"AUTO_SELL_PREVIEW",
-		"STAGE_ADVANCE":
+		"STAGE_ADVANCE",
+		"HERO_MOVEMENT":
 		return EventCategoryState
 
 	case "COMBAT_EVENT",

@@ -2,29 +2,30 @@ import { useState, useEffect } from 'react';
 import { GameCanvas } from '../Viewport/GameCanvas';
 import { TibiaEquipmentGrid } from '../Inventory/TibiaEquipmentGrid';
 import { ExpeditionRegionSelector } from '../Expedition/ExpeditionRegionSelector';
-import { TacticalStanceSelector } from '../Expedition/TacticalStanceSelector';
 import { SkillBar } from '../Skills/SkillBar';
-import { CombatStylesHelpModal } from '../Onboarding/CombatStylesHelpModal';
 import { CampManagementModal } from '../Camp/CampManagementModal';
 import { ResourceDepotModal } from '../Camp/ResourceDepotModal';
 import { SkinSelectionModal } from '../Skins/SkinSelectionModal';
 import { SkinRegistryService } from '../../game/registries/SkinRegistry';
+import { PixelItemSprite } from '../../game/registries/PixelArtItemRegistry';
 import { useGameSocket } from '../../hooks/useGameSocket';
 import { useGameCatalog } from '../../hooks/useGameCatalog';
 import { EconomyHubModal } from '../Economy/EconomyHubModal';
+import type { ImportantNotification } from '../../types/notifications';
 
 interface DashboardGridProps {
   token: string;
   character: any;
   onCharacterUpdate?: (char: any) => void;
+  onImportantNotification?: (notification: ImportantNotification) => void;
 }
 
-export function DashboardGrid({ token, character: initialChar, onCharacterUpdate }: DashboardGridProps) {
-  const [isCombatHelpOpen, setIsCombatHelpOpen] = useState(false);
+export function DashboardGrid({ token, character: initialChar, onCharacterUpdate, onImportantNotification }: DashboardGridProps) {
   const [isDepotOpen, setIsDepotOpen] = useState(false);
   const [isCampModalOpen, setIsCampModalOpen] = useState(false);
   const [isSkinModalOpen, setIsSkinModalOpen] = useState(false);
   const [isEconomyOpen, setIsEconomyOpen] = useState(false);
+  const [showAdvancedStats, setShowAdvancedStats] = useState(false);
   const { catalog } = useGameCatalog();
 
   const {
@@ -36,7 +37,10 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
     skillCooldowns,
     inventory,
     discoveredLoot,
+		autoPotionSettings,
+		autoPotionState,
     economy,
+    activeBuffs,
     craftPreview,
     lastCraftBatchResult,
     totalAttack,
@@ -49,15 +53,14 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
     unlockedRegions,
     isExpeditionActive,
     autoResumeExpedition,
-    dps,
     attackCooldownRemaining,
     logs,
     connected,
+    moveHero,
     toggleExpedition,
     setAutoResumeExpedition,
     equipItem,
     unequipItem,
-    discardItem,
     discardResource,
     changeRegion,
     setStance,
@@ -65,6 +68,7 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
     allocateStat,
     bulkSell,
     startBuildingUpgrade,
+    moveCampBuilding,
     requestSalvagePreview,
     salvageItem,
     salvageBatch,
@@ -75,13 +79,18 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
     claimGatheringRewards,
     requestCraftPreview,
     craftItem,
+    consumeFood,
     requestEconomySync,
     claimPendingCraft,
     claimPendingResources,
     createHeroDesire,
     cancelHeroDesire,
     claimArmoryItem,
+    transferTreasuryGold,
+    updateTreasuryPolicy,
+		updateAutoPotionSettings,
     setOnCombatEvent,
+    setOnImportantNotification,
   } = useGameSocket(token, initialChar.id, initialChar);
 
   const char = liveChar || initialChar;
@@ -95,6 +104,11 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
       SkinRegistryService.setCharacterId(char.id);
     }
   }, [char, onCharacterUpdate]);
+
+  useEffect(() => {
+    setOnImportantNotification(onImportantNotification || (() => undefined));
+    return () => setOnImportantNotification(() => undefined);
+  }, [onImportantNotification, setOnImportantNotification]);
 
   // Curva e percentual são enviados pelo backend autoritativo.
   const safeXP = Math.max(0, char?.experience || 0);
@@ -117,11 +131,12 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
   const isDistanceArchetype = derivedStats?.primary_archetype === 'distance' || inventory.equipment?.mainhand?.weapon_type === 'bow';
 
   return (
-    <div className="p-4 bg-slate-950 min-h-screen text-slate-100 font-sans">
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+    <div className="p-2.5 xl:p-3 bg-slate-950 min-h-screen text-slate-100 font-sans">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 xl:gap-3">
         {/* Painel Esquerdo: Equipamentos & Status do Aventureiro (3 Colunas) */}
-        <div className="md:col-span-3 flex flex-col gap-4">
+        <div className="md:col-span-3 xl:col-span-2 flex flex-col gap-2.5 xl:gap-3">
           <TibiaEquipmentGrid
+            compact
             character={char}
             derivedStats={derivedStats}
             equipment={inventory.equipment}
@@ -129,10 +144,6 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
             cap={totalCapacity}
             totalAttack={totalAttack}
             totalDefense={totalDefense}
-            health={char.health}
-            maxHealth={char.max_health}
-            mana={char.mana}
-            maxMana={char.max_mana}
             storageUsed={camp?.storage_used || 0}
             storageCapacity={camp?.storage_capacity || 500}
             activeConstructionSlots={camp?.active_construction_slots || 0}
@@ -141,82 +152,87 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
             onOpenCamp={() => setIsCampModalOpen(true)}
             onEquipItem={equipItem}
             onUnequipItem={unequipItem}
-            onDiscardItem={discardItem}
             onBulkSell={bulkSell}
             onLearnBlueprint={learnBuildingBlueprint}
           />
 
           {/* Card de Status & Experiência Balanceada (Abaixo de Equipamentos) */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-xl text-xs space-y-2.5">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-1.5">
-              <h3 className="font-semibold text-amber-400 text-xs flex items-center gap-1.5">
+          <div className="pixel-card rounded-xl p-2.5 text-xs space-y-2">
+            <div className="pixel-card-header">
+              <h3 className="font-pixel-heading text-xs text-amber-400 flex items-center gap-1.5">
                 <span>📊 Dados do Aventureiro</span>
               </h3>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowAdvancedStats((value) => !value)}
+                  className="pixel-btn pixel-btn-dark px-1.5 py-0.5 text-[9px]"
+                  title="Mostrar ou ocultar atributos primários"
+                >
+                  {showAdvancedStats ? 'Menos' : 'Detalhes'}
+                </button>
                 <button
                   onClick={() => setIsSkinModalOpen(true)}
-                  className="px-2 py-0.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 rounded text-[10px] font-bold transition flex items-center gap-1 shadow-sm"
+                  className="pixel-btn pixel-btn-purple px-2 py-0.5 text-[10px]"
                   title="Personalizar Skin e Visual do Herói"
                 >
                   <span>🎭 Skins</span>
                 </button>
               </div>
             </div>
-            <div className="flex justify-between font-mono">
+            <div className="flex justify-between font-pixel-body">
               <span className="text-slate-400">Nível Atual:</span>
-              <span className="text-amber-300 font-bold">Nível {char.level}</span>
+              <span className="text-amber-300 font-bold font-pixel-heading text-[11px]">Nível {char.level}</span>
             </div>
             <div className="space-y-1">
-              <div className="flex justify-between text-[10px] font-mono text-slate-400">
+              <div className="flex justify-between text-[10px] font-pixel-body text-slate-400">
                 <span>XP ({xpPercent}%)</span>
                 <span>{safeXP.toLocaleString()} / {xpNextLevel.toLocaleString()}</span>
               </div>
-              <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
-                <div className="bg-purple-500 h-full transition-all duration-300" style={{ width: `${xpPercent}%` }}></div>
+              <div className="w-full pixel-bar-bg rounded h-3 overflow-hidden">
+                <div className="pixel-bar-xp h-full transition-all duration-300" style={{ width: `${xpPercent}%` }}></div>
               </div>
             </div>
 
             {/* Atributos de Combate: Ataque e Defesa */}
-            <div className="grid grid-cols-2 gap-2 font-mono pt-1.5 border-t border-slate-800 text-[11px]">
-              <div className="flex justify-between items-center bg-slate-950 px-2 py-1 rounded border border-slate-800">
-                <span className="text-slate-400">
-                  {isMagicArchetype ? '🔮 Magia:' : isDistanceArchetype ? '🏹 Distância:' : '⚔️ Ataque:'}
+            <div className="grid grid-cols-2 gap-2 font-pixel-body pt-1.5 border-t border-slate-800/80 text-[11px]">
+              <div className="flex justify-between items-center bg-slate-950/80 px-2 py-1.5 rounded border border-slate-800">
+                <span className="text-slate-400 flex items-center gap-1">
+                  {isMagicArchetype ? <PixelItemSprite weaponType="wand" size="sm" /> : isDistanceArchetype ? <PixelItemSprite weaponType="bow" size="sm" /> : <PixelItemSprite weaponType="sword" size="sm" />}
+                  <span>{isMagicArchetype ? 'Magia:' : isDistanceArchetype ? 'Distância:' : 'Ataque:'}</span>
                 </span>
-                <span className={`font-bold ${isMagicArchetype ? 'text-cyan-300' : isDistanceArchetype ? 'text-emerald-300' : 'text-amber-300'}`}>
+                <span className={`font-bold font-pixel-heading text-xs ${isMagicArchetype ? 'text-cyan-300' : isDistanceArchetype ? 'text-emerald-300' : 'text-amber-300'}`}>
                   {totalAttack}
                 </span>
               </div>
-              <div className="flex justify-between items-center bg-slate-950 px-2 py-1 rounded border border-slate-800">
-                <span className="text-slate-400">🛡️ Defesa:</span>
-                <span className="text-sky-300 font-bold">{totalDefense}</span>
+              <div className="flex justify-between items-center bg-slate-950/80 px-2 py-1.5 rounded border border-slate-800">
+                <span className="text-slate-400 flex items-center gap-1">
+                  <PixelItemSprite slotType="offhand" size="sm" />
+                  <span>Defesa:</span>
+                </span>
+                <span className="text-sky-300 font-bold font-pixel-heading text-xs">{totalDefense}</span>
               </div>
             </div>
 
-            <div className="flex justify-between font-mono pt-1 text-[11px]">
-              <span className="text-slate-400">Poder Ofensivo (DPS):</span>
-              <span className="text-rose-400 font-bold">⚔️ {dps} DPS</span>
-            </div>
-
             {/* Painel de Atributos Primários & Pontos Disponíveis */}
-            <div className="pt-2 border-t border-slate-800 space-y-1.5">
-              <div className="flex justify-between items-center text-[11px] font-mono">
-                <span className="text-slate-300 font-bold">Atributos Primários</span>
-                <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${char.unspent_points > 0 ? 'bg-amber-500 text-slate-950 animate-pulse' : 'bg-slate-950 text-slate-500 border border-slate-800'}`}>
+            <div className={`${showAdvancedStats ? 'block' : 'hidden'} pt-2 border-t border-slate-800/80 space-y-1.5`}>
+              <div className="flex justify-between items-center text-[11px] font-pixel-body">
+                <span className="text-slate-300 font-bold font-pixel-heading text-[10px]">Atributos Primários</span>
+                <span className={`font-bold font-pixel-heading px-1.5 py-0.5 rounded text-[10px] ${char.unspent_points > 0 ? 'bg-amber-500 text-slate-950 animate-pulse' : 'bg-slate-950 text-slate-500 border border-slate-800'}`}>
                   {char.unspent_points || 0} Pontos
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
+              <div className="grid grid-cols-2 gap-1.5 text-[10px] font-pixel-body">
                 {/* FOR / STR */}
                 <div
-                  className="flex justify-between items-center bg-slate-950 px-2 py-1 rounded border border-slate-800"
+                  className="flex justify-between items-center bg-slate-950/80 px-2 py-1.5 rounded border border-slate-800"
                   title="FOR: +1.5 Ataque Físico Melee por ponto, +15 Capacidade (Cap) por ponto base."
                 >
-                  <span className="text-slate-300">⚔️ FOR: <strong className="text-amber-400">{char.str || 5}</strong></span>
+                  <span className="text-slate-300 flex items-center gap-1">⚔️ FOR: <strong className="text-amber-400 font-pixel-heading text-[11px]">{char.str || 5}</strong></span>
                   {char.unspent_points > 0 && (
                     <button
                       onClick={() => allocateStat('str')}
-                      className="px-1.5 py-0.5 bg-amber-500 text-slate-950 font-bold rounded hover:bg-amber-400 transition"
+                      className="pixel-btn pixel-btn-gold px-2 py-0.5 text-[10px]"
                       title="+1.5 Dano Melee, +15 Cap"
                     >
                       +
@@ -226,14 +242,14 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
 
                 {/* DES / DEX */}
                 <div
-                  className="flex justify-between items-center bg-slate-950 px-2 py-1 rounded border border-slate-800"
+                  className="flex justify-between items-center bg-slate-950/80 px-2 py-1.5 rounded border border-slate-800"
                   title="DES: +1.5 Ataque à Distância, +Crítico assintótico com Diminishing Returns (até 50% Hard Cap)."
                 >
-                  <span className="text-slate-300">🏹 DES: <strong className="text-emerald-400">{char.dex || 5}</strong></span>
+                  <span className="text-slate-300 flex items-center gap-1">🏹 DES: <strong className="text-emerald-400 font-pixel-heading text-[11px]">{char.dex || 5}</strong></span>
                   {char.unspent_points > 0 && (
                     <button
                       onClick={() => allocateStat('dex')}
-                      className="px-1.5 py-0.5 bg-amber-500 text-slate-950 font-bold rounded hover:bg-amber-400 transition"
+                      className="pixel-btn pixel-btn-gold px-2 py-0.5 text-[10px]"
                       title="+1.5 Dano Distância, +Crítico Assintótico"
                     >
                       +
@@ -243,14 +259,14 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
 
                 {/* INT / INT */}
                 <div
-                  className="flex justify-between items-center bg-slate-950 px-2 py-1 rounded border border-slate-800"
+                  className="flex justify-between items-center bg-slate-950/80 px-2 py-1.5 rounded border border-slate-800"
                   title="INT: +2.0 Ataque Mágico, +12 Max Mana, +Regeneração contínua de MP (até 6.0 MP/s)."
                 >
-                  <span className="text-slate-300">🔮 INT: <strong className="text-sky-400">{char.int_stat || 5}</strong></span>
+                  <span className="text-slate-300 flex items-center gap-1">🔮 INT: <strong className="text-sky-400 font-pixel-heading text-[11px]">{char.int_stat || 5}</strong></span>
                   {char.unspent_points > 0 && (
                     <button
                       onClick={() => allocateStat('int')}
-                      className="px-1.5 py-0.5 bg-amber-500 text-slate-950 font-bold rounded hover:bg-amber-400 transition"
+                      className="pixel-btn pixel-btn-gold px-2 py-0.5 text-[10px]"
                       title="+2.0 Dano Mágico, +12 Max Mana, +Regen MP"
                     >
                       +
@@ -260,14 +276,14 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
 
                 {/* VIT / VIT */}
                 <div
-                  className="flex justify-between items-center bg-slate-950 px-2 py-1 rounded border border-slate-800"
+                  className="flex justify-between items-center bg-slate-950/80 px-2 py-1.5 rounded border border-slate-800"
                   title="VIT: +25 Max HP, +0.5 Defesa Física por ponto base."
                 >
-                  <span className="text-slate-300">❤️ VIT: <strong className="text-rose-400">{char.vit || 5}</strong></span>
+                  <span className="text-slate-300 flex items-center gap-1">❤️ VIT: <strong className="text-rose-400 font-pixel-heading text-[11px]">{char.vit || 5}</strong></span>
                   {char.unspent_points > 0 && (
                     <button
                       onClick={() => allocateStat('vit')}
-                      className="px-1.5 py-0.5 bg-amber-500 text-slate-950 font-bold rounded hover:bg-amber-400 transition"
+                      className="pixel-btn pixel-btn-gold px-2 py-0.5 text-[10px]"
                       title="+25 Max HP, +0.5 Defesa"
                     >
                       +
@@ -279,26 +295,34 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
           </div>
         </div>
 
-        {/* Painel Central: Viewport de Combate 2D, Acampamento & Log de Batalha (6 Colunas) */}
-        <div className="md:col-span-6 flex flex-col gap-4">
-          {/* Canvas PixiJS com a Arena em Pixel Art */}
+        {/* Painel Central: Viewport de Combate 2D, Acampamento & Notificações (6 Colunas) */}
+        <div className="md:col-span-6 xl:col-span-8 flex flex-col gap-2.5 xl:gap-3">
+          {/* Canvas PixiJS com a Arena em Pixel Art e Barra de Ação/Posturas */}
           <GameCanvas
             setOnCombatEvent={setOnCombatEvent}
             character={char}
             derivedStats={derivedStats}
+            activeBuffs={activeBuffs}
+			autoPotionSettings={autoPotionSettings}
+			autoPotionState={autoPotionState}
             skillCooldowns={skillCooldowns}
             attackCooldownRemaining={attackCooldownRemaining}
             mainHandItem={inventory.equipment?.mainhand}
             onToggleSkill={toggleSkill}
+            currentStance={activeStance}
+            onSelectStance={setStance}
+			onUpdateAutoPotionSettings={updateAutoPotionSettings}
+            onMoveHero={moveHero}
+            onMoveCampBuilding={moveCampBuilding}
           />
 
-          {/* Log de Combate WebSocket Stream */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-xl flex-1 flex flex-col">
-            <h3 className="font-semibold text-amber-400 text-xs mb-2 flex justify-between items-center border-b border-slate-800 pb-1.5">
-              <span>📜 Log de Batalha & Eventos</span>
-              <span className="text-[10px] text-slate-500 font-mono">WebSocket Stream</span>
+          {/* O chat técnico permanece separado da central de notificações da barra superior. */}
+          <div className="pixel-card rounded-xl p-2.5 flex-1 flex flex-col">
+            <h3 className="font-pixel-heading text-xs text-amber-400 mb-2 flex justify-between items-center border-b border-slate-800/80 pb-1.5">
+              <span>💬 Chat de logs</span>
+              <span className="text-[10px] text-slate-500 font-pixel-body">Combate e sistema</span>
             </h3>
-            <div className="flex-1 max-h-44 overflow-y-auto text-[11px] font-mono text-slate-400 space-y-1.5 pr-1 bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
+            <div className="flex-1 max-h-32 overflow-y-auto text-[11px] font-pixel-terminal text-slate-400 space-y-1.5 pr-1 bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
               {logs.map((log, idx) => (
                 <p key={idx} className="border-b border-slate-900/60 pb-1 leading-relaxed">
                   <span className="text-amber-500 mr-1 opacity-70">&gt;</span>
@@ -310,14 +334,14 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
         </div>
 
         {/* Painel Direito: Controles & Estatísticas do Personagem (3 Colunas) */}
-        <div className="md:col-span-3 flex flex-col gap-4">
+        <div className="md:col-span-3 xl:col-span-2 flex flex-col gap-2.5 xl:gap-3">
           {/* Card de Ação Principal: Controle da Expedição */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-xl space-y-2">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-1.5">
-              <h3 className="font-bold text-amber-400 text-xs flex items-center gap-1.5">
+          <div className="pixel-card-gold rounded-xl p-2.5 space-y-1.5">
+            <div className="pixel-card-header pixel-card-header-gold">
+              <h3 className="font-pixel-heading text-xs text-amber-400 flex items-center gap-1.5">
                 <span>🚀 Controle de Expedição</span>
               </h3>
-              <span className={connected ? 'text-emerald-400 text-[10px]' : 'text-rose-400 text-[10px]'}>
+              <span className={connected ? 'text-emerald-400 font-pixel-heading text-[10px]' : 'text-rose-400 font-pixel-heading text-[10px]'}>
                 {connected ? '● ON' : '○ OFF'}
               </span>
             </div>
@@ -325,24 +349,23 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
             <button
               onClick={toggleExpedition}
               disabled={!connected}
-              className={`w-full py-2.5 font-bold rounded-xl transition-all shadow-lg text-xs ${
-                isExpeditionActive
-                  ? 'bg-rose-600 hover:bg-rose-500 text-white'
-                  : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+              title={isExpeditionActive ? 'Encerrar a visualização da expedição e retornar ao acampamento.' : 'Iniciar uma nova expedição na região selecionada.'}
+              className={`w-full py-2 pixel-btn text-[11px] ${
+                isExpeditionActive ? 'pixel-btn-crimson' : 'pixel-btn-gold'
               }`}
             >
-              {isExpeditionActive ? 'Pausar Expedição' : 'Iniciar Expedição'}
+              {isExpeditionActive ? '⛺ Voltar ao Acampamento' : '⚔️ Iniciar Expedição'}
             </button>
 
-			<button onClick={() => setIsEconomyOpen(true)} disabled={!connected} className="w-full rounded-xl border border-emerald-500/40 bg-emerald-500/10 py-2.5 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-40">
-			  🏘️ Assentamento, Trabalhos & Oficina
+			<button onClick={() => setIsEconomyOpen(true)} disabled={!connected} title="Administrar moradores, trabalhos, receitas, tesouraria e arsenal." className="w-full py-2 pixel-btn pixel-btn-emerald text-[11px] disabled:opacity-40">
+			  🏘️ Gerenciar Assentamento & Trabalhos
 			</button>
 
             {/* Toggle de Auto-Retorno Pós-Derrota no Acampamento */}
-            <div className="flex items-center justify-between bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 mt-2">
+            <div className="flex items-center justify-between bg-slate-950/80 border border-slate-800 rounded-lg p-2 mt-1.5">
               <div className="flex flex-col">
-                <span className="text-xs font-semibold text-slate-200">Retornar automaticamente</span>
-                <span className="text-[10px] text-slate-400">Ao recuperar 100% de HP e Mana no acampamento</span>
+                <span className="text-xs font-semibold text-slate-200 font-pixel-body">Retorno automático</span>
+                <span className="text-[10px] text-slate-400 font-pixel-body">Ao recuperar 100% no acampamento</span>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -356,13 +379,6 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
             </div>
           </div>
 
-          {/* Seletor de Posturas Táticas com Botão de Ajuda de Estilos */}
-          <TacticalStanceSelector
-            currentStance={activeStance}
-            onSelectStance={setStance}
-            onOpenCombatHelp={() => setIsCombatHelpOpen(true)}
-          />
-
           {/* Seletor de Regiões de Expedição por Nível */}
           <ExpeditionRegionSelector
             currentRegion={activeRegion}
@@ -372,6 +388,7 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
             currentStage={currentStage}
             maxStages={maxStages}
             isBossStage={isBossStage}
+            compact
 			onSelectRegion={selectCombatRegionSafely}
           />
 
@@ -382,7 +399,8 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
             activeSkills={char.active_skills} 
             skillCooldowns={skillCooldowns}
             primaryArchetype={derivedStats?.primary_archetype || 'melee'}
-            onToggleSkill={toggleSkill} 
+            onToggleSkill={toggleSkill}
+            compact
           />
         </div>
       </div>
@@ -428,11 +446,6 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
         characterId={char?.id}
       />
 
-      <CombatStylesHelpModal
-        isOpen={isCombatHelpOpen}
-        onClose={() => setIsCombatHelpOpen(false)}
-      />
-
 	  {catalog && <EconomyHubModal
 		isOpen={isEconomyOpen}
 		onClose={() => setIsEconomyOpen(false)}
@@ -447,12 +460,15 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
 		onClaimGathering={claimGatheringRewards}
 		onPreviewCraft={requestCraftPreview}
 		onCraft={craftItem}
+		onConsumeFood={consumeFood}
 		onSync={requestEconomySync}
 		onClaimPendingCraft={claimPendingCraft}
 		onClaimPendingResources={claimPendingResources}
 		onCreateHeroDesire={createHeroDesire}
 		onCancelHeroDesire={cancelHeroDesire}
 		onClaimArmoryItem={claimArmoryItem}
+		onTransferTreasuryGold={transferTreasuryGold}
+		onUpdateTreasuryPolicy={updateTreasuryPolicy}
 	  />}
     </div>
   );

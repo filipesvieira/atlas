@@ -240,3 +240,177 @@ export class IceShardEffect implements VisualEffect {
   }
 }
 
+export class ArcaneNovaEffect implements VisualEffect {
+  id: string;
+  isFinished = false;
+  private startProvider: () => Position;
+  private targetProvider: () => Position;
+  private impactPos: Position | null = null;
+  private elapsedMs = 0;
+  private readonly travelDurationMs = 360;
+  private readonly impactDurationMs = 720;
+  private trailParticles: Array<{ x: number; y: number; vx: number; vy: number; size: number; alpha: number; color: string }> = [];
+  private particles: Array<{ angle: number; speed: number; distance: number; size: number; color: string }>;
+
+  constructor(startPosOrProvider: Position | (() => Position), targetPosOrProvider: Position | (() => Position)) {
+    this.id = 'arcane_nova_' + Math.random().toString(36).substring(2, 9);
+    this.startProvider = typeof startPosOrProvider === 'function' ? startPosOrProvider : () => startPosOrProvider;
+    this.targetProvider = typeof targetPosOrProvider === 'function' ? targetPosOrProvider : () => targetPosOrProvider;
+    const colors = ['#ffffff', '#f5d0fe', '#e879f9', '#c084fc', '#60a5fa'];
+    this.particles = Array.from({ length: 32 }, (_, index) => ({
+      angle: (Math.PI * 2 * index) / 32,
+      speed: 34 + Math.random() * 56,
+      distance: 8 + Math.random() * 18,
+      size: 2 + Math.random() * 2,
+      color: colors[index % colors.length],
+    }));
+  }
+
+  update(deltaMs: number): void {
+    this.elapsedMs += deltaMs;
+    const totalDuration = this.travelDurationMs + this.impactDurationMs;
+    if (this.elapsedMs >= totalDuration) {
+      this.isFinished = true;
+      return;
+    }
+
+    const dt = deltaMs / 1000;
+    const target = this.targetProvider();
+    this.impactPos = this.elapsedMs <= this.travelDurationMs ? { ...target } : this.impactPos || { ...target };
+
+    if (this.elapsedMs <= this.travelDurationMs) {
+      const progress = Math.min(1, this.elapsedMs / this.travelDurationMs);
+      const start = this.startProvider();
+      const current = {
+        x: start.x + (target.x - start.x) * progress,
+        y: start.y + (target.y - start.y) * progress,
+      };
+      for (let index = 0; index < 3; index += 1) {
+        this.trailParticles.push({
+          x: current.x + (Math.random() * 10 - 5),
+          y: current.y + (Math.random() * 10 - 5),
+          vx: (Math.random() - 0.5) * 18,
+          vy: (Math.random() - 0.5) * 18,
+          size: 2 + Math.random() * 2,
+          alpha: 0.95,
+          color: index % 2 === 0 ? '#e879f9' : '#60a5fa',
+        });
+      }
+    }
+
+    for (let index = this.trailParticles.length - 1; index >= 0; index -= 1) {
+      const particle = this.trailParticles[index];
+      particle.x += particle.vx * dt;
+      particle.y += particle.vy * dt;
+      particle.alpha -= 3.2 * dt;
+      if (particle.alpha <= 0) this.trailParticles.splice(index, 1);
+    }
+  }
+
+  render(ctx: CanvasRenderingContext2D): void {
+    const impact = this.impactPos || this.targetProvider();
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+
+    for (const particle of this.trailParticles) {
+      ctx.globalAlpha = Math.max(0, particle.alpha);
+      ctx.fillStyle = particle.color;
+      ctx.fillRect(particle.x, particle.y, particle.size, particle.size);
+    }
+
+    if (this.elapsedMs <= this.travelDurationMs) {
+      const progress = Math.min(1, this.elapsedMs / this.travelDurationMs);
+      const start = this.startProvider();
+      const target = this.targetProvider();
+      const current = {
+        x: start.x + (target.x - start.x) * progress,
+        y: start.y + (target.y - start.y) * progress,
+      };
+      const angle = Math.atan2(target.y - start.y, target.x - start.x);
+
+      ctx.save();
+      ctx.translate(current.x, current.y);
+      ctx.rotate(angle);
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = '#7e22ce';
+      ctx.fillRect(-13, -3, 20, 6);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#c084fc';
+      ctx.fillRect(-7, -6, 12, 12);
+      ctx.fillStyle = '#f5d0fe';
+      ctx.fillRect(-4, -4, 7, 8);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-2, -2, 3, 4);
+      ctx.strokeStyle = '#60a5fa';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 9, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      const impactProgress = Math.min(1, (this.elapsedMs - this.travelDurationMs) / this.impactDurationMs);
+      const alpha = Math.max(0, 1 - impactProgress);
+      const flashProgress = Math.min(1, (this.elapsedMs - this.travelDurationMs) / 150);
+
+      ctx.save();
+      ctx.translate(impact.x, impact.y);
+
+      // Flash central e núcleo cristalino tornam o impacto distinguível do
+      // projétil básico da varinha/cajado, mesmo em hordas aglomeradas.
+      if (flashProgress < 1) {
+        ctx.globalAlpha = (1 - flashProgress) * 0.9;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-10, -10, 20, 20);
+        ctx.fillStyle = '#e879f9';
+        ctx.fillRect(-15, -3, 30, 6);
+        ctx.fillRect(-3, -15, 6, 30);
+      }
+
+      ctx.globalAlpha = alpha;
+      for (let ring = 0; ring < 3; ring += 1) {
+        const ringProgress = Math.min(1, impactProgress + ring * 0.12);
+        ctx.strokeStyle = ring === 1 ? '#60a5fa' : '#e879f9';
+        ctx.lineWidth = ring === 1 ? 2 : 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, 10 + ringProgress * (38 + ring * 11), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Quatro runas quadradas orbitam o centro durante a dissipação.
+      const runeRadius = 16 + impactProgress * 25;
+      for (let index = 0; index < 4; index += 1) {
+        const runeAngle = (Math.PI / 2) * index + impactProgress * 1.8;
+        const runeX = Math.cos(runeAngle) * runeRadius;
+        const runeY = Math.sin(runeAngle) * runeRadius * 0.65;
+        ctx.fillStyle = index % 2 === 0 ? '#f5d0fe' : '#93c5fd';
+        ctx.fillRect(runeX - 3, runeY - 3, 6, 6);
+        ctx.fillStyle = '#7e22ce';
+        ctx.fillRect(runeX - 1, runeY - 1, 2, 2);
+      }
+
+      for (const particle of this.particles) {
+        const distance = particle.distance + impactProgress * particle.speed;
+        ctx.globalAlpha = alpha * 0.95;
+        ctx.fillStyle = particle.color;
+        ctx.fillRect(
+          Math.cos(particle.angle) * distance - particle.size / 2,
+          Math.sin(particle.angle) * distance * 0.65 - particle.size / 2,
+          particle.size,
+          particle.size,
+        );
+      }
+
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#581c87';
+      ctx.fillRect(-8, -8, 16, 16);
+      ctx.fillStyle = '#c084fc';
+      ctx.fillRect(-5, -5, 10, 10);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-2, -6, 4, 12);
+      ctx.fillRect(-6, -2, 12, 4);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+}

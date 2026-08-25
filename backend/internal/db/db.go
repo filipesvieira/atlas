@@ -25,42 +25,50 @@ type Account struct {
 }
 
 type Character struct {
-	ID                   string             `json:"id"`
-	AccountID            string             `json:"account_id"`
-	Name                 string             `json:"name"`
-	Vocation             string             `json:"vocation"`
-	Origin               string             `json:"origin"`
-	Level                int                `json:"level"`
-	Experience           int64              `json:"experience"`
-	Health               int                `json:"health"`
-	MaxHealth            int                `json:"max_health"`
-	Mana                 int                `json:"mana"`
-	MaxMana              int                `json:"max_mana"`
-	GoldBank             int64              `json:"gold_bank"`
-	STR                  int                `json:"str"`
-	DEX                  int                `json:"dex"`
-	INT                  int                `json:"int_stat"`
-	VIT                  int                `json:"vit"`
-	UnspentPoints        int                `json:"unspent_points"`
-	Masteries            game.MasteriesData `json:"masteries"`
-	LearnedSkills        []string           `json:"learned_skills"`
-	ActiveSkills         []string           `json:"active_skills"`
-	UnlockedRegions      []string           `json:"unlocked_regions"`
-	IsExpeditionActive   bool               `json:"is_expedition_active"`
-	ActiveRegion         string             `json:"active_region"`
-	LastLogin            time.Time          `json:"last_login"`
-	LastLogout           time.Time          `json:"last_logout"`
-	OfflineClaimedAt     time.Time          `json:"offline_claimed_at"`
-	ActiveStance         string             `json:"active_stance"`
-	CurrentStage         int                `json:"current_stage"`
-	IsBossStage          bool               `json:"is_boss_stage"`
-	StateRevision        int64              `json:"state_revision"`
-	ProgressionVersion   int                `json:"progression_version"`
-	LifetimeExperience   int64              `json:"lifetime_experience"`
-	HighestLevelEver     int                `json:"highest_level_ever"`
-	AutoResumeExpedition bool               `json:"auto_resume_expedition"`
-	StarterPackClaimed   bool               `json:"starter_pack_claimed"`
-	StarterPackKey       string             `json:"starter_pack_key,omitempty"`
+	ID                        string             `json:"id"`
+	AccountID                 string             `json:"account_id"`
+	Name                      string             `json:"name"`
+	Vocation                  string             `json:"vocation"`
+	Origin                    string             `json:"origin"`
+	Level                     int                `json:"level"`
+	Experience                int64              `json:"experience"`
+	Health                    int                `json:"health"`
+	MaxHealth                 int                `json:"max_health"`
+	Mana                      int                `json:"mana"`
+	MaxMana                   int                `json:"max_mana"`
+	GoldBank                  int64              `json:"gold_bank"`
+	STR                       int                `json:"str"`
+	DEX                       int                `json:"dex"`
+	INT                       int                `json:"int_stat"`
+	VIT                       int                `json:"vit"`
+	UnspentPoints             int                `json:"unspent_points"`
+	Masteries                 game.MasteriesData `json:"masteries"`
+	LearnedSkills             []string           `json:"learned_skills"`
+	ActiveSkills              []string           `json:"active_skills"`
+	UnlockedRegions           []string           `json:"unlocked_regions"`
+	IsExpeditionActive        bool               `json:"is_expedition_active"`
+	ActiveRegion              string             `json:"active_region"`
+	LastLogin                 time.Time          `json:"last_login"`
+	LastLogout                time.Time          `json:"last_logout"`
+	OfflineClaimedAt          time.Time          `json:"offline_claimed_at"`
+	ActiveStance              string             `json:"active_stance"`
+	CurrentStage              int                `json:"current_stage"`
+	IsBossStage               bool               `json:"is_boss_stage"`
+	ExpeditionsCompletedTotal int64              `json:"expeditions_completed_total"`
+	BossesDefeatedTotal       int64              `json:"bosses_defeated_total"`
+	ExpeditionDeathsTotal     int64              `json:"expedition_deaths_total"`
+	HighestStageReached       int                `json:"highest_stage_reached"`
+	LastExpeditionDeathStage  int                `json:"last_expedition_death_stage,omitempty"`
+	ExpeditionRecoveryUntil   time.Time          `json:"expedition_recovery_until,omitempty"`
+	StateRevision             int64              `json:"state_revision"`
+	ProgressionVersion        int                `json:"progression_version"`
+	LifetimeExperience        int64              `json:"lifetime_experience"`
+	HighestLevelEver          int                `json:"highest_level_ever"`
+	AutoResumeExpedition      bool               `json:"auto_resume_expedition"`
+	StarterPackClaimed        bool               `json:"starter_pack_claimed"`
+	StarterPackKey            string             `json:"starter_pack_key,omitempty"`
+	ProgressionBlocked        bool               `json:"progression_blocked,omitempty"`
+	ProgressionBlockReason    string             `json:"progression_block_reason,omitempty"`
 }
 
 type EquipmentSlots struct {
@@ -243,11 +251,11 @@ func CreateCharacter(accountID, name, vocation, origin string) (*Character, erro
 	defaultBackpack := []game.Item{}
 	if starterSword != nil {
 		starterSword.SpecialEffect = "Arma Inicial"
-		defaultBackpack = append(defaultBackpack, *starterSword)
+		defaultEquip.MainHand = starterSword
 	}
 	if starterShield != nil {
 		starterShield.SpecialEffect = "Escudo Inicial"
-		defaultBackpack = append(defaultBackpack, *starterShield)
+		defaultEquip.OffHand = starterShield
 	}
 	if starterBow != nil {
 		starterBow.SpecialEffect = "Arma Inicial"
@@ -282,14 +290,57 @@ func GetCharactersByAccountID(accountID string) ([]*Character, error) {
 	}
 	defer rows.Close()
 	var characters []*Character
+	validIDs := make(map[string]struct{})
+	var blockedScan bool
 	for rows.Next() {
 		c, err := scanLockedCharacter(rows)
 		if err != nil {
-			return nil, err
+			if !errors.Is(err, ErrInvalidProgression) {
+				return nil, err
+			}
+			// Um save legado ambíguo não deve esconder as demais personagens da
+			// conta. Ele será anexado abaixo como bloqueado para revisão, sem
+			// alterar XP ou nível automaticamente.
+			blockedScan = true
+			log.Printf("personagem legado bloqueado ao listar conta %s: %v", accountID, err)
+			continue
 		}
 		characters = append(characters, c)
+		validIDs[c.ID] = struct{}{}
 	}
-	return characters, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if !blockedScan {
+		return characters, nil
+	}
+
+	blockedRows, err := DB.Query(`
+		SELECT id, account_id, name, vocation, COALESCE(origin,'wanderer'), level,
+		       experience, health, max_health, mana, max_mana, gold_bank
+		FROM characters
+		WHERE account_id=$1
+		ORDER BY name`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer blockedRows.Close()
+	for blockedRows.Next() {
+		c := &Character{ProgressionBlocked: true, ProgressionBlockReason: "xp_ambiguous_for_current_level"}
+		if err := blockedRows.Scan(
+			&c.ID, &c.AccountID, &c.Name, &c.Vocation, &c.Origin, &c.Level,
+			&c.Experience, &c.Health, &c.MaxHealth, &c.Mana, &c.MaxMana, &c.GoldBank,
+		); err != nil {
+			return nil, err
+		}
+		if _, exists := validIDs[c.ID]; !exists {
+			characters = append(characters, c)
+		}
+	}
+	if err := blockedRows.Err(); err != nil {
+		return nil, err
+	}
+	return characters, nil
 }
 
 func GetCharacterByID(id string) (*Character, error) {
@@ -418,7 +469,10 @@ func UpdateCharacterState(c *Character) error {
 			state_revision=COALESCE(target.state_revision,0)+1,
 			auto_resume_expedition=$25, starter_pack_claimed=$26, starter_pack_key=$27,
 			progression_version=$28, lifetime_experience=GREATEST(lifetime_experience,$29),
-			highest_level_ever=GREATEST(highest_level_ever,$30,$3)
+			highest_level_ever=GREATEST(highest_level_ever,$30,$3),
+			expeditions_completed_total=$31, bosses_defeated_total=$32,
+			expedition_deaths_total=$33, highest_stage_reached=GREATEST(highest_stage_reached,$34),
+			last_expedition_death_stage=$35, expedition_recovery_until=$36
 		FROM (SELECT id,level AS previous_level,experience AS previous_experience,lifetime_experience AS previous_lifetime FROM characters WHERE id=$1) AS previous
 		WHERE target.id=$1 AND previous.id=target.id
 		  AND COALESCE(target.state_revision,0)=$24
@@ -429,7 +483,7 @@ func UpdateCharacterState(c *Character) error {
 	var previousExperience int64
 	var previousLifetime int64
 	var nextRevision int64
-	err = tx.QueryRow(query, c.ID, c.Vocation, c.Level, c.Experience, c.Health, c.MaxHealth, c.Mana, c.MaxMana, c.GoldBank, c.STR, c.DEX, c.INT, c.VIT, c.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, c.IsExpeditionActive, c.ActiveRegion, c.ActiveStance, c.CurrentStage, c.IsBossStage, c.StateRevision, c.AutoResumeExpedition, c.StarterPackClaimed, c.StarterPackKey, c.ProgressionVersion, c.LifetimeExperience, c.HighestLevelEver).Scan(&nextRevision, &previousLevel, &previousExperience, &previousLifetime)
+	err = tx.QueryRow(query, c.ID, c.Vocation, c.Level, c.Experience, c.Health, c.MaxHealth, c.Mana, c.MaxMana, c.GoldBank, c.STR, c.DEX, c.INT, c.VIT, c.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, c.IsExpeditionActive, c.ActiveRegion, c.ActiveStance, c.CurrentStage, c.IsBossStage, c.StateRevision, c.AutoResumeExpedition, c.StarterPackClaimed, c.StarterPackKey, c.ProgressionVersion, c.LifetimeExperience, c.HighestLevelEver, c.ExpeditionsCompletedTotal, c.BossesDefeatedTotal, c.ExpeditionDeathsTotal, c.HighestStageReached, c.LastExpeditionDeathStage, c.ExpeditionRecoveryUntil).Scan(&nextRevision, &previousLevel, &previousExperience, &previousLifetime)
 	if err == sql.ErrNoRows {
 		game.IncrementTelemetry("progression_conflict_total")
 		return ErrProgressionConflict
@@ -483,13 +537,19 @@ func SaveCharacterAndInventoryAtomic(c *Character, inv *Inventory) error {
 			state_revision=COALESCE(state_revision,0)+1,
 			auto_resume_expedition=$25, starter_pack_claimed=$26, starter_pack_key=$27,
 			progression_version=$28, lifetime_experience=GREATEST(lifetime_experience,$29),
-			highest_level_ever=GREATEST(highest_level_ever,$30,$3)
+			highest_level_ever=GREATEST(highest_level_ever,$30,$3),
+			expeditions_completed_total=GREATEST(expeditions_completed_total,$31),
+			bosses_defeated_total=GREATEST(bosses_defeated_total,$32),
+			expedition_deaths_total=GREATEST(expedition_deaths_total,$33),
+			highest_stage_reached=GREATEST(highest_stage_reached,$34),
+			last_expedition_death_stage=CASE WHEN $35 > 0 THEN $35 ELSE last_expedition_death_stage END,
+			expedition_recovery_until=$36
 		WHERE id=$1 AND COALESCE(state_revision,0)=$24
 		  AND (level < $3 OR (level = $3 AND experience <= $4))
 		RETURNING state_revision
 	`
 	var nextRevision int64
-	if err := tx.QueryRow(queryChar, c.ID, c.Vocation, c.Level, c.Experience, c.Health, c.MaxHealth, c.Mana, c.MaxMana, c.GoldBank, c.STR, c.DEX, c.INT, c.VIT, c.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, c.IsExpeditionActive, c.ActiveRegion, c.ActiveStance, c.CurrentStage, c.IsBossStage, c.StateRevision, c.AutoResumeExpedition, c.StarterPackClaimed, c.StarterPackKey, c.ProgressionVersion, c.LifetimeExperience, c.HighestLevelEver).Scan(&nextRevision); err != nil {
+	if err := tx.QueryRow(queryChar, c.ID, c.Vocation, c.Level, c.Experience, c.Health, c.MaxHealth, c.Mana, c.MaxMana, c.GoldBank, c.STR, c.DEX, c.INT, c.VIT, c.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, c.IsExpeditionActive, c.ActiveRegion, c.ActiveStance, c.CurrentStage, c.IsBossStage, c.StateRevision, c.AutoResumeExpedition, c.StarterPackClaimed, c.StarterPackKey, c.ProgressionVersion, c.LifetimeExperience, c.HighestLevelEver, c.ExpeditionsCompletedTotal, c.BossesDefeatedTotal, c.ExpeditionDeathsTotal, c.HighestStageReached, c.LastExpeditionDeathStage, c.ExpeditionRecoveryUntil).Scan(&nextRevision); err != nil {
 		if err == sql.ErrNoRows {
 			game.IncrementTelemetry("progression_conflict_total")
 			return ErrProgressionConflict
@@ -558,6 +618,12 @@ func SetCharacterOffline(c *Character, inv *Inventory) error {
 			progression_version=$26,
 			lifetime_experience=GREATEST(lifetime_experience,$27),
 			highest_level_ever=GREATEST(highest_level_ever,$28,$3),
+			expeditions_completed_total=GREATEST(expeditions_completed_total,$29),
+			bosses_defeated_total=GREATEST(bosses_defeated_total,$30),
+			expedition_deaths_total=GREATEST(expedition_deaths_total,$31),
+			highest_stage_reached=GREATEST(highest_stage_reached,$32),
+			last_expedition_death_stage=CASE WHEN $33 > 0 THEN $33 ELSE last_expedition_death_stage END,
+			expedition_recovery_until=$34,
 			last_logout=NOW(), offline_claimed_at=NOW()
 		WHERE id=$1 AND COALESCE(state_revision,0)=$24
 		  AND (level < $3 OR (level = $3 AND experience <= $4))
@@ -565,7 +631,7 @@ func SetCharacterOffline(c *Character, inv *Inventory) error {
 	`
 	var nextLogout, nextOfflineClaim time.Time
 	var nextRevision int64
-	if err := tx.QueryRow(query, c.ID, c.Vocation, c.Level, c.Experience, c.Health, c.MaxHealth, c.Mana, c.MaxMana, c.GoldBank, c.STR, c.DEX, c.INT, c.VIT, c.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, c.IsExpeditionActive, c.ActiveRegion, c.ActiveStance, c.CurrentStage, c.IsBossStage, c.StateRevision, c.AutoResumeExpedition, c.ProgressionVersion, c.LifetimeExperience, c.HighestLevelEver).Scan(&nextLogout, &nextOfflineClaim, &nextRevision); err != nil {
+	if err := tx.QueryRow(query, c.ID, c.Vocation, c.Level, c.Experience, c.Health, c.MaxHealth, c.Mana, c.MaxMana, c.GoldBank, c.STR, c.DEX, c.INT, c.VIT, c.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, c.IsExpeditionActive, c.ActiveRegion, c.ActiveStance, c.CurrentStage, c.IsBossStage, c.StateRevision, c.AutoResumeExpedition, c.ProgressionVersion, c.LifetimeExperience, c.HighestLevelEver, c.ExpeditionsCompletedTotal, c.BossesDefeatedTotal, c.ExpeditionDeathsTotal, c.HighestStageReached, c.LastExpeditionDeathStage, c.ExpeditionRecoveryUntil).Scan(&nextLogout, &nextOfflineClaim, &nextRevision); err != nil {
 		if err == sql.ErrNoRows {
 			game.IncrementTelemetry("progression_conflict_total")
 			return ErrProgressionConflict
@@ -646,6 +712,9 @@ func characterToGame(c *Character) *game.CharacterData {
 		IsExpeditionActive: c.IsExpeditionActive, ActiveRegion: c.ActiveRegion, ActiveStance: c.ActiveStance,
 		CurrentStage: c.CurrentStage, IsBossStage: c.IsBossStage, StateRevision: c.StateRevision,
 		LastLogin: c.LastLogin, LastLogout: c.LastLogout, AutoResumeExpedition: c.AutoResumeExpedition,
+		ExpeditionsCompletedTotal: c.ExpeditionsCompletedTotal, BossesDefeatedTotal: c.BossesDefeatedTotal,
+		ExpeditionDeathsTotal: c.ExpeditionDeathsTotal, HighestStageReached: c.HighestStageReached,
+		LastExpeditionDeathStage: c.LastExpeditionDeathStage, ExpeditionRecoveryUntil: c.ExpeditionRecoveryUntil,
 		StarterPackClaimed: c.StarterPackClaimed, StarterPackKey: c.StarterPackKey,
 		ProgressionVersion: c.ProgressionVersion, LifetimeExperience: c.LifetimeExperience,
 		HighestLevelEver: c.HighestLevelEver,
@@ -661,6 +730,7 @@ func inventoryToGame(inv *Inventory) *game.InventoryData {
 func scanLockedCharacter(row rowScanner) (*Character, error) {
 	c := &Character{}
 	var masteriesRaw, skillsRaw, activeRaw, unlockedRaw string
+	var recoveryUntil sql.NullTime
 	err := row.Scan(
 		&c.ID, &c.AccountID, &c.Name, &c.Vocation, &c.Origin,
 		&c.Level, &c.Experience, &c.Health, &c.MaxHealth, &c.Mana, &c.MaxMana,
@@ -670,9 +740,14 @@ func scanLockedCharacter(row rowScanner) (*Character, error) {
 		&c.IsBossStage, &c.LastLogin, &c.LastLogout, &c.OfflineClaimedAt, &c.StateRevision,
 		&c.AutoResumeExpedition, &c.StarterPackClaimed, &c.StarterPackKey,
 		&c.ProgressionVersion, &c.LifetimeExperience, &c.HighestLevelEver,
+		&c.ExpeditionsCompletedTotal, &c.BossesDefeatedTotal, &c.ExpeditionDeathsTotal,
+		&c.HighestStageReached, &c.LastExpeditionDeathStage, &recoveryUntil,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if recoveryUntil.Valid {
+		c.ExpeditionRecoveryUntil = recoveryUntil.Time
 	}
 	if err := json.Unmarshal([]byte(masteriesRaw), &c.Masteries); err != nil {
 		return nil, fmt.Errorf("maestrias persistidas corrompidas: %w", err)
@@ -713,7 +788,10 @@ const characterSnapshotColumns = `
 	COALESCE(auto_resume_expedition,false),
 	COALESCE(starter_pack_claimed,false), COALESCE(starter_pack_key,''),
 	COALESCE(progression_version,0), COALESCE(lifetime_experience,experience),
-	GREATEST(COALESCE(highest_level_ever,level),level)`
+	GREATEST(COALESCE(highest_level_ever,level),level),
+	COALESCE(expeditions_completed_total,0), COALESCE(bosses_defeated_total,0),
+	COALESCE(expedition_deaths_total,0), GREATEST(COALESCE(highest_stage_reached,1),1),
+	COALESCE(last_expedition_death_stage,0), expedition_recovery_until`
 
 // ClaimOfflineProgress é a única porta de entrada para aplicar progresso offline.
 // SELECT FOR UPDATE + cursor offline_claimed_at tornam o claim idempotente e impedem
@@ -769,24 +847,49 @@ func claimOfflineProgressOnce(accountID, charID string, now time.Time) (*Offline
 	gameChar := characterToGame(character)
 	gameInv := inventoryToGame(inventory)
 	autoSellSettings, _ := GetCharacterAutoSellSettings(charID)
+	autoPotionSettings, _ := GetCharacterAutoPotionSettings(charID)
+	autoPotionState, autoPotionStateErr := getCharacterAutoPotionStateTx(tx, charID, true)
+	if autoPotionStateErr != nil {
+		return nil, autoPotionStateErr
+	}
+	activeBuffs, err := getCharacterBuffsOverlappingTx(tx, charID, start, now)
+	if err != nil {
+		return nil, err
+	}
 
 	result := game.CalculateOfflineProgress(game.OfflineSimulationInput{
 		Character: gameChar, Inventory: gameInv, IsExpeditionActive: character.IsExpeditionActive,
 		ActiveRegion: character.ActiveRegion, ActiveStance: character.ActiveStance,
 		CurrentStage: character.CurrentStage, IsBossStage: character.IsBossStage,
 		PeriodStart: start, PeriodEnd: now, StateRevision: character.StateRevision,
-		AutoSellSettings: autoSellSettings,
+		AutoSellSettings: autoSellSettings, AutoPotionSettings: autoPotionSettings,
+		AutoPotionState: autoPotionState, ActiveBuffs: activeBuffs,
 	})
 
 	if result.MinutesOffline >= game.MinimumOfflineMinutes {
 		character.Experience += result.XPGained
-		character.GoldBank += result.GoldGained
+		character.GoldBank += result.GoldGained - result.AutoPotionGoldSpent
+		character.ExpeditionsCompletedTotal += int64(result.ExpeditionsCompleted)
+		character.BossesDefeatedTotal += int64(result.BossesDefeated)
+		if result.HighestStageReached > character.HighestStageReached {
+			character.HighestStageReached = result.HighestStageReached
+		}
 		character.CurrentStage = result.FinalStage
 		character.IsBossStage = result.IsBossStageAfter
 		if result.Defeated {
+			character.ExpeditionDeathsTotal++
+			character.LastExpeditionDeathStage = result.FailureStage
+			stats := game.CalculateDerivedStats(gameChar, gameInv, character.ActiveStance)
+			recoverySeconds := 30.0
+			if stats.MaxHealth > 0 {
+				recoverySeconds = math.Max(30, math.Min(180, float64(stats.MaxHealth)/(math.Max(6, 6+float64(gameChar.VIT)*0.15+float64(gameChar.Level)*0.08))))
+			}
+			character.ExpeditionRecoveryUntil = now.Add(time.Duration(recoverySeconds * float64(time.Second)))
 			character.IsExpeditionActive = false
 			character.CurrentStage = 1
 			character.IsBossStage = false
+		} else if !character.ExpeditionRecoveryUntil.IsZero() && !character.ExpeditionRecoveryUntil.After(now) {
+			character.ExpeditionRecoveryUntil = time.Time{}
 		}
 		for _, unlockedID := range result.RegionsUnlocked {
 			alreadyUnlocked := false
@@ -889,13 +992,22 @@ func claimOfflineProgressOnce(accountID, charID string, now time.Time) (*Offline
 			character.Health = character.MaxHealth
 			character.Mana = character.MaxMana
 		} else {
-			if character.Health > character.MaxHealth {
-				character.Health = character.MaxHealth
-			}
+			// A simulação já aplicou regeneração, dano e frascos de vida. Manter
+			// o HP de logout aqui faria a expedição offline divergir do combate
+			// autoritativo e tornaria a cura automática apenas aparente.
+			character.Health = int(math.Max(1, math.Min(float64(character.MaxHealth), float64(result.HealthAfter))))
 			if character.Mana > character.MaxMana {
 				character.Mana = character.MaxMana
 			}
 		}
+	}
+
+	if result.MinutesOffline >= game.MinimumOfflineMinutes && autoPotionSettings.Enabled {
+		updatedPotionState, err := saveCharacterAutoPotionStateTx(tx, charID, result.AutoPotionState)
+		if err != nil {
+			return nil, err
+		}
+		result.AutoPotionState = updatedPotionState
 	}
 
 	character.LastLogin = now
@@ -908,7 +1020,7 @@ func claimOfflineProgressOnce(accountID, charID string, now time.Time) (*Offline
 	skillsJSON, _ := json.Marshal(character.LearnedSkills)
 	activeJSON, _ := json.Marshal(character.ActiveSkills)
 	unlockedJSON, _ := json.Marshal(character.UnlockedRegions)
-	updateResult, err := tx.Exec(`UPDATE characters SET vocation=$2,level=$3,experience=$4,health=$5,max_health=$6,mana=$7,max_mana=$8,gold_bank=$9,str=$10,dex=$11,int_stat=$12,vit=$13,unspent_points=$14,masteries=$15,learned_skills=$16,active_skills=$17,unlocked_regions=$18,is_expedition_active=$19,active_region=$20,active_stance=$21,current_stage=$22,is_boss_stage=$23,state_revision=$24,auto_resume_expedition=$25,last_login=$26,offline_claimed_at=$27,progression_version=$28,lifetime_experience=GREATEST(lifetime_experience,$29),highest_level_ever=GREATEST(highest_level_ever,$30,$3) WHERE id=$1 AND (level < $3 OR (level=$3 AND experience <= $4))`, character.ID, character.Vocation, character.Level, character.Experience, character.Health, character.MaxHealth, character.Mana, character.MaxMana, character.GoldBank, character.STR, character.DEX, character.INT, character.VIT, character.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, character.IsExpeditionActive, character.ActiveRegion, character.ActiveStance, character.CurrentStage, character.IsBossStage, character.StateRevision, character.AutoResumeExpedition, now, now, character.ProgressionVersion, character.LifetimeExperience, character.HighestLevelEver)
+	updateResult, err := tx.Exec(`UPDATE characters SET vocation=$2,level=$3,experience=$4,health=$5,max_health=$6,mana=$7,max_mana=$8,gold_bank=$9,str=$10,dex=$11,int_stat=$12,vit=$13,unspent_points=$14,masteries=$15,learned_skills=$16,active_skills=$17,unlocked_regions=$18,is_expedition_active=$19,active_region=$20,active_stance=$21,current_stage=$22,is_boss_stage=$23,state_revision=$24,auto_resume_expedition=$25,last_login=$26,offline_claimed_at=$27,progression_version=$28,lifetime_experience=GREATEST(lifetime_experience,$29),highest_level_ever=GREATEST(highest_level_ever,$30,$3),expeditions_completed_total=$31,bosses_defeated_total=$32,expedition_deaths_total=$33,highest_stage_reached=GREATEST(highest_stage_reached,$34),last_expedition_death_stage=$35,expedition_recovery_until=$36 WHERE id=$1 AND (level < $3 OR (level=$3 AND experience <= $4))`, character.ID, character.Vocation, character.Level, character.Experience, character.Health, character.MaxHealth, character.Mana, character.MaxMana, character.GoldBank, character.STR, character.DEX, character.INT, character.VIT, character.UnspentPoints, masteriesJSON, skillsJSON, activeJSON, unlockedJSON, character.IsExpeditionActive, character.ActiveRegion, character.ActiveStance, character.CurrentStage, character.IsBossStage, character.StateRevision, character.AutoResumeExpedition, now, now, character.ProgressionVersion, character.LifetimeExperience, character.HighestLevelEver, character.ExpeditionsCompletedTotal, character.BossesDefeatedTotal, character.ExpeditionDeathsTotal, character.HighestStageReached, character.LastExpeditionDeathStage, character.ExpeditionRecoveryUntil)
 	if err != nil {
 		return nil, err
 	}
@@ -1092,6 +1204,203 @@ func SaveCharacterAutoSellSettings(charID string, s game.AutoSellSettings) error
 	`
 	_, err := DB.Exec(query, charID, s.Enabled, s.OnlineEnabled, s.OfflineEnabled, s.TriggerPercent, s.TargetPercent, string(raritiesJSON), string(slotsJSON), s.OnlyDuplicates, s.KeepFirstDiscoveredCopy, s.KeepBestPerTemplate, string(protectedJSON), s.SellCraftedItems, s.Revision)
 	return err
+}
+
+// GetCharacterAutoPotionSettings recupera a preferência persistente de
+// suprimentos de emergência. A ausência da linha é compatível com personagens
+// anteriores à feature e retorna a configuração desligada.
+func GetCharacterAutoPotionSettings(charID string) (game.AutoPotionSettings, error) {
+	var settings game.AutoPotionSettings
+	err := DB.QueryRow(`
+		SELECT enabled, health_threshold_percent, mana_threshold_percent,
+		       max_gold_per_expedition, revision
+		FROM character_auto_potion_settings
+		WHERE character_id=$1
+	`, charID).Scan(
+		&settings.Enabled,
+		&settings.HealthThresholdPercent,
+		&settings.ManaThresholdPercent,
+		&settings.MaxGoldPerExpedition,
+		&settings.Revision,
+	)
+	if err == sql.ErrNoRows {
+		return game.DefaultAutoPotionSettings(), nil
+	}
+	if err != nil {
+		return game.DefaultAutoPotionSettings(), err
+	}
+	return game.NormalizeAutoPotionSettings(settings), nil
+}
+
+// SaveCharacterAutoPotionSettings atualiza somente preferências; o ouro e o
+// orçamento de uma expedição são tratados em transações separadas.
+func SaveCharacterAutoPotionSettings(charID string, settings game.AutoPotionSettings) error {
+	settings = game.NormalizeAutoPotionSettings(settings)
+	_, err := DB.Exec(`
+		INSERT INTO character_auto_potion_settings(
+			character_id, enabled, health_threshold_percent, mana_threshold_percent,
+			max_gold_per_expedition, revision, updated_at
+		) VALUES($1,$2,$3,$4,$5,1,NOW())
+		ON CONFLICT(character_id) DO UPDATE SET
+			enabled=EXCLUDED.enabled,
+			health_threshold_percent=EXCLUDED.health_threshold_percent,
+			mana_threshold_percent=EXCLUDED.mana_threshold_percent,
+			max_gold_per_expedition=EXCLUDED.max_gold_per_expedition,
+			revision=character_auto_potion_settings.revision+1,
+			updated_at=NOW()
+	`, charID, settings.Enabled, settings.HealthThresholdPercent, settings.ManaThresholdPercent, settings.MaxGoldPerExpedition)
+	return err
+}
+
+func scanAutoPotionState(row *sql.Row) (game.AutoPotionState, error) {
+	state := game.DefaultAutoPotionState()
+	var healthCooldown, manaCooldown sql.NullTime
+	err := row.Scan(&state.GoldSpent, &healthCooldown, &manaCooldown, &state.BudgetExhausted, &state.Revision)
+	if err != nil {
+		return state, err
+	}
+	if healthCooldown.Valid {
+		state.HealthCooldownUntil = healthCooldown.Time.UTC()
+	}
+	if manaCooldown.Valid {
+		state.ManaCooldownUntil = manaCooldown.Time.UTC()
+	}
+	return state, nil
+}
+
+func getCharacterAutoPotionStateTx(tx *sql.Tx, charID string, forUpdate bool) (game.AutoPotionState, error) {
+	query := `SELECT gold_spent, health_cooldown_until, mana_cooldown_until, budget_exhausted, revision FROM character_auto_potion_state WHERE character_id=$1`
+	if forUpdate {
+		query += ` FOR UPDATE`
+	}
+	state, err := scanAutoPotionState(tx.QueryRow(query, charID))
+	if err == sql.ErrNoRows {
+		return game.DefaultAutoPotionState(), nil
+	}
+	return state, err
+}
+
+// GetCharacterAutoPotionState recupera o orçamento da caçada que está em
+// andamento. A linha pode não existir em personagens que nunca ativaram a
+// função.
+func GetCharacterAutoPotionState(charID string) (game.AutoPotionState, error) {
+	state, err := scanAutoPotionState(DB.QueryRow(`
+		SELECT gold_spent, health_cooldown_until, mana_cooldown_until, budget_exhausted, revision
+		FROM character_auto_potion_state WHERE character_id=$1
+	`, charID))
+	if err == sql.ErrNoRows {
+		return game.DefaultAutoPotionState(), nil
+	}
+	return state, err
+}
+
+func saveCharacterAutoPotionStateTx(tx *sql.Tx, charID string, state game.AutoPotionState) (game.AutoPotionState, error) {
+	var revision int64
+	err := tx.QueryRow(`
+		INSERT INTO character_auto_potion_state(
+			character_id, gold_spent, health_cooldown_until, mana_cooldown_until,
+			budget_exhausted, revision, updated_at
+		) VALUES($1,$2,$3,$4,$5,1,NOW())
+		ON CONFLICT(character_id) DO UPDATE SET
+			gold_spent=EXCLUDED.gold_spent,
+			health_cooldown_until=EXCLUDED.health_cooldown_until,
+			mana_cooldown_until=EXCLUDED.mana_cooldown_until,
+			budget_exhausted=EXCLUDED.budget_exhausted,
+			revision=character_auto_potion_state.revision+1,
+			updated_at=NOW()
+		RETURNING revision
+	`, charID, state.GoldSpent, nullableTime(state.HealthCooldownUntil), nullableTime(state.ManaCooldownUntil), state.BudgetExhausted).Scan(&revision)
+	if err != nil {
+		return state, err
+	}
+	state.Revision = revision
+	return state, nil
+}
+
+func nullableTime(value time.Time) interface{} {
+	if value.IsZero() {
+		return nil
+	}
+	return value.UTC()
+}
+
+// SaveCharacterAutoPotionState é usado após a simulação offline, que já
+// calculou de forma determinística o estado final da expedição.
+func SaveCharacterAutoPotionState(charID string, state game.AutoPotionState) (game.AutoPotionState, error) {
+	tx, err := DB.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return state, err
+	}
+	defer tx.Rollback()
+	updated, err := saveCharacterAutoPotionStateTx(tx, charID, state)
+	if err != nil {
+		return state, err
+	}
+	if err := tx.Commit(); err != nil {
+		return state, err
+	}
+	return updated, nil
+}
+
+// ResetCharacterAutoPotionState começa um novo orçamento quando o jogador
+// inicia explicitamente outra expedição. Reconexões nunca chamam esta função.
+func ResetCharacterAutoPotionState(charID string) (game.AutoPotionState, error) {
+	return SaveCharacterAutoPotionState(charID, game.DefaultAutoPotionState())
+}
+
+// SpendCharacterAutoPotion debita ouro e avança o orçamento em uma única
+// transação. Assim uma queda de conexão não pode conceder cura sem cobrança.
+func SpendCharacterAutoPotion(charID string, settings game.AutoPotionSettings, kind string, now time.Time) (game.AutoPotionSpendResult, error) {
+	result := game.AutoPotionSpendResult{PotionKey: kind}
+	settings = game.NormalizeAutoPotionSettings(settings)
+	tx, err := DB.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return result, err
+	}
+	defer tx.Rollback()
+
+	state, err := getCharacterAutoPotionStateTx(tx, charID, true)
+	if err != nil {
+		return result, err
+	}
+	var goldBank int64
+	if err := tx.QueryRow(`SELECT gold_bank FROM characters WHERE id=$1 FOR UPDATE`, charID).Scan(&goldBank); err != nil {
+		return result, err
+	}
+
+	result.Reason = game.CanSpendAutoPotion(settings, state, kind, goldBank, now.UTC())
+	if result.Reason != "" {
+		if result.Reason == "budget_exhausted" && !state.BudgetExhausted {
+			state.BudgetExhausted = true
+			state, err = saveCharacterAutoPotionStateTx(tx, charID, state)
+			if err != nil {
+				return result, err
+			}
+		}
+		result.GoldBank = goldBank
+		result.State = state
+		if err := tx.Commit(); err != nil {
+			return result, err
+		}
+		return result, nil
+	}
+
+	cost := game.AutoPotionCost(kind)
+	if _, err := tx.Exec(`UPDATE characters SET gold_bank=gold_bank-$2 WHERE id=$1`, charID, cost); err != nil {
+		return result, err
+	}
+	state = game.ApplyAutoPotionSpend(state, kind, now.UTC())
+	state, err = saveCharacterAutoPotionStateTx(tx, charID, state)
+	if err != nil {
+		return result, err
+	}
+	if err := tx.Commit(); err != nil {
+		return result, err
+	}
+	result.Applied = true
+	result.GoldBank = goldBank - cost
+	result.State = state
+	return result, nil
 }
 
 // GetCharacterOverflowChest obtém a lista de itens protegidos no Baú de Achados (overflow de 20 slots).

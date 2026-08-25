@@ -37,6 +37,7 @@ type CraftResult struct {
 	SentToOverflow     bool                      `json:"sent_to_overflow"`
 	SentToPending      bool                      `json:"sent_to_pending"`
 	SentToArmory       bool                      `json:"sent_to_armory"`
+	SentToBackpack     bool                      `json:"sent_to_backpack"`
 	ProfessionProgress ProfessionProgress        `json:"profession_progress"`
 	ResourceInventory  ResourceInventorySnapshot `json:"resource_inventory"`
 }

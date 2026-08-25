@@ -2,6 +2,7 @@ import React from 'react';
 import { ResourceDefinition } from '../../game/GameCatalog';
 import { ResourceAmount } from '../../hooks/useGameSocket';
 import { formatQuantity } from '../../utils/formatters';
+import { PixelResourceSprite } from '../../game/registries/PixelResourceRegistry';
 
 interface ResourceBarProps {
   resources: ResourceAmount[];
@@ -20,14 +21,7 @@ const DEFAULT_RESOURCE_NAMES: Record<string, string> = {
   arcane_essence: 'Essência Arcana',
 };
 
-const DEFAULT_RESOURCE_ICONS: Record<string, string> = {
-  wood: '🪵',
-  stone: '🪨',
-  iron: '⛓️',
-  fiber: '🌿',
-  leather: '📜',
-  arcane_essence: '✨',
-};
+
 
 export const ResourceBar: React.FC<ResourceBarProps> = ({
   resources = [],
@@ -91,7 +85,6 @@ export const ResourceBar: React.FC<ResourceBarProps> = ({
         {primaryKeys.map((key) => {
           const qty = resMap.get(key) || 0;
           const def = defMap.get(key);
-          const icon = def?.icon || DEFAULT_RESOURCE_ICONS[key] || '📦';
           const name = def?.name || DEFAULT_RESOURCE_NAMES[key] || key;
 
           return (
@@ -103,7 +96,7 @@ export const ResourceBar: React.FC<ResourceBarProps> = ({
               title={`${name}: ${qty.toLocaleString()} unidades guardadas`}
             >
               <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-sm shrink-0">{icon}</span>
+                <span className="shrink-0"><PixelResourceSprite resourceKey={key} name={name} size="sm" /></span>
                 <span className="text-[11px] truncate font-medium">{name}</span>
               </div>
               <span className="font-mono text-[11px] font-bold shrink-0 ml-1 text-amber-300">
@@ -126,7 +119,6 @@ export const ResourceBar: React.FC<ResourceBarProps> = ({
           </span>
           {trophyList.map((t) => {
             const def = defMap.get(t.key);
-            const icon = def?.icon || '🏆';
             const name = def?.name || t.key;
             return (
               <div
@@ -134,7 +126,7 @@ export const ResourceBar: React.FC<ResourceBarProps> = ({
                 className="flex items-center gap-1 bg-amber-950/40 border border-amber-500/40 px-2 py-0.5 rounded-full text-[11px] text-amber-200"
                 title={`${name}: ${t.quantity.toLocaleString()} unidades`}
               >
-                <span>{icon}</span>
+                <span><PixelResourceSprite resourceKey={t.key} name={name} size="sm" /></span>
                 <span>{name}</span>
                 <span className="font-mono font-bold text-amber-400">x{formatQuantity(t.quantity)}</span>
               </div>

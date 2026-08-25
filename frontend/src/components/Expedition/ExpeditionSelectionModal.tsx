@@ -29,7 +29,7 @@ export function ExpeditionSelectionModal({
   const defeatedSet = new Set(safeUnlockedRegions);
   const filteredRegions = regions.filter((r) => r.tier === selectedTier);
 
-  // Helper: retorna o progresso de chefes derrotados no tier anterior (data-driven)
+  // Helper: retorna o progresso de chefes derrotados no tier anterior
   const getTierBossProgress = (targetTier: number) => {
     if (targetTier <= 1) return { defeated: 0, total: 0, complete: true };
     const prevTierRegions = regions.filter((r) => r.tier === targetTier - 1);
@@ -52,47 +52,47 @@ export function ExpeditionSelectionModal({
     });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
+      <div className="pixel-card-gold rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         {/* Cabeçalho */}
-        <div className="p-4 border-b border-slate-800 bg-slate-950/60 flex justify-between items-center">
+        <div className="pixel-card-header pixel-card-header-gold p-4 flex justify-between items-center">
           <div className="flex items-center gap-2.5">
             <span className="text-2xl">🗺️</span>
             <div>
-              <h3 className="text-lg font-bold text-amber-400">Mapa do Mundo & Regiões de Expedição</h3>
-              <p className="text-xs text-slate-400">
-                Selecione seu destino estratégico para enfrentar monstros e chefes das regiões.
+              <h3 className="text-sm sm:text-base font-pixel-heading text-amber-400">Mapa do Mundo & Regiões</h3>
+              <p className="text-xs text-slate-400 font-pixel-body">
+                Selecione seu destino estratégico para enfrentar monstros e chefes.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-sm transition-all"
+            className="pixel-btn pixel-btn-crimson px-2.5 py-1 text-xs"
           >
             ✕
           </button>
         </div>
 
         {/* Abas de Tiers de Nível */}
-        <div className="flex border-b border-slate-800 bg-slate-950/40 p-2 gap-1.5 overflow-x-auto">
+        <div className="flex border-b border-slate-800 bg-slate-950/80 p-2 gap-1.5 overflow-x-auto font-pixel-body">
           {tiers.map(({ tier, minLevel, maxLevel, isTierLocked }) => {
             const active = selectedTier === tier;
             return (
               <button
                 key={tier}
                 onClick={() => setSelectedTier(tier)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap border ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-all whitespace-nowrap ${
                   active
-                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold shadow-md shadow-amber-500/20'
+                    ? 'pixel-btn pixel-btn-gold text-slate-950 font-bold'
                     : isTierLocked
-                    ? 'bg-slate-950/60 border-slate-800 text-slate-500 hover:bg-slate-900/80 hover:text-slate-400'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-slate-100'
+                    ? 'pixel-btn pixel-btn-dark opacity-50'
+                    : 'pixel-btn pixel-btn-dark text-slate-300'
                 }`}
               >
-                <span>Tier {tier}</span>
+                <span className="font-pixel-heading">Tier {tier}</span>
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
-                    active ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+                  className={`text-[9px] px-1.5 py-0.2 rounded font-pixel-body ${
+                    active ? 'bg-slate-950 text-amber-300 font-bold' : 'bg-slate-900 text-slate-400'
                   }`}
                 >
                   Lv. {minLevel}-{maxLevel}
@@ -104,7 +104,7 @@ export function ExpeditionSelectionModal({
         </div>
 
         {/* Lista de Expedições do Tier Selecionado */}
-        <div className="p-4 overflow-y-auto space-y-3.5 flex-1 custom-scrollbar">
+        <div className="p-4 overflow-y-auto space-y-3 flex-1 font-pixel-body">
           {filteredRegions.map((region) => {
             const isLevelMet = characterLevel >= region.minLevel;
             const needsTierComplete = region.tier > 1 && (region.requiresTierComplete || !region.requiresUnlockFrom);
@@ -125,31 +125,31 @@ export function ExpeditionSelectionModal({
             return (
               <div
                 key={region.id}
-                className={`p-3.5 rounded-xl border transition-all flex flex-col md:flex-row justify-between items-center gap-3 ${
+                className={`p-3.5 pixel-slot rounded-xl transition-all flex flex-col md:flex-row justify-between items-center gap-3 ${
                   isSelected
-                    ? 'bg-amber-950/30 border-amber-500 shadow-lg shadow-amber-500/10'
+                    ? 'border-amber-400 bg-amber-950/60 shadow-lg ring-1 ring-amber-400'
                     : !isAvailable
-                    ? 'bg-slate-950/50 border-slate-850 opacity-60'
-                    : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                    ? 'opacity-60 bg-slate-950/50'
+                    : 'bg-slate-950/80 hover:border-slate-700'
                 }`}
               >
                 {/* Informações da Região */}
-                <div className="space-y-2 flex-1">
-                  <div className="flex items-center gap-2">
+                <div className="space-y-1.5 flex-1">
+                  <div className="flex items-center gap-2.5">
                     <span className="text-2xl">{region.icon}</span>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-bold text-sm text-slate-100">{region.name}</h3>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 font-mono text-emerald-400 font-bold border border-slate-700">
+                        <h3 className="font-pixel-heading text-xs text-amber-300">{region.name}</h3>
+                        <span className="text-[9px] px-2 py-0.5 rounded font-pixel-heading bg-slate-900 text-emerald-400 border border-slate-700">
                           Lv. {region.minLevel}-{region.maxLevel}
                         </span>
                         {isSelected && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-bold">
+                          <span className="text-[9px] px-2 py-0.5 rounded font-pixel-heading bg-amber-500 text-slate-950 font-bold">
                             ● Ativa
                           </span>
                         )}
                         {defeatedSet.has(region.id) && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-bold">
+                          <span className="text-[9px] px-2 py-0.5 rounded font-pixel-heading bg-emerald-950 border border-emerald-500/50 text-emerald-300">
                             ✨ Boss Derrotado
                           </span>
                         )}
@@ -159,8 +159,8 @@ export function ExpeditionSelectionModal({
                   </div>
 
                   {/* Informações do Chefão & Fases */}
-                  <div className="flex items-center gap-3 text-[10px] font-mono text-slate-300 pt-0.5">
-                    <span className="text-amber-400 font-semibold">👑 Boss Final: {region.bossName}</span>
+                  <div className="flex items-center gap-3 text-[10px] text-slate-300 pt-0.5">
+                    <span className="text-amber-400 font-semibold">👑 Boss: {region.bossName}</span>
                     <span className="text-slate-500">•</span>
                     <span className="text-purple-400">🚩 {region.maxStages} Fases + Chefão</span>
                   </div>
@@ -169,8 +169,8 @@ export function ExpeditionSelectionModal({
                 {/* Ação / Seleção */}
                 <div className="flex md:flex-col justify-end items-end gap-2 border-t md:border-t-0 border-slate-800 pt-2 md:pt-0 min-w-[140px]">
                   {!isAvailable ? (
-                    <div className="text-right space-y-1">
-                      <span className="text-xs font-bold text-rose-400 flex items-center gap-1 justify-end">
+                    <div className="pixel-alert-frame pixel-alert-warning rounded p-2 text-right space-y-1">
+                      <span className="text-xs font-pixel-heading text-rose-400 flex items-center gap-1 justify-end">
                         🔒 Bloqueado
                       </span>
                       <p className="text-[10px] text-slate-500 max-w-[130px]">
@@ -178,7 +178,7 @@ export function ExpeditionSelectionModal({
                           ? `Requer Nível ${region.minLevel}`
                           : tierProgress
                           ? `👑 ${tierProgress.defeated}/${tierProgress.total} Chefes do Tier ${region.tier - 1}`
-                          : `Derrote o Boss da expedição anterior para liberar!`}
+                          : `Derrote o Boss da expedição anterior!`}
                       </p>
                     </div>
                   ) : (
@@ -188,13 +188,13 @@ export function ExpeditionSelectionModal({
                         onClose();
                       }}
                       disabled={isSelected}
-                      className={`w-full py-2 px-4 rounded-xl font-bold text-xs transition-all shadow-md ${
+                      className={`w-full py-2 px-4 rounded text-xs font-pixel-heading transition-all ${
                         isSelected
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 cursor-default'
-                          : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                          ? 'pixel-btn pixel-btn-dark opacity-60 cursor-default'
+                          : 'pixel-btn pixel-btn-gold'
                       }`}
                     >
-                      {isSelected ? 'Expedição Ativa' : 'Viajar para Região ➔'}
+                      {isSelected ? 'Expedição Ativa' : 'Viajar ➔'}
                     </button>
                   )}
                 </div>
@@ -204,11 +204,11 @@ export function ExpeditionSelectionModal({
         </div>
 
         {/* Rodapé do Modal */}
-        <div className="p-3 border-t border-slate-800 bg-slate-950/60 flex justify-between items-center text-[11px] text-slate-400">
-          <span>💡 Dica: Cada monstro possui tabela de drop própria. Farm em locais estratégicos!</span>
+        <div className="p-3 border-t border-slate-800 bg-slate-950/80 flex justify-between items-center text-[11px] text-slate-400 font-pixel-body">
+          <span>💡 Cada monstro possui tabela de drop própria. Farm em locais estratégicos!</span>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold transition-all text-xs"
+            className="pixel-btn pixel-btn-dark px-4 py-1.5 text-xs font-pixel-heading"
           >
             Fechar Mapa
           </button>

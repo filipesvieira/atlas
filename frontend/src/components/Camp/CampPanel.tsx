@@ -41,20 +41,21 @@ export const CampPanel: React.FC<CampPanelProps> = ({
 
   const [isSalvageOpen, setIsSalvageOpen] = useState(false);
 
-  // Mapeamento dos slots padrão
   const slotsMap = camp?.buildings || {};
+  const findBuildingSlot = (buildingKey: string, legacySlot?: string) =>
+    Object.values(slotsMap).find((slot) => slot.building_key === buildingKey) || (legacySlot ? slotsMap[legacySlot] : undefined);
 
   // Filtra construções descobertas (Fogueira é base, as demais exigem Blueprint ou nível > 0)
   const discoveredBuildings = buildingDefinitions.filter((bDef) => {
     if (bDef.key === 'campfire') return true;
     if (camp?.blueprints && camp.blueprints[bDef.key]) return true;
-    const slot = slotsMap[bDef.slot_type];
+    const slot = findBuildingSlot(bDef.key, bDef.slot_type);
     if (slot && slot.level > 0) return true;
     return false;
   });
 
   // Verifica se a bancada está construída (Nv >= 1)
-  const workbenchSlot = slotsMap['south'];
+  const workbenchSlot = findBuildingSlot('workbench', 'south');
   const isSalvageUnlocked = Boolean(workbenchSlot && workbenchSlot.level >= 1);
   const workbenchLevel = workbenchSlot?.level || 0;
 
@@ -124,10 +125,13 @@ export const CampPanel: React.FC<CampPanelProps> = ({
       {/* Grid das Construções Descobertas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {discoveredBuildings.map((bDef) => {
-          const slot = slotsMap[bDef.slot_type] || {
-            slot_key: bDef.slot_type,
+          const slot = findBuildingSlot(bDef.key, bDef.slot_type) || {
+            slot_key: bDef.key,
             building_key: bDef.key,
             level: 0,
+            tile_x: 0,
+            tile_y: 0,
+            rotation: 0,
             updated_at: new Date().toISOString(),
           };
 

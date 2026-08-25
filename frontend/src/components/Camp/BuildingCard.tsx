@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BuildingDefinition } from '../../game/GameCatalog';
 import { BuildingSlot } from '../../hooks/useGameSocket';
+import { BuildingScenePreview } from './BuildingScenePreview';
 
 interface BuildingCardProps {
   buildingDef: BuildingDefinition;
@@ -94,31 +95,31 @@ export const BuildingCard: React.FC<BuildingCardProps> = ({
 
   return (
     <div
-      className={`relative p-3.5 rounded-xl border transition-all flex flex-col justify-between ${
+      className={`relative p-3.5 pixel-slot rounded-xl transition-all flex flex-col justify-between ${
         currentLevel > 0
-          ? 'bg-slate-900/90 border-slate-800 shadow-md hover:border-slate-700'
-          : 'bg-slate-950/60 border-slate-900 text-slate-500'
+          ? 'bg-slate-950/85 border-slate-800'
+          : 'bg-slate-950/50 border-slate-900 opacity-70'
       }`}
     >
       {/* Header do Card */}
       <div>
         <div className="flex items-start justify-between gap-2 border-b border-slate-800/80 pb-2">
           <div className="flex items-center gap-2.5">
-            <span className="text-2xl p-1.5 bg-slate-950 rounded-lg border border-slate-800">
-              {buildingDef.icon}
-            </span>
+            <div className="p-1 pixel-slot rounded bg-slate-900 border-amber-500/40 flex items-center justify-center shrink-0">
+              <BuildingScenePreview buildingKey={buildingDef.key} level={currentLevel} size="sm" />
+            </div>
             <div>
-              <h4 className="font-bold text-xs text-slate-200">{buildingDef.name}</h4>
-              <span className="text-[10px] text-slate-500 font-mono capitalize">Slot {buildingDef.slot_type}</span>
+              <h4 className="font-pixel-heading text-xs text-amber-300">{buildingDef.name}</h4>
+              <span className="text-[9px] text-slate-500 font-pixel-body capitalize">Slot {buildingDef.slot_type}</span>
             </div>
           </div>
           <span
-            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+            className={`px-2 py-0.5 rounded text-[9px] font-pixel-heading ${
               isMaxLevel
-                ? 'bg-amber-400/20 text-amber-300 border border-amber-500/40'
+                ? 'bg-amber-950 text-amber-300 border border-amber-500/40'
                 : currentLevel > 0
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                : 'bg-slate-800 text-slate-500 border border-slate-700'
+                ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                : 'bg-slate-900 text-slate-500 border border-slate-800'
             }`}
           >
             {isMaxLevel ? 'MAX' : `Nv. ${currentLevel}/${buildingDef.max_level}`}
@@ -126,7 +127,7 @@ export const BuildingCard: React.FC<BuildingCardProps> = ({
         </div>
 
         {/* Efeito Ativo */}
-        <p className="text-[11px] text-slate-400 mt-2 min-h-[28px] leading-relaxed">
+        <p className="text-[11px] text-slate-400 mt-2 min-h-[28px] leading-relaxed font-pixel-body">
           {getActiveBonusSummary()}
         </p>
       </div>
@@ -134,16 +135,16 @@ export const BuildingCard: React.FC<BuildingCardProps> = ({
       {/* Barra de Progresso de Upgrade ou Botão de Ação */}
       <div className="mt-3 pt-2 border-t border-slate-800/80">
         {isUpgrading ? (
-          <div className="space-y-1">
-            <div className="flex justify-between text-[10px] font-mono text-amber-300">
+          <div className="space-y-1 font-pixel-body">
+            <div className="flex justify-between text-[10px] text-amber-300">
               <span className="flex items-center gap-1 animate-pulse">
                 <span>🔨</span> Melhorando para Nv. {slot?.upgrade_target_level}...
               </span>
-              <span>{timeLeft}</span>
+              <span className="font-pixel-heading">{timeLeft}</span>
             </div>
-            <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
+            <div className="w-full pixel-bar-bg rounded h-2 overflow-hidden">
               <div
-                className="bg-amber-500 h-full transition-all duration-300 rounded-full"
+                className="pixel-bar-xp h-full transition-all duration-300"
                 style={{ width: `${progressPercent}%` }}
               ></div>
             </div>
@@ -152,12 +153,12 @@ export const BuildingCard: React.FC<BuildingCardProps> = ({
           <button
             onClick={() => slot && onOpenUpgradeModal(buildingDef, slot)}
             disabled={isMaxLevel || !slot}
-            className={`w-full py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+            className={`w-full py-1.5 rounded text-xs font-pixel-heading transition flex items-center justify-center gap-1.5 ${
               isMaxLevel
-                ? 'bg-slate-950 text-slate-600 border border-slate-800 cursor-default'
+                ? 'pixel-btn pixel-btn-dark opacity-50 cursor-default'
                 : currentLevel === 0
-                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md'
-                : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700'
+                ? 'pixel-btn pixel-btn-gold'
+                : 'pixel-btn pixel-btn-dark text-amber-300'
             }`}
           >
             {isMaxLevel ? (

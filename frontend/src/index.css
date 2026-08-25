@@ -3,23 +3,619 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    color-scheme: dark;
+  }
   body {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family: 'Trebuchet MS', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    color-scheme: dark;
+    background-color: #060a17;
+    color: #f8fafc;
+  }
+
+  /* Forçar tema escuro nativo e desabilitar widgets brancos do sistema em selects/inputs */
+  select, input, textarea {
+    color-scheme: dark !important;
+    background-color: #0b1120 !important;
+    color: #f8fafc !important;
+    border-color: #334155 !important;
+  }
+
+  select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f59e0b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 0.75rem center !important;
+    background-size: 1rem !important;
+    padding-right: 2.25rem !important;
+  }
+
+  option {
+    background-color: #0b1120 !important;
+    color: #f8fafc !important;
   }
 }
 
-/* Custom scrollbars */
+/* ==========================================================================
+   ATLAS PIXEL ART DESIGN SYSTEM (RETRO RPG AESTHETICS)
+   ========================================================================== */
+
+/* Tipografias Claras, Legíveis e com Estética Gamer/RPG */
+.font-pixel-heading {
+  font-family: 'Chakra Petch', sans-serif;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+}
+
+.font-pixel-stats {
+  font-family: 'Chakra Petch', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+}
+
+.font-pixel-retro {
+  font-family: 'Chakra Petch', sans-serif;
+  line-height: 1.4;
+}
+
+.font-pixel-body {
+  font-family: 'Trebuchet MS', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.font-pixel-terminal {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Molduras de Cards em Pixel Art (Chanfro de Pedra Rúnica / Ouro) */
+.pixel-card {
+  background: linear-gradient(180deg, #0f172a 0%, #090e1a 100%);
+  border: 2px solid #1e293b;
+  box-shadow: 
+    inset 1px 1px 0px rgba(255, 255, 255, 0.08),
+    inset -1px -1px 0px rgba(0, 0, 0, 0.6),
+    0 6px 16px rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+
+.pixel-card-gold {
+  background: linear-gradient(180deg, #131c31 0%, #0a0f1d 100%);
+  border: 2px solid #b45309;
+  box-shadow: 
+    inset 1px 1px 0px rgba(251, 191, 36, 0.3),
+    inset -1px -1px 0px rgba(0, 0, 0, 0.8),
+    0 0 12px rgba(245, 158, 11, 0.12),
+    0 6px 16px rgba(0, 0, 0, 0.6);
+  position: relative;
+}
+
+.pixel-card-cyan {
+  background: linear-gradient(180deg, #0e1a2f 0%, #070d18 100%);
+  border: 2px solid #0284c7;
+  box-shadow: 
+    inset 1px 1px 0px rgba(56, 189, 248, 0.3),
+    inset -1px -1px 0px rgba(0, 0, 0, 0.8),
+    0 0 12px rgba(14, 165, 233, 0.12);
+}
+
+.pixel-card-purple {
+  background: linear-gradient(180deg, #18112e 0%, #0c0819 100%);
+  border: 2px solid #7e22ce;
+  box-shadow: 
+    inset 1px 1px 0px rgba(192, 132, 252, 0.3),
+    inset -1px -1px 0px rgba(0, 0, 0, 0.8),
+    0 0 12px rgba(147, 51, 234, 0.15);
+}
+
+/* Header estilizado de Card */
+.pixel-card-header {
+  border-bottom: 2px solid #1e293b;
+  padding-bottom: 0.375rem;
+  margin-bottom: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+}
+
+.pixel-card-header-gold {
+  border-bottom: 2px solid rgba(245, 158, 11, 0.3);
+}
+
+/* Cantoneiras Pixeladas Decorativas */
+.pixel-corner-box {
+  position: relative;
+}
+.pixel-corner-box::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  width: 4px;
+  height: 4px;
+  background: #fbbf24;
+  pointer-events: none;
+}
+.pixel-corner-box::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 4px;
+  height: 4px;
+  background: #fbbf24;
+  pointer-events: none;
+}
+
+/* Botões 3D Chanfrados em Pixel Art */
+.pixel-btn {
+  font-family: 'Pixelify Sans', 'Silkscreen', monospace;
+  font-weight: 700;
+  border-radius: 4px;
+  position: relative;
+  transition: filter 0.1s ease, transform 0.05s ease;
+  user-select: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pixel-btn:active {
+  transform: translateY(2px);
+  box-shadow: none !important;
+}
+
+/* Botão Dourado Principal */
+.pixel-btn-gold {
+  background: linear-gradient(180deg, #fbbf24 0%, #d97706 100%);
+  color: #1a0f02;
+  border-top: 2px solid #fef08a;
+  border-left: 2px solid #fef08a;
+  border-right: 2px solid #78350f;
+  border-bottom: 2px solid #78350f;
+  box-shadow: 0 2px 0 #451a03, 0 4px 8px rgba(0,0,0,0.4);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.4);
+}
+.pixel-btn-gold:hover {
+  filter: brightness(1.1);
+}
+.pixel-btn-gold:active {
+  border-top: 2px solid #78350f;
+  border-left: 2px solid #78350f;
+  border-right: 2px solid #fef08a;
+  border-bottom: 2px solid #fef08a;
+}
+
+/* Botão Esmeralda / Ação Positiva */
+.pixel-btn-emerald {
+  background: linear-gradient(180deg, #10b981 0%, #047857 100%);
+  color: #ffffff;
+  border-top: 2px solid #6ee7b7;
+  border-left: 2px solid #6ee7b7;
+  border-right: 2px solid #064e3b;
+  border-bottom: 2px solid #064e3b;
+  box-shadow: 0 2px 0 #022c22, 0 4px 8px rgba(0,0,0,0.4);
+  text-shadow: 0 1px 1px #064e3b;
+}
+.pixel-btn-emerald:hover {
+  filter: brightness(1.1);
+}
+
+/* Botão Carmesim / Pausar / Cancelar */
+.pixel-btn-crimson {
+  background: linear-gradient(180deg, #f43f5e 0%, #be123c 100%);
+  color: #ffffff;
+  border-top: 2px solid #fda4af;
+  border-left: 2px solid #fda4af;
+  border-right: 2px solid #881337;
+  border-bottom: 2px solid #881337;
+  box-shadow: 0 2px 0 #4c0519, 0 4px 8px rgba(0,0,0,0.4);
+  text-shadow: 0 1px 1px #881337;
+}
+.pixel-btn-crimson:hover {
+  filter: brightness(1.1);
+}
+
+/* Botão Roxo / Arcano */
+.pixel-btn-purple {
+  background: linear-gradient(180deg, #a855f7 0%, #6b21a8 100%);
+  color: #ffffff;
+  border-top: 2px solid #d8b4fe;
+  border-left: 2px solid #d8b4fe;
+  border-right: 2px solid #3b0764;
+  border-bottom: 2px solid #3b0764;
+  box-shadow: 0 2px 0 #2e1065, 0 4px 8px rgba(0,0,0,0.4);
+  text-shadow: 0 1px 1px #3b0764;
+}
+.pixel-btn-purple:hover {
+  filter: brightness(1.1);
+}
+
+/* Botão Escuro / Inset */
+.pixel-btn-dark {
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  color: #cbd5e1;
+  border-top: 2px solid #475569;
+  border-left: 2px solid #475569;
+  border-right: 2px solid #020617;
+  border-bottom: 2px solid #020617;
+  box-shadow: 0 2px 0 #020617;
+}
+.pixel-btn-dark:hover {
+  filter: brightness(1.15);
+  color: #f8fafc;
+}
+
+/* Slots de Itens Estilo Tibia-Pixel com Chanfro */
+.pixel-slot {
+  background: #060a14;
+  border-top: 2px solid #020617;
+  border-left: 2px solid #020617;
+  border-right: 2px solid #334155;
+  border-bottom: 2px solid #334155;
+  box-shadow: inset 1px 1px 2px rgba(0,0,0,0.8);
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.pixel-slot:hover {
+  border-color: #f59e0b;
+  box-shadow: inset 0 0 6px rgba(245, 158, 11, 0.3), 0 0 8px rgba(245, 158, 11, 0.4);
+}
+
+.pixel-slot-equipped {
+  border-top: 2px solid #1e293b;
+  border-left: 2px solid #1e293b;
+  border-right: 2px solid #64748b;
+  border-bottom: 2px solid #64748b;
+}
+
+.pixel-slot-selected {
+  border-top: 2px solid #fef08a !important;
+  border-left: 2px solid #fef08a !important;
+  border-right: 2px solid #b45309 !important;
+  border-bottom: 2px solid #b45309 !important;
+  background: #271304 !important;
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.7), inset 0 0 8px rgba(251, 191, 36, 0.4) !important;
+  outline: 2px solid #fbbf24 !important;
+  outline-offset: 1px;
+}
+
+/* Componentes compartilhados do Modal de Assentamento & Trabalho */
+.settlement-panel {
+  border: 1px solid rgba(71, 85, 105, 0.9);
+  border-radius: 0.75rem;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(6, 10, 23, 0.9));
+  padding: 1rem;
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.05), 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+/* Moldura de atenção reutilizável: pulso em passos para manter a linguagem pixel-art. */
+.pixel-alert-frame,
+.settlement-budget-alert {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(253, 164, 175, 0.18),
+    0 0 0 1px rgba(15, 23, 42, 0.72),
+    0 0 12px rgba(148, 163, 184, 0.12);
+}
+
+.pixel-alert-frame::after,
+.settlement-budget-alert::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 0.55rem;
+  pointer-events: none;
+}
+
+.pixel-alert-critical,
+.settlement-budget-alert {
+  border-color: rgba(244, 63, 94, 0.95);
+  background: linear-gradient(180deg, rgba(76, 5, 25, 0.42), rgba(15, 23, 42, 0.92));
+  animation: pixel-alert-critical-pulse 1.2s steps(2, end) infinite;
+}
+
+.pixel-alert-critical::after,
+.settlement-budget-alert::after {
+  border-color: rgba(251, 113, 133, 0.42);
+}
+
+.pixel-alert-warning {
+  border-color: rgba(245, 158, 11, 0.9);
+  background: linear-gradient(180deg, rgba(69, 45, 10, 0.42), rgba(15, 23, 42, 0.92));
+  animation: pixel-alert-warning-pulse 1.8s steps(2, end) infinite;
+}
+
+.pixel-alert-warning::after {
+  border-color: rgba(252, 211, 77, 0.38);
+}
+
+.pixel-alert-success {
+  border-color: rgba(52, 211, 153, 0.72);
+  background: linear-gradient(180deg, rgba(6, 78, 59, 0.34), rgba(15, 23, 42, 0.92));
+  animation: pixel-alert-success-enter 0.8s steps(2, end) 1;
+}
+
+.pixel-alert-success::after {
+  border-color: rgba(110, 231, 183, 0.32);
+}
+
+.pixel-alert-info {
+  border-color: rgba(56, 189, 248, 0.72);
+  background: linear-gradient(180deg, rgba(7, 49, 78, 0.34), rgba(15, 23, 42, 0.92));
+}
+
+.pixel-alert-info::after {
+  border-color: rgba(125, 211, 252, 0.28);
+}
+
+.pixel-alert-arcane {
+  border-color: rgba(192, 132, 252, 0.72);
+  background: linear-gradient(180deg, rgba(59, 25, 86, 0.38), rgba(15, 23, 42, 0.92));
+  animation: pixel-alert-arcane-pulse 2.2s steps(2, end) infinite;
+}
+
+.pixel-alert-arcane::after {
+  border-color: rgba(216, 180, 254, 0.3);
+}
+
+.pixel-alert-icon,
+.settlement-budget-alert-icon {
+  display: inline-block;
+  animation: pixel-alert-icon-pulse 1.2s steps(2, end) infinite;
+}
+
+@keyframes pixel-alert-critical-pulse {
+  0%, 100% {
+    border-color: rgba(244, 63, 94, 0.95);
+    box-shadow:
+      inset 0 1px 0 rgba(253, 164, 175, 0.18),
+      0 0 0 1px rgba(127, 29, 51, 0.72),
+      0 0 16px rgba(225, 29, 72, 0.22);
+  }
+
+  50% {
+    border-color: rgba(254, 202, 202, 1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 228, 230, 0.32),
+      0 0 0 2px rgba(225, 29, 72, 0.82),
+      0 0 27px rgba(225, 29, 72, 0.5);
+  }
+}
+
+@keyframes pixel-alert-warning-pulse {
+  0%, 100% {
+    border-color: rgba(245, 158, 11, 0.9);
+    box-shadow: 0 0 0 1px rgba(120, 53, 15, 0.68), 0 0 12px rgba(245, 158, 11, 0.18);
+  }
+
+  50% {
+    border-color: rgba(254, 243, 199, 1);
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.72), 0 0 21px rgba(245, 158, 11, 0.38);
+  }
+}
+
+@keyframes pixel-alert-success-enter {
+  0% { box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.7), 0 0 22px rgba(52, 211, 153, 0.44); }
+  100% { box-shadow: 0 0 0 1px rgba(6, 78, 59, 0.68), 0 0 10px rgba(52, 211, 153, 0.12); }
+}
+
+@keyframes pixel-alert-arcane-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(107, 33, 168, 0.64), 0 0 12px rgba(192, 132, 252, 0.16); }
+  50% { box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.58), 0 0 20px rgba(192, 132, 252, 0.32); }
+}
+
+@keyframes pixel-alert-icon-pulse {
+  0%, 100% { opacity: 0.72; }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pixel-alert-critical,
+  .pixel-alert-warning,
+  .pixel-alert-success,
+  .pixel-alert-arcane,
+  .settlement-budget-alert,
+  .pixel-alert-icon,
+  .settlement-budget-alert-icon {
+    animation: none;
+  }
+}
+
+.settlement-panel-accent {
+  border-color: rgba(245, 158, 11, 0.42);
+  background: linear-gradient(180deg, rgba(69, 45, 10, 0.35), rgba(15, 23, 42, 0.88));
+}
+
+.settlement-panel-arcane {
+  border-color: rgba(192, 132, 252, 0.38);
+  background: linear-gradient(180deg, rgba(59, 25, 86, 0.38), rgba(15, 23, 42, 0.88));
+}
+
+.settlement-panel-positive {
+  border-color: rgba(52, 211, 153, 0.38);
+  background: linear-gradient(180deg, rgba(6, 78, 59, 0.28), rgba(15, 23, 42, 0.88));
+}
+
+.settlement-panel-info {
+  border-color: rgba(56, 189, 248, 0.36);
+  background: linear-gradient(180deg, rgba(7, 49, 78, 0.3), rgba(15, 23, 42, 0.88));
+}
+
+.settlement-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.8);
+  padding-bottom: 0.65rem;
+  margin-bottom: 0.85rem;
+}
+
+.settlement-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #fbbf24;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.settlement-panel-subtitle {
+  margin-top: 0.25rem;
+  color: #94a3b8;
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.settlement-field-label {
+  display: block;
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.settlement-control {
+  width: 100%;
+  min-height: 2.5rem;
+  margin-top: 0.4rem;
+  border: 1px solid #475569 !important;
+  border-radius: 0.5rem;
+  background: #0b1120 !important;
+  padding: 0.6rem 0.75rem;
+  color: #f8fafc !important;
+  font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+  font-size: 0.75rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.settlement-control:focus {
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.16);
+}
+
+.settlement-control:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.settlement-icon-frame {
+  display: flex;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(245, 158, 11, 0.42);
+  border-radius: 0.65rem;
+  background: #0b1120;
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.55);
+}
+
+.settlement-choice {
+  border: 1px solid #334155;
+  border-radius: 0.65rem;
+  background: rgba(6, 10, 20, 0.78);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.settlement-choice:hover {
+  border-color: #64748b;
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.settlement-choice-selected {
+  border-color: #fbbf24 !important;
+  background: rgba(120, 53, 15, 0.28) !important;
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.42), inset 0 0 12px rgba(245, 158, 11, 0.08);
+}
+
+.settlement-empty {
+  border: 1px dashed #475569;
+  border-radius: 0.75rem;
+  background: rgba(6, 10, 20, 0.48);
+  padding: 1.25rem;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+/* Barras de Progresso em Pixel Art */
+.pixel-bar-bg {
+  background: #030712;
+  border-top: 2px solid #020617;
+  border-left: 2px solid #020617;
+  border-right: 2px solid #374151;
+  border-bottom: 2px solid #374151;
+  padding: 1px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.9);
+}
+
+.pixel-bar-hp {
+  background: repeating-linear-gradient(
+    90deg,
+    #ef4444 0px,
+    #ef4444 6px,
+    #dc2626 6px,
+    #dc2626 8px
+  );
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -1px 0 rgba(0,0,0,0.4);
+}
+
+.pixel-bar-mana {
+  background: repeating-linear-gradient(
+    90deg,
+    #38bdf8 0px,
+    #38bdf8 6px,
+    #0284c7 6px,
+    #0284c7 8px
+  );
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -1px 0 rgba(0,0,0,0.4);
+}
+
+.pixel-bar-xp {
+  background: repeating-linear-gradient(
+    90deg,
+    #c084fc 0px,
+    #c084fc 6px,
+    #9333ea 6px,
+    #9333ea 8px
+  );
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -1px 0 rgba(0,0,0,0.4);
+}
+
+/* Custom Scrollbars Retrô */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: #070d19;
+  border: 1px solid #1e293b;
 }
 ::-webkit-scrollbar-thumb {
   background: #334155;
-  border-radius: 3px;
+  border-top: 1px solid #64748b;
+  border-left: 1px solid #64748b;
+  border-right: 1px solid #0f172a;
+  border-bottom: 1px solid #0f172a;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #f59e0b;
+  border-color: #fde68a #78350f #78350f #fde68a;
+}
+.pixel-art, .game-canvas, canvas.pixel-art {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }

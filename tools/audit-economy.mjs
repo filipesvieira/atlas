@@ -16,6 +16,8 @@ const profileRuntime = read('backend/pkg/game/resource_profiles.go');
 const database = read('backend/internal/db/db.go');
 const economyDatabase = read('backend/internal/db/economy.go');
 const settlementDatabase = read('backend/internal/db/settlement.go');
+const buffDatabase = read('backend/internal/db/buffs.go');
+const buffs = read('backend/pkg/game/buffs.go');
 const migrationNames = [
   '000006_progression_professions_crafting',
   '000007_economy_hardening',
@@ -25,18 +27,29 @@ const migrationNames = [
   '000011_pending_item_no_loss',
   '000012_classless_onboarding',
   '000013_settlement_residents_desires',
+  '000014_settlement_treasury_payroll',
+  '000015_isometric_camp_layout',
+  '000016_character_food_buffs',
+  '000017_treasury_auto_fund_opt_in',
 ];
 const migration = migrationNames
   .map((name) => read(`backend/migrations/${name}.sql`))
   .join('\n');
 
-const professionKeys = [...professions.matchAll(/^\s*"([a-z_]+)":\s*\{Key:/gm)].map((m) => m[1]);
+const professionKeys = [...professions.matchAll(/^\s*"([a-z_]+)":\s*\{\s*$/gm)].map((m) => m[1]);
 const gatheringKeys = [...gathering.matchAll(/^\s*"([a-z_]+)":\s*\{Key:/gm)].map((m) => m[1]);
 const monsterParts = [...profiles.matchAll(/"([a-z0-9_]+)":\s*"part_/g)].map((m) => m[1]);
 const monsterPartKeys = [...new Set([...profiles.matchAll(/"[a-z0-9_]+":\s*"(part_[a-z0-9_]+)"/g)].map((m) => m[1]))];
 const rawResources = [...(economyResources + baseResources).matchAll(/Key:\s*"([a-z0-9_]+)"[^}]+?Category:\s*ResourceCategoryProfessionRaw/g)].map((m) => m[1]);
 
-assert(professionKeys.length === 6, `esperadas 6 profissões; encontradas ${professionKeys.length}`);
+assert(professionKeys.length === 13, `esperadas 13 profissões (6 coleta + 6 artesanato + cozinheiro); encontradas ${professionKeys.length}`);
+assert(professionKeys.includes('cook'), 'profissão cook/Cozinheiro ausente');
+for (const food of ['grilled_fish', 'hunter_skewer', 'explorer_stew', 'tracker_pie', 'arcane_banquet', 'warrior_banquet']) {
+  assert(recipes.includes(`OutputResourceKey: "${food}"`), `receita culinária ausente: ${food}`);
+  assert(buffs.includes(`"${food}"`), `buff de alimento ausente: ${food}`);
+}
+assert(migration.includes('character_active_buffs') && migration.includes('character_consumption_transactions'), 'persistência/idempotência de refeições ausente');
+assert(buffDatabase.includes('getCharacterBuffsOverlappingTx') && buffDatabase.includes('ConsumeCharacterConsumable'), 'consumo ou histórico offline de buffs ausente');
 assert(gatheringKeys.length === 6, `esperadas 6 expedições de coleta; encontradas ${gatheringKeys.length}`);
 assert(monsterParts.length === 39, `esperados 39 mapeamentos temáticos de monstros; encontrados ${monsterParts.length}`);
 assert(!/(ResourceKey:\s*"(?:wood|stone|fiber|iron)")/.test(profileRuntime), 'catálogo runtime ainda contém matéria-prima profissional hardcoded para monstros');
@@ -63,6 +76,9 @@ assert(economyDatabase.includes('ActiveGatherings') && economyDatabase.includes(
 assert(settlementDatabase.includes('AdvanceHeroDesires') && settlementDatabase.includes('hero_desire_reserve'), 'scheduler ou reserva transacional de Ambições ausente');
 assert(settlementDatabase.includes('settlement_armory') && settlementDatabase.includes('SentToArmory: true'), 'produção automática não está protegida no Arsenal');
 assert(migration.includes('recipe_snapshot JSONB') && settlementDatabase.includes('recipeSnapshot'), 'Ambições não congelam a receita para sobreviver a atualizações de catálogo');
+assert(migration.includes('settlement_gold_ledger') && migration.includes('settlement_payroll'), 'Tesouraria ou folha auditável do assentamento ausente');
+assert(migration.includes('treasury_auto_fund_enabled SET DEFAULT FALSE'), 'auto-funding da tesouraria deve ser opt-in para novos assentamentos');
+assert(economyDatabase.includes('reserveGatheringWageTx') && economyDatabase.includes('settleGatheringPayrollTx'), 'coleta não reserva/liquida salário no fluxo transacional');
 
 for (const table of [
   'character_professions', 'character_activities', 'character_pending_gathering_rewards',
@@ -71,6 +87,7 @@ for (const table of [
   'progression_migration_issues', 'settlements', 'settlement_residents',
   'settlement_resident_skills', 'hero_desires', 'hero_desire_resource_reservations',
   'settlement_armory',
+  'settlement_gold_ledger', 'settlement_payroll',
 ]) assert(migration.includes(table), `migração não contém ${table}`);
 
 const report = {
@@ -84,9 +101,11 @@ const report = {
   progressionConcurrency: 'expected revision + distributed lease',
   fullStoragePolicy: 'pending claim; no loss',
   settlementAutomation: 'resident workers + reserved desires + protected armory',
+  settlementPayroll: 'treasury reserve + automatic settlement + proportional refund',
+  foodBuffs: '6 recipes + persistent wall-clock history + idempotent consume',
   errors,
 };
 
 console.log(JSON.stringify(report, null, 2));
 if (errors.length) process.exit(1);
-console.log('Economy audit OK: progressão, profissões, coleta, crafting, rollout e overflow estão cobertos.');
+console.log('Economy audit OK: progressão, profissões, coleta, crafting, cozinha/buffs, rollout e overflow estão cobertos.');

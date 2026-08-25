@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func TestSkillRegistry_AllSevenSkillsRegistered(t *testing.T) {
-	expected := []string{"whirlwind", "brutal_strike", "multishot", "sniper_shot", "fireball", "ice_shard", "divine_heal"}
+func TestSkillRegistry_AllEightSkillsRegistered(t *testing.T) {
+	expected := []string{"whirlwind", "brutal_strike", "multishot", "sniper_shot", "fireball", "ice_shard", "arcane_nova", "divine_heal"}
 	for _, key := range expected {
 		def, exists := GetSkillDefinition(key)
 		if !exists {
@@ -48,6 +48,9 @@ func TestSkillRegistry_ArchetypeFiltering(t *testing.T) {
 	if !IsSkillAllowedForArchetype("ice_shard", "magic") {
 		t.Error("Ice Shard deveria ser permitido para Magic")
 	}
+	if !IsSkillAllowedForArchetype("arcane_nova", "magic") {
+		t.Error("Nova Arcana deveria ser permitida para Magic")
+	}
 
 	// Divine Heal (Universal de Suporte)
 	if !IsSkillAllowedForArchetype("divine_heal", "melee") || !IsSkillAllowedForArchetype("divine_heal", "distance") || !IsSkillAllowedForArchetype("divine_heal", "magic") {
@@ -55,19 +58,64 @@ func TestSkillRegistry_ArchetypeFiltering(t *testing.T) {
 	}
 }
 
+func TestInitialCombatSkillsUnlockAtLevelTenAndActivateForArchetype(t *testing.T) {
+	character := &CharacterData{Level: InitialCombatSkillUnlockLevel - 1, LearnedSkills: []string{}, ActiveSkills: []string{}}
+	if unlocked := UnlockInitialCombatSkills(character); len(unlocked) != 0 {
+		t.Fatalf("nível abaixo do marco não deve desbloquear habilidades: %v", unlocked)
+	}
+
+	character.Level = InitialCombatSkillUnlockLevel
+	unlocked := UnlockInitialCombatSkills(character)
+	if len(unlocked) != len(initialCombatSkillKeys) {
+		t.Fatalf("esperava %d habilidades iniciais, obteve %v", len(initialCombatSkillKeys), unlocked)
+	}
+	if activated := ActivateInitialSkillForArchetype(character, "magic"); activated != "arcane_nova" {
+		t.Fatalf("mago deveria ativar a Nova Arcana, obteve %q", activated)
+	}
+	if !hasSkill(character.ActiveSkills, "arcane_nova") {
+		t.Fatalf("Nova Arcana deveria estar ativa: %v", character.ActiveSkills)
+	}
+}
+
+func TestArcaneNovaHitsUpToFourTargets(t *testing.T) {
+	def, exists := GetSkillDefinition("arcane_nova")
+	if !exists {
+		t.Fatal("arcane_nova não encontrada")
+	}
+	monsters := []*Monster{
+		{ID: "one", Health: 500, MaxHealth: 500},
+		{ID: "two", Health: 500, MaxHealth: 500},
+		{ID: "three", Health: 500, MaxHealth: 500},
+		{ID: "four", Health: 500, MaxHealth: 500},
+		{ID: "five", Health: 500, MaxHealth: 500},
+	}
+	result := def.Execute(&SkillContext{
+		Character:       &CharacterData{Level: 10},
+		DerivedStats:    &DerivedStats{EffectiveINT: 10},
+		Monsters:        monsters,
+		MagicMasteryLvl: 10,
+	})
+	if result == nil || len(result.TargetIDs) != 4 || result.DamageDealt <= 0 {
+		t.Fatalf("Nova Arcana deveria acertar quatro alvos: %+v", result)
+	}
+	if monsters[4].Health != monsters[4].MaxHealth {
+		t.Fatalf("quinto alvo não deveria ser atingido: %+v", monsters[4])
+	}
+}
+
 func TestSkillBookLearningDoesNotRequireCompatibleWeapon(t *testing.T) {
-	book := GenerateItemFromTemplate("Manual: Tiro Quádruplo", "Raro", rand.New(rand.NewSource(42)))
+	book := GenerateItemFromTemplate("Manual: Tiro Preciso", "Raro", rand.New(rand.NewSource(42)))
 	if book == nil {
 		t.Fatal("livro de Tiro Quádruplo não foi gerado pelo catálogo")
 	}
 	character := &CharacterData{
-		ID:           "skill-learning-test",
-		Name:         "Aprendiz Livre",
-		Level:        10,
-		Health:       100,
-		MaxHealth:    100,
-		Mana:         100,
-		MaxMana:      100,
+		ID:            "skill-learning-test",
+		Name:          "Aprendiz Livre",
+		Level:         10,
+		Health:        100,
+		MaxHealth:     100,
+		Mana:          100,
+		MaxMana:       100,
 		LearnedSkills: []string{},
 		ActiveSkills:  []string{},
 	}
@@ -80,10 +128,10 @@ func TestSkillBookLearningDoesNotRequireCompatibleWeapon(t *testing.T) {
 
 	session.EquipItem(book.ID, string(SlotSkillBook))
 
-	if len(character.LearnedSkills) != 1 || character.LearnedSkills[0] != "multishot" {
+	if !hasSkill(character.LearnedSkills, "sniper_shot") {
 		t.Fatalf("habilidade de distância deveria ser aprendida com espada equipada: %+v", character.LearnedSkills)
 	}
-	if len(character.ActiveSkills) != 0 {
+	if hasSkill(character.ActiveSkills, "sniper_shot") {
 		t.Fatalf("habilidade incompatível pode ser aprendida, mas não deve ser autoativada: %+v", character.ActiveSkills)
 	}
 	if len(inventory.Backpack) != 0 {

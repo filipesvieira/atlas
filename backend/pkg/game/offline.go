@@ -15,10 +15,7 @@ const (
 	MaximumOfflineMinutes        = 720
 	MaximumOfflineItems          = 50
 	MaximumOfflineRewardedBosses = 12
-	offlineIncomingDamageFactor  = 0.32
 	offlineCombatTickSeconds     = 0.75
-	offlineRangedEngagementDelay = 1.50
-	offlineMeleeEngagementDelay  = 4.50
 )
 
 type OfflineSimulationInput struct {
@@ -34,6 +31,9 @@ type OfflineSimulationInput struct {
 	StateRevision      int64
 	Seed               int64
 	AutoSellSettings   AutoSellSettings
+	AutoPotionSettings AutoPotionSettings
+	AutoPotionState    AutoPotionState
+	ActiveBuffs        []ActiveBuff
 }
 
 type OfflineResult struct {
@@ -57,6 +57,8 @@ type OfflineResult struct {
 	Efficiency           float64          `json:"efficiency"`
 	XPGained             int64            `json:"xp_gained"`
 	GoldGained           int64            `json:"gold_gained"`
+	AutoPotionGoldSpent  int64            `json:"auto_potion_gold_spent,omitempty"`
+	AutoPotionState      AutoPotionState  `json:"auto_potion_state"`
 	ItemsFound           []Item           `json:"items_found"`
 	ItemsPending         []Item           `json:"items_pending,omitempty"`
 	ItemsConverted       []Item           `json:"items_converted,omitempty"`
@@ -64,8 +66,10 @@ type OfflineResult struct {
 	DropsAutoConverted   int              `json:"drops_auto_converted,omitempty"`
 	ResourcesFound       []ResourceAmount `json:"resources_found,omitempty"`
 	BossTrophies         []ResourceAmount `json:"boss_trophies,omitempty"`
+	FailureStage         int              `json:"failure_stage,omitempty"`
 	LevelBefore          int              `json:"level_before"`
 	LevelAfter           int              `json:"level_after"`
+	HighestStageReached  int              `json:"highest_stage_reached"`
 	HealthAfter          int              `json:"health_after"`
 	Defeated             bool             `json:"defeated,omitempty"`
 	StoppedReason        string           `json:"stopped_reason,omitempty"`
@@ -105,8 +109,11 @@ func equipmentPassives(inv *InventoryData) (lifesteal, goldBonus float64, manaRe
 	return lifesteal, goldBonus, manaRegen
 }
 
-func offlineStats(input OfflineSimulationInput) (attack, defense, maxHealth int, attackSpeed float64) {
+func offlineStats(input OfflineSimulationInput, level int, at time.Time) DerivedStats {
 	charCopy := *input.Character
+	if level > 0 {
+		charCopy.Level = level
+	}
 	if input.Inventory == nil {
 		input.Inventory = &InventoryData{Cap: 1500, Backpack: []Item{}}
 	}
@@ -114,19 +121,7 @@ func offlineStats(input OfflineSimulationInput) (attack, defense, maxHealth int,
 	if stance == "" {
 		stance = "balanced"
 	}
-	temp := &GameSession{Character: &charCopy, Inventory: input.Inventory, ActiveStance: stance}
-	attack, defense = temp.CalculateStats()
-	maxHealth = temp.Character.MaxHealth
-	attackSpeed = 1.0
-	if input.Inventory.Equipment.MainHand != nil {
-		switch GetItemWeaponType(input.Inventory.Equipment.MainHand) {
-		case WeaponTypeBow:
-			attackSpeed = 1.40
-		case WeaponTypeWand:
-			attackSpeed = 1.25
-		}
-	}
-	return attack, defense, maxHealth, attackSpeed
+	return ApplyActiveBuffsToDerivedStats(CalculateDerivedStats(&charCopy, input.Inventory, stance), input.ActiveBuffs, at)
 }
 
 func offlineKillXP(playerLevel, monsterLevel, maxHealth int, isBoss bool) int64 {
@@ -174,48 +169,182 @@ func offlineBossRewardBudget(minutes int) int {
 	return budget
 }
 
-// offlineProjectedWaveDamage aproxima o mesmo fluxo autoritativo do combate
-// online: monstros vivos contra-atacam em ticks, defesa mitiga por nível,
-// melee precisa encostar e ranged entra antes em alcance. O fator de abstração
-// representa movimentação, habilidades e alvos secundários que a simulação
-// agregada não executa tick a tick. O objetivo é impedir imortalidade offline,
-// não substituir o motor de combate online.
-func offlineProjectedWaveDamage(wave []Monster, fightDurations []float64, playerDefense int, dps, lifesteal float64) float64 {
-	if len(wave) == 0 || len(wave) != len(fightDurations) {
-		return 0
+type offlineWaveSimulation struct {
+	completed      bool
+	defeated       bool
+	elapsedSeconds float64
+	healthAfter    float64
+	damageTaken    int
+	killTimes      []float64
+}
+
+// offlineAutoPotionRuntime mantém a mesma carteira e o mesmo orçamento da
+// sessão online. A mana não é comprada offline porque o simulador não executa
+// habilidades ativas (a regra já existente que favorece o jogo ao vivo).
+type offlineAutoPotionRuntime struct {
+	settings  AutoPotionSettings
+	state     AutoPotionState
+	goldBank  int64
+	goldSpent int64
+}
+
+func newOfflineAutoPotionRuntime(input OfflineSimulationInput) *offlineAutoPotionRuntime {
+	gold := int64(0)
+	if input.Character != nil {
+		gold = input.Character.GoldBank
+	}
+	return &offlineAutoPotionRuntime{
+		settings: NormalizeAutoPotionSettings(input.AutoPotionSettings),
+		state:    input.AutoPotionState,
+		goldBank: gold,
+	}
+}
+
+func (runtime *offlineAutoPotionRuntime) tryHealthPotion(currentHealth float64, maxHealth int, now time.Time) (float64, bool) {
+	if runtime == nil || !runtime.settings.Enabled || maxHealth <= 0 {
+		return currentHealth, false
+	}
+	if percentOfCurrent(int(math.Floor(currentHealth)), maxHealth) > runtime.settings.HealthThresholdPercent {
+		return currentHealth, false
+	}
+	if CanSpendAutoPotion(runtime.settings, runtime.state, AutoPotionKindHealth, runtime.goldBank, now) != "" {
+		if runtime.state.GoldSpent+AutoPotionHealthCost > runtime.settings.MaxGoldPerExpedition {
+			runtime.state.BudgetExhausted = true
+		}
+		return currentHealth, false
+	}
+	runtime.goldBank -= AutoPotionHealthCost
+	runtime.goldSpent += AutoPotionHealthCost
+	runtime.state = ApplyAutoPotionSpend(runtime.state, AutoPotionKindHealth, now)
+	restore := math.Ceil(float64(maxHealth) * float64(AutoPotionHealthRestorePercent) / 100.0)
+	return math.Min(float64(maxHealth), currentHealth+restore), true
+}
+
+// simulateOfflineWave reproduz o relógio autoritativo da arena em baixa
+// resolução: o mesmo tick, a mesma malha, alcance, perseguição, kite, fuga,
+// cadência de ataque, mitigação e variação de dano usados online. A simulação
+// não executa habilidades ativas (elas dependem de decisões e estado visual
+// da sessão), tornando o jogo online deliberadamente mais responsivo e
+// vantajoso sem conceder recompensas irreais ao modo offline.
+func simulateOfflineWave(input OfflineSimulationInput, playerLevel int, wave []Monster, initialHealth, maxSeconds float64, startedAt time.Time, rng *rand.Rand, autoPotions *offlineAutoPotionRuntime) offlineWaveSimulation {
+	result := offlineWaveSimulation{
+		healthAfter: initialHealth,
+		killTimes:   make([]float64, len(wave)),
+	}
+	if len(wave) == 0 || maxSeconds <= 0 {
+		return result
 	}
 
+	session := &GameSession{
+		CurrentMonsters: make([]Monster, len(wave)),
+		HeroGridX:       HeroGridX,
+		HeroGridY:       HeroGridY,
+		HeroState:       "IDLE",
+		SkillCooldowns:  make(map[string]int),
+	}
+	copy(session.CurrentMonsters, wave)
+	for i := range session.CurrentMonsters {
+		mob := &session.CurrentMonsters[i]
+		mob.ID = "offline_mob_" + strconv.Itoa(i)
+		mob.GridX, mob.GridY = arenaSpawnPoint(i)
+		mob.State = "CHASE"
+		mob.FleeResolved = false
+		if mob.MovementSpeedMultiplier <= 0 {
+			mob.MovementSpeedMultiplier = 1.0
+		}
+		if mob.AttackSpeedSeconds <= 0 {
+			mob.AttackSpeedSeconds = DefaultMonsterAttackSpeed
+		}
+		// O spawn online acontece em um tick separado; o primeiro ataque só
+		// pode ocorrer no tick seguinte, quando o cooldown inicial é reduzido.
+		mob.AttackCooldownSec = 0.50
+	}
+
+	lifesteal, _, _ := equipmentPassives(input.Inventory)
+	alive := len(session.CurrentMonsters)
 	elapsed := 0.0
-	incoming := 0.0
-	for i, monster := range wave {
-		elapsed += fightDurations[i]
-		aliveUntil := elapsed
-		delay := offlineMeleeEngagementDelay
-		if monster.AttackType == AttackTypeRanged {
-			delay = offlineRangedEngagementDelay
+	for elapsed+offlineCombatTickSeconds <= maxSeconds && alive > 0 {
+		tickAt := startedAt.Add(time.Duration(elapsed * float64(time.Second)))
+		stats := offlineStats(input, playerLevel, tickAt)
+
+		// A arena regenera um ponto de vida por tick antes de processar os
+		// ataques, exatamente como o loop online.
+		if result.healthAfter < float64(stats.MaxHealth) {
+			result.healthAfter = math.Min(float64(stats.MaxHealth), result.healthAfter+1)
 		}
-		activeSeconds := math.Max(0, aliveUntil-delay)
-		spd := monster.AttackSpeedSeconds
-		if spd <= 0 {
-			spd = DefaultMonsterAttackSpeed
+		session.moveHeroWithSpeed(stats.PrimaryArchetype, stats.MovementSpeedMultiplier)
+		session.moveMonsters()
+
+		// O ataque básico mantém a cadência real derivada da arma/DEX. A
+		// variância e o crítico usam a mesma distribuição do combate online.
+		session.BasicAttackCooldownSec -= offlineCombatTickSeconds
+		target := session.nearestLivingMonsterInRange(stats.PrimaryArchetype)
+		dealt := 0
+		if session.BasicAttackCooldownSec <= 0 && target != nil {
+			session.BasicAttackCooldownSec = stats.AttackSpeedSeconds
+			attack := int(float64(stats.TotalAttack) * (0.85 + rng.Float64()*0.30))
+			if rng.Float64() <= stats.CritChance/100.0 {
+				attack = int(float64(attack) * 1.50)
+			}
+			if attack < 1 {
+				attack = 1
+			}
+			target.Health -= attack
+			dealt = attack
 		}
-		hits := math.Floor(activeSeconds/spd) + 1
-		if activeSeconds <= 0 {
-			hits = 0
+
+		// Monstros só causam dano quando a posição isométrica os coloca no
+		// alcance. Isso elimina a antiga aproximação que aplicava dano por
+		// duração da luta mesmo enquanto a horda ainda se deslocava.
+		taken := 0
+		for i := range session.CurrentMonsters {
+			mob := &session.CurrentMonsters[i]
+			if mob.Health <= 0 {
+				continue
+			}
+			if mob.AttackSpeedSeconds <= 0 {
+				mob.AttackSpeedSeconds = DefaultMonsterAttackSpeed
+			}
+			mob.AttackCooldownSec -= offlineCombatTickSeconds
+			distance := gridDistance(session.HeroGridX, session.HeroGridY, mob.GridX, mob.GridY)
+			inRange := distance <= 8.0
+			if mob.AttackType != AttackTypeRanged {
+				inRange = distance <= combatRangeForArchetype("melee")
+			}
+			if inRange && mob.AttackCooldownSec <= 0 {
+				mob.AttackCooldownSec = mob.AttackSpeedSeconds
+				mitigation := float64(stats.TotalDefense) / (float64(stats.TotalDefense) + float64(20*mob.Level))
+				rawAttack := float64(mob.Attack + rng.Intn(4))
+				taken += int(math.Max(1, math.Round(rawAttack*(1.0-mitigation))))
+			}
 		}
-		monsterLevel := math.Max(1, float64(monster.Level))
-		mitigation := float64(playerDefense) / (float64(playerDefense) + 20.0*monsterLevel)
-		damagePerHit := math.Max(1, math.Round(float64(monster.Attack)*(1.0-mitigation)))
-		incoming += hits * damagePerHit
+		result.damageTaken += taken
+		result.healthAfter -= float64(taken)
+		if lifesteal > 0 && dealt > 0 {
+			result.healthAfter = math.Min(float64(stats.MaxHealth), result.healthAfter+float64(int(float64(dealt)*(lifesteal/100.0))))
+		}
+		result.healthAfter, _ = autoPotions.tryHealthPotion(result.healthAfter, stats.MaxHealth, tickAt)
+
+		for i := range session.CurrentMonsters {
+			updateMonsterFleeState(&session.CurrentMonsters[i])
+		}
+		elapsed += offlineCombatTickSeconds
+		for i := range session.CurrentMonsters {
+			if session.CurrentMonsters[i].Health <= 0 && result.killTimes[i] == 0 {
+				result.killTimes[i] = elapsed
+				alive--
+			}
+		}
+		if result.healthAfter <= 0 {
+			result.defeated = true
+			result.elapsedSeconds = elapsed
+			return result
+		}
 	}
 
-	waveSeconds := 0.0
-	for _, duration := range fightDurations {
-		waveSeconds += duration
-	}
-	lifestealHealing := dps * waveSeconds * (lifesteal / 100.0)
-	continuousHealing := math.Floor(waveSeconds / offlineCombatTickSeconds)
-	return math.Max(0, incoming*offlineIncomingDamageFactor-lifestealHealing-continuousHealing)
+	result.elapsedSeconds = elapsed
+	result.completed = alive == 0
+	return result
 }
 
 func buildOfflineWave(region ExpeditionRegion, stage int, bossStage bool, playerLevel int, rng *rand.Rand) []Monster {
@@ -266,7 +395,7 @@ func appendUnique(values []string, candidates ...string) []string {
 // e avança o estágio quando há tempo para concluí-la, evitando exploração por
 // relog em uma horda parcialmente derrotada.
 func CalculateOfflineProgress(input OfflineSimulationInput) OfflineResult {
-	result := OfflineResult{ItemsFound: []Item{}, ItemsConverted: []Item{}, RegionsUnlocked: []string{}}
+	result := OfflineResult{ItemsFound: []Item{}, ItemsConverted: []Item{}, RegionsUnlocked: []string{}, AutoPotionState: input.AutoPotionState}
 	isEligible := input.IsExpeditionActive || (input.Character != nil && input.Character.AutoResumeExpedition)
 	if input.Character == nil || !isEligible || input.PeriodStart.IsZero() {
 		return result
@@ -277,6 +406,9 @@ func CalculateOfflineProgress(input OfflineSimulationInput) OfflineResult {
 	}
 	start := input.PeriodStart.UTC()
 	end = end.UTC()
+	if !input.IsExpeditionActive && input.Character.AutoResumeExpedition && input.Character.ExpeditionRecoveryUntil.After(start) {
+		start = input.Character.ExpeditionRecoveryUntil.UTC()
+	}
 	if !end.After(start) {
 		return result
 	}
@@ -303,23 +435,25 @@ func CalculateOfflineProgress(input OfflineSimulationInput) OfflineResult {
 	bossStage := input.IsBossStage || stage >= region.MaxStages
 
 	result = OfflineResult{
-		ReportID:         deterministicReportID(input.Character.ID, start, end, input.StateRevision),
-		PeriodStart:      start,
-		PeriodEnd:        end,
-		CalculatedAt:     end,
-		MinutesOffline:   minutes,
-		RegionID:         regionID,
-		RegionName:       region.Name,
-		Stage:            stage,
-		WasBossStage:     bossStage,
-		FinalStage:       stage,
-		IsBossStageAfter: bossStage,
-		ItemsFound:       []Item{},
-		ItemsConverted:   []Item{},
-		RegionsUnlocked:  []string{},
-		LevelBefore:      input.Character.Level,
-		LevelAfter:       input.Character.Level,
-		StateRevision:    input.StateRevision,
+		ReportID:            deterministicReportID(input.Character.ID, start, end, input.StateRevision),
+		PeriodStart:         start,
+		PeriodEnd:           end,
+		CalculatedAt:        end,
+		MinutesOffline:      minutes,
+		RegionID:            regionID,
+		RegionName:          region.Name,
+		Stage:               stage,
+		WasBossStage:        bossStage,
+		FinalStage:          stage,
+		IsBossStageAfter:    bossStage,
+		ItemsFound:          []Item{},
+		ItemsConverted:      []Item{},
+		RegionsUnlocked:     []string{},
+		LevelBefore:         input.Character.Level,
+		LevelAfter:          input.Character.Level,
+		HighestStageReached: stage,
+		StateRevision:       input.StateRevision,
+		AutoPotionState:     input.AutoPotionState,
 	}
 	if len(region.Monsters) == 0 {
 		result.StoppedReason = "regiao_sem_monstros"
@@ -334,8 +468,8 @@ func CalculateOfflineProgress(input OfflineSimulationInput) OfflineResult {
 		}
 	}
 	rng := rand.New(rand.NewSource(seed))
-	playerAttack, playerDefense, maxHealth, attackSpeed := offlineStats(input)
-	dps := math.Max(1, float64(playerAttack)/0.75*attackSpeed)
+	initialStats := offlineStats(input, input.Character.Level, start)
+	maxHealth := initialStats.MaxHealth
 	currentHealth := float64(input.Character.Health)
 	if currentHealth <= 0 || currentHealth > float64(maxHealth) {
 		currentHealth = float64(maxHealth)
@@ -353,69 +487,71 @@ func CalculateOfflineProgress(input OfflineSimulationInput) OfflineResult {
 	offlineResMap := make(map[string]int64)
 	offlineTrophyMap := make(map[string]int64)
 	bossRewardBudget := offlineBossRewardBudget(minutes)
+	autoPotions := newOfflineAutoPotionRuntime(input)
 
 	for remainingSeconds > 0 {
+		elapsedSeconds := float64(minutes*60) - remainingSeconds
+		waveStartedAt := start.Add(time.Duration(elapsedSeconds * float64(time.Second)))
+		stats := offlineStats(input, simulatedLevel, waveStartedAt)
+		maxHealth = stats.MaxHealth
+		if currentHealth > float64(maxHealth) {
+			currentHealth = float64(maxHealth)
+		}
 		wave := buildOfflineWave(region, stage, bossStage, simulatedLevel, rng)
+		if stage > result.HighestStageReached {
+			result.HighestStageReached = stage
+		}
 		if len(wave) == 0 {
 			result.StoppedReason = "onda_sem_monstros"
 			break
 		}
 
-		waveSeconds := 0.0
 		waveEfficiencies := make([]float64, len(wave))
-		fightDurations := make([]float64, len(wave))
 		for i, monster := range wave {
-			efficiency := offlineCombatEfficiency(playerDefense, maxHealth, dps, lifesteal, input.Character.VIT, input.ActiveStance, monster)
+			efficiency := offlineCombatEfficiency(stats.TotalDefense, maxHealth, math.Max(1, float64(stats.CurrentDPS)), lifesteal, input.Character.VIT, input.ActiveStance, monster)
 			waveEfficiencies[i] = efficiency
-			monsterHP := monster.MaxHealth
-			if monsterHP <= 0 {
-				monsterHP = monster.Health
-			}
-			fightDurations[i] = math.Max(1.0, float64(monsterHP)/dps) + 1.5
-			waveSeconds += fightDurations[i]
 		}
-		if waveSeconds <= 0 || waveSeconds > remainingSeconds {
-			if result.WavesCompleted == 0 {
-				result.StoppedReason = "poder_ou_tempo_insuficiente_para_concluir_fase"
-			}
+
+		waveResult := simulateOfflineWave(input, simulatedLevel, wave, currentHealth, remainingSeconds, waveStartedAt, rng, autoPotions)
+		if !waveResult.completed {
+			currentHealth = waveResult.healthAfter
 			for _, efficiency := range waveEfficiencies {
 				efficiencySum += efficiency
 				efficiencySamples++
 			}
-			break
-		}
+			remainingSeconds -= waveResult.elapsedSeconds
+			if waveResult.defeated {
+				campRecoverySeconds := offlineCampRecoverySeconds(maxHealth, simulatedLevel, input.Character.VIT)
+				shouldAutoResume := input.Character != nil && input.Character.AutoResumeExpedition
 
-		projectedDamage := offlineProjectedWaveDamage(wave, fightDurations, playerDefense, dps, lifesteal)
-		if projectedDamage >= currentHealth {
-			campRecoverySeconds := offlineCampRecoverySeconds(maxHealth, simulatedLevel, input.Character.VIT)
-			shouldAutoResume := input.Character != nil && input.Character.AutoResumeExpedition
+				if shouldAutoResume && remainingSeconds > campRecoverySeconds {
+					// Herói é derrotado nesta fase específica; retorna ao acampamento,
+					// descansa o tempo escalonado por seu HP/Nível/VIT para regenerar a vida ao máximo
+					// e reinicia a expedição na fase 1!
+					remainingSeconds -= campRecoverySeconds
+					currentHealth = float64(maxHealth)
+					stage = 1
+					bossStage = false
+					continue
+				}
 
-			if shouldAutoResume && remainingSeconds > (waveSeconds+campRecoverySeconds) {
-				// Herói é derrotado nesta fase específica; retorna ao acampamento,
-				// descansa o tempo escalonado por seu HP/Nível/VIT para regenerar a vida ao máximo
-				// e reinicia a expedição na fase 1!
-				remainingSeconds -= (waveSeconds + campRecoverySeconds)
-				currentHealth = float64(maxHealth)
-				stage = 1
-				bossStage = false
-				continue
+				result.Defeated = true
+				result.FailureStage = stage
+				result.StoppedReason = "derrotado_durante_simulacao_offline"
+				result.FinalStage = 1
+				result.IsBossStageAfter = false
+				result.HealthAfter = int(math.Max(1, math.Floor(float64(maxHealth)*0.40)))
+				break
 			}
-
-			result.Defeated = true
-			result.StoppedReason = "derrotado_durante_simulacao_offline"
-			result.FinalStage = 1
-			result.IsBossStageAfter = false
-			result.HealthAfter = int(math.Max(1, math.Floor(float64(maxHealth)*0.40)))
+			result.StoppedReason = "poder_ou_tempo_insuficiente_para_concluir_fase"
 			break
 		}
-		currentHealth = math.Min(float64(maxHealth), currentHealth-projectedDamage)
-		// Regeneração natural de intervalo entre fases (Vitalidade + descanso breve)
-		waveRestRegen := math.Max(3.0, float64(input.Character.VIT)*0.35+6.0)
-		currentHealth = math.Min(float64(maxHealth), currentHealth+waveRestRegen)
 
-		remainingSeconds -= waveSeconds
+		currentHealth = math.Min(float64(maxHealth), waveResult.healthAfter)
+		remainingSeconds -= waveResult.elapsedSeconds
 		result.WavesCompleted++
 		for i, monster := range wave {
+			killAt := waveStartedAt.Add(time.Duration(waveResult.killTimes[i] * float64(time.Second)))
 			efficiencySum += waveEfficiencies[i]
 			efficiencySamples++
 			result.Kills++
@@ -425,10 +561,12 @@ func CalculateOfflineProgress(input OfflineSimulationInput) OfflineResult {
 			}
 			rewardBoss := monster.IsBoss && result.BossesRewarded < bossRewardBudget
 			bossMultiplier := monster.IsBoss && rewardBoss
-			xpGained := CalculateKillXP(simulatedLevel, monster.Level, mHealth, bossMultiplier)
+			xpGained := ApplyXPGainBuff(CalculateKillXP(simulatedLevel, monster.Level, mHealth, bossMultiplier), input.ActiveBuffs, killAt)
 			result.XPGained += xpGained
 			simulatedExperience += xpGained
-			result.GoldGained += CalculateKillGold(bossMultiplier, goldBonus, rng)
+			goldReward := CalculateKillGold(bossMultiplier, goldBonus, rng)
+			result.GoldGained += goldReward
+			autoPotions.goldBank += goldReward
 
 			mKey := monster.Key
 			if mKey == "" {
@@ -508,6 +646,13 @@ func CalculateOfflineProgress(input OfflineSimulationInput) OfflineResult {
 			stage++
 			bossStage = stage >= region.MaxStages
 		}
+
+		// O servidor online usa um tick de spawn separado entre duas ondas;
+		// preservar esse intervalo evita que o modo offline transforme a troca
+		// de fase em tempo de combate gratuito.
+		if remainingSeconds > 0 {
+			remainingSeconds -= math.Min(remainingSeconds, offlineCombatTickSeconds)
+		}
 	}
 
 	for k, v := range offlineResMap {
@@ -532,5 +677,7 @@ func CalculateOfflineProgress(input OfflineSimulationInput) OfflineResult {
 	if efficiencySamples > 0 {
 		result.Efficiency = math.Round((efficiencySum/float64(efficiencySamples))*1000) / 1000
 	}
+	result.AutoPotionGoldSpent = autoPotions.goldSpent
+	result.AutoPotionState = autoPotions.state
 	return result
 }

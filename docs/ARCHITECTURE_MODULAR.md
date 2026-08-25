@@ -200,6 +200,87 @@ Floresta.
 O princípio para as próximas features é simples: **conteúdo registra dados e
 renderers; o motor trabalha apenas com contratos e keys estáveis**.
 
+## Arena isométrica de expedição — primeira fatia
+
+A Floresta passou a usar a mesma malha visual 24x18 do assentamento, com
+terreno de grama, trilhas, árvores, pedras, fogueira decorativa e rio com
+animação de fluxo. O background estático continua cacheado; água e efeitos
+animados são uma camada dinâmica independente para não recriar o cenário a
+cada frame.
+
+O backend agora envia um `arena` no protocolo de combate. `GridX/GridY` são
+coordenadas discretas autoritativas e o frontend apenas converte tile para
+tela e interpola os atores. O herói melee persegue o alvo, heróis de distância
+recuam de ameaças melee e monstros perseguem, mantêm alcance ou fogem em dois
+eixos. O alvo de projéteis continua sendo resolvido por `target_id`, portanto
+flechas e magias acompanham a posição interpolada do monstro.
+
+### Regras de finalização e composição da arena
+
+O estado `FLEE` é temporário: a criatura pode recuar, mas encerra a fuga ao
+ser encurralada ou ao encontrar o limite da malha. `FleeResolved` impede o
+rearmamento infinito do mesmo recuo. A seleção de habilidades usa somente
+alvos vivos e alcançáveis, ordenados por distância; habilidades `self`, como
+cura, não dependem de uma lista de monstros. Após o movimento, o backend
+resolve tiles duplicados para evitar atores empilhados e preservar áreas de
+efeito legíveis.
+
+No Canvas, a entrada de um monstro é uma transição de teleporte no tile
+recebido, com portal azul, escala e partículas. O cliente não fabrica uma
+posição lateral para o nascimento. Ao pausar a expedição, o viewport limpa
+efeitos, projéteis e investidas pendentes; o herói é então desenhado pelo
+mesmo pipeline de profundidade do acampamento e percorre uma rota isométrica
+junto aos moradores.
+
+Os pontos de nascimento são distribuídos pelos quatro cantos da malha. Para
+o kite, `stepGridAway` tenta primeiro o vetor oposto e depois a melhor célula
+vizinha; assim, uma borda não congela o herói. A seleção de alvo dá prioridade
+temporária a uma criatura em fuga/com pouca vida e retorna ao conjunto de
+monstros vivos quando o alvo atual é removido. Textos de dano usam a posição
+interpolada do ator, nunca o `BATTLE_GROUND_Y` legado.
+
+O motor separa alvo de perseguição de alvo atacável. A criatura ferida ou em
+fuga pode continuar guiando o deslocamento do herói, mas o ataque básico usa o
+monstro vivo mais próximo dentro do alcance efetivo. Isso evita que um alvo
+distante bloqueie o ataque contra outro inimigo próximo. Para arquétipos de
+distância, a postura `KITE` só é aplicada diante de ameaça melee próxima;
+contra inimigos ranged fora do alcance do herói, o estado passa a `CHASE` até
+fechar a distância. O alcance que produz `ATTACK` é compartilhado com a
+checagem real do golpe básico.
+
+A orientação dos sprites permanece responsabilidade do viewport: o eixo
+horizontal projetado (`grid_x - grid_y`) determina se o herói deve olhar para
+a esquerda/direita e cada monstro é espelhado em relação à posição interpolada
+do herói. Assim, a lógica autoritativa não precisa conhecer detalhes de
+renderização, mas a cena mantém os atores frente a frente durante movimento e
+ataque; no estado `FLEE`, o monstro inverte o facing para correr de costas. A
+origem de flechas e projéteis também acompanha esse facing.
+
+A reação de vida crítica é conteúdo autoritativo do monstro, não uma regra
+global da arena. `low_health_behavior` aceita `flee` (padrão retrocompatível)
+ou `stand_ground`; a Floresta usa `flee` para Lobo/Aranha e `stand_ground` para
+Goblin/Urso chefe. O estado é atualizado imediatamente após o dano que cruza
+20% da vida, mas `FleeResolved` continua impedindo fuga infinita quando a
+criatura é encurralada ou alcança o limite da malha.
+
+Proximidade por si só não encerra `FLEE`: criaturas configuradas para fugir
+tentam primeiro aumentar a distância mesmo quando o dano crítico aconteceu em
+combate corpo a corpo. A resolução só ocorre quando `stepGridAway` não consegue
+encontrar uma célula que melhore a distância, evitando o ciclo visual de virar
+de costas por um tick e imediatamente voltar a atacar.
+
+Efeitos de combate mantêm a identidade do alvo mesmo quando o golpe o remove
+da lista de monstros vivos. O viewport guarda a última posição conhecida para
+resolver o impacto e nunca redireciona um `target_id` explícito para outro
+monstro. Isso é especialmente importante para a investida melee do guerreiro,
+cujo ponto final deve continuar sendo o alvo que recebeu o dano autoritativo.
+
+As outras regiões continuam usando o renderer legado até receberem sua própria
+arena visual. O próximo corte deve adicionar ao catálogo a definição de mapa
+(tiles passáveis, obstáculos, pontes e linha de visão) antes de habilitar
+colisões ambientais; a primeira floresta deliberadamente usa movimento livre
+para validar o contrato visual e de combate sem inventar regras de terreno.
+
 ## Módulos de UI: Inventário & Equipamentos
 
 - `ItemIcon.tsx`: Fachada para ícones vetoriais SVG de 15 slots/armas, helpers universais de raridade (`getRarityStyle`), rótulos canônicos de slots (`getSlotLabel`), badges de atributos (`BonusBadges`) e normalização de nomes (`getCleanItemName`).

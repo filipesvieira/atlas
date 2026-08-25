@@ -43,6 +43,9 @@ type GatheringActivity struct {
 	Result              *GatheringResult       `json:"result,omitempty"`
 	ProfessionXPApplied bool                   `json:"profession_xp_applied"`
 	Revision            int64                  `json:"revision"`
+	WageReserved        int64                  `json:"wage_reserved"`
+	WagePaid            int64                  `json:"wage_paid"`
+	WageRuleVersion     int                    `json:"wage_rule_version"`
 }
 
 type GatheringResult struct {
@@ -59,6 +62,9 @@ type GatheringResult struct {
 	ProfessionBefore int              `json:"profession_level_before"`
 	ProfessionAfter  int              `json:"profession_level_after"`
 	WasCancelled     bool             `json:"was_cancelled"`
+	WageReserved     int64            `json:"wage_reserved"`
+	WagePaid         int64            `json:"wage_paid"`
+	WageRefunded     int64            `json:"wage_refunded"`
 }
 
 // PendingResourceBatch preserva a procedência da carga segura. A lista
@@ -74,13 +80,14 @@ type PendingResourceBatch struct {
 }
 
 type EconomyState struct {
-	Professions       []ProfessionProgress  `json:"professions"`
-	ActiveGathering   *GatheringActivity    `json:"active_gathering,omitempty"`
-	ActiveGatherings  []GatheringActivity   `json:"active_gatherings,omitempty"`
-	PendingGathering  []ResourceAmount      `json:"pending_gathering,omitempty"`
-	UnlockedRecipes   []string              `json:"unlocked_recipes"`
-	PendingCraftItems []Item                `json:"pending_craft_items,omitempty"`
-	PendingResources  []ResourceAmount      `json:"pending_resources,omitempty"`
+	Professions       []ProfessionProgress   `json:"professions"`
+	ActiveGathering   *GatheringActivity     `json:"active_gathering,omitempty"`
+	ActiveGatherings  []GatheringActivity    `json:"active_gatherings,omitempty"`
+	PendingGathering  []ResourceAmount       `json:"pending_gathering,omitempty"`
+	UnlockedRecipes   []string               `json:"unlocked_recipes"`
+	PendingCraftItems []Item                 `json:"pending_craft_items,omitempty"`
+	PendingResources  []ResourceAmount       `json:"pending_resources,omitempty"`
 	PendingBatches    []PendingResourceBatch `json:"pending_resource_batches,omitempty"`
-	Settlement        *SettlementState      `json:"settlement,omitempty"`
+	Settlement        *SettlementState       `json:"settlement,omitempty"`
+	ActiveBuffs       []ActiveBuff           `json:"active_buffs,omitempty"`
 }

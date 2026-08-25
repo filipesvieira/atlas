@@ -159,8 +159,31 @@ func TestOfflineSimulationStopsOnDefeatWithoutGrantingIncompleteBoss(t *testing.
 	if result.FinalStage != 1 || result.IsBossStageAfter {
 		t.Fatalf("derrota não resetou a expedição: %+v", result)
 	}
+	if result.FailureStage != 5 {
+		t.Fatalf("fase da derrota não foi preservada: %d", result.FailureStage)
+	}
 	if result.HealthAfter <= 0 {
 		t.Fatalf("vida de retorno inválida: %d", result.HealthAfter)
+	}
+}
+
+func TestOfflineAutoResumeRespectsPersistedRecoveryWindow(t *testing.T) {
+	input := offlineFixture()
+	input.IsExpeditionActive = false
+	input.Character.AutoResumeExpedition = true
+	input.Character.ExpeditionRecoveryUntil = input.PeriodStart.Add(60 * time.Minute)
+
+	beforeRecovery := input
+	beforeRecovery.PeriodEnd = input.PeriodStart.Add(30 * time.Minute)
+	if result := CalculateOfflineProgress(beforeRecovery); result.MinutesOffline != 0 || result.XPGained != 0 {
+		t.Fatalf("simulação começou antes do fim da recuperação: %+v", result)
+	}
+
+	afterRecovery := input
+	afterRecovery.PeriodEnd = input.PeriodStart.Add(90 * time.Minute)
+	result := CalculateOfflineProgress(afterRecovery)
+	if result.MinutesOffline != 30 || result.PeriodStart != input.Character.ExpeditionRecoveryUntil {
+		t.Fatalf("janela offline não começou após a recuperação: %+v", result)
 	}
 }
 

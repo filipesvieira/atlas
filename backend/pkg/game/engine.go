@@ -14,6 +14,15 @@ import (
 
 type AttackType string
 
+// LowHealthBehavior define a reação do monstro quando sua vida entra na faixa
+// crítica. O valor vazio preserva o comportamento legado: fugir.
+type LowHealthBehavior string
+
+const (
+	LowHealthBehaviorFlee        LowHealthBehavior = "flee"
+	LowHealthBehaviorStandGround LowHealthBehavior = "stand_ground"
+)
+
 const (
 	AttackTypeMelee  AttackType = "melee"
 	AttackTypeRanged AttackType = "ranged"
@@ -22,36 +31,35 @@ const (
 	MaxCharacterLevel = 10000
 )
 
-// GridWidth e GridHeight definem o tamanho da arena em tiles (32×32px)
-// Arena: 500px × 260px → 15 cols × 8 rows
-const (
-	GridWidth  = 15
-	GridHeight = 8
-	HeroGridX  = 2
-	HeroGridY  = 4
-)
-
 const (
 	DefaultMonsterAttackSpeed = 2.50 // Cadência padrão de ataque dos monstros em segundos
 )
 
 type Monster struct {
-	ID                 string         `json:"id"`
-	Key                string         `json:"key"`
-	VisualKey          string         `json:"visual_key"`
-	IsBoss             bool           `json:"is_boss"`
-	Name               string         `json:"name"`
-	Level              int            `json:"level"`
-	Health             int            `json:"health"`
-	MaxHealth          int            `json:"max_health"`
-	Attack             int            `json:"attack"`
-	AttackType         AttackType     `json:"attack_type"` // "melee" | "ranged"
-	AttackSpeedSeconds float64        `json:"attack_speed_seconds,omitempty"` // Cadência de ataque do monstro (ex: 2.5s)
-	AttackCooldownSec  float64        `json:"attack_cooldown_sec,omitempty"`  // Temporizador dinâmico até o próximo golpe
-	GridX              int            `json:"grid_x"`      // Posição horizontal no grid (0-14)
-	GridY              int            `json:"grid_y"`      // Posição vertical no grid (0-7)
-	State              string         `json:"state"`       // "CHASE", "ATTACK", "KITE", "FLEE"
-	StatusEffects      []StatusEffect `json:"status_effects,omitempty"`
+	ID                      string            `json:"id"`
+	Key                     string            `json:"key"`
+	VisualKey               string            `json:"visual_key"`
+	IsBoss                  bool              `json:"is_boss"`
+	Name                    string            `json:"name"`
+	Level                   int               `json:"level"`
+	Health                  int               `json:"health"`
+	MaxHealth               int               `json:"max_health"`
+	Attack                  int               `json:"attack"`
+	AttackType              AttackType        `json:"attack_type"`                         // "melee" | "ranged"
+	AttackSpeedSeconds      float64           `json:"attack_speed_seconds,omitempty"`      // Cadência de ataque do monstro (ex: 2.5s)
+	AttackCooldownSec       float64           `json:"attack_cooldown_sec,omitempty"`       // Temporizador dinâmico até o próximo golpe
+	MovementSpeedMultiplier float64           `json:"movement_speed_multiplier,omitempty"` // 1.0 = velocidade base
+	MovementAccumulator     float64           `json:"-"`
+	GridX                   int               `json:"grid_x"`                        // Tile X da arena (0-23)
+	GridY                   int               `json:"grid_y"`                        // Tile Y da arena (0-17)
+	State                   string            `json:"state"`                         // "CHASE", "ATTACK", "KITE", "FLEE"
+	LowHealthBehavior       LowHealthBehavior `json:"low_health_behavior,omitempty"` // "flee" (padrão) ou "stand_ground"
+	FleeResolved            bool              `json:"flee_resolved,omitempty"`       // Evita que um monstro derrotado repita a fuga para sempre
+	StatusEffects           []StatusEffect    `json:"status_effects,omitempty"`
+}
+
+func (m Monster) FleesAtLowHealth() bool {
+	return m.LowHealthBehavior != LowHealthBehaviorStandGround
 }
 
 type EquipmentSlots struct {
@@ -84,43 +92,49 @@ type MasteriesData struct {
 }
 
 type CharacterData struct {
-	ID                   string        `json:"id"`
-	AccountID            string        `json:"account_id"`
-	Name                 string        `json:"name"`
-	Vocation             string        `json:"vocation"`
-	Origin               string        `json:"origin"`
-	Level                int           `json:"level"`
-	Experience           int64         `json:"experience"`
-	Health               int           `json:"health"`
-	MaxHealth            int           `json:"max_health"`
-	Mana                 int           `json:"mana"`
-	MaxMana              int           `json:"max_mana"`
-	GoldBank             int64         `json:"gold_bank"`
-	STR                  int           `json:"str"`
-	DEX                  int           `json:"dex"`
-	INT                  int           `json:"int_stat"`
-	VIT                  int           `json:"vit"`
-	UnspentPoints        int           `json:"unspent_points"`
-	Masteries            MasteriesData `json:"masteries"`
-	LearnedSkills        []string      `json:"learned_skills"`
-	ActiveSkills         []string      `json:"active_skills"`
-	UnlockedRegions      []string      `json:"unlocked_regions"`
-	IsExpeditionActive   bool          `json:"is_expedition_active"`
-	ActiveRegion         string        `json:"active_region"`
-	ActiveStance         string        `json:"active_stance"`
-	CurrentStage         int           `json:"current_stage"`
-	IsBossStage          bool          `json:"is_boss_stage"`
-	StateRevision        int64         `json:"state_revision"`
-	ProgressionVersion   int           `json:"progression_version"`
-	LifetimeExperience   int64         `json:"lifetime_experience"`
-	HighestLevelEver     int           `json:"highest_level_ever"`
-	XPRequired           int64         `json:"xp_required"`
-	XPPercent            float64       `json:"xp_percent"`
-	LastLogin            time.Time     `json:"last_login"`
-	LastLogout           time.Time     `json:"last_logout"`
-	AutoResumeExpedition bool          `json:"auto_resume_expedition"`
-	StarterPackClaimed   bool          `json:"starter_pack_claimed"`
-	StarterPackKey       string        `json:"starter_pack_key,omitempty"`
+	ID                        string        `json:"id"`
+	AccountID                 string        `json:"account_id"`
+	Name                      string        `json:"name"`
+	Vocation                  string        `json:"vocation"`
+	Origin                    string        `json:"origin"`
+	Level                     int           `json:"level"`
+	Experience                int64         `json:"experience"`
+	Health                    int           `json:"health"`
+	MaxHealth                 int           `json:"max_health"`
+	Mana                      int           `json:"mana"`
+	MaxMana                   int           `json:"max_mana"`
+	GoldBank                  int64         `json:"gold_bank"`
+	STR                       int           `json:"str"`
+	DEX                       int           `json:"dex"`
+	INT                       int           `json:"int_stat"`
+	VIT                       int           `json:"vit"`
+	UnspentPoints             int           `json:"unspent_points"`
+	Masteries                 MasteriesData `json:"masteries"`
+	LearnedSkills             []string      `json:"learned_skills"`
+	ActiveSkills              []string      `json:"active_skills"`
+	UnlockedRegions           []string      `json:"unlocked_regions"`
+	IsExpeditionActive        bool          `json:"is_expedition_active"`
+	ActiveRegion              string        `json:"active_region"`
+	ActiveStance              string        `json:"active_stance"`
+	CurrentStage              int           `json:"current_stage"`
+	IsBossStage               bool          `json:"is_boss_stage"`
+	StateRevision             int64         `json:"state_revision"`
+	ProgressionVersion        int           `json:"progression_version"`
+	LifetimeExperience        int64         `json:"lifetime_experience"`
+	HighestLevelEver          int           `json:"highest_level_ever"`
+	XPRequired                int64         `json:"xp_required"`
+	XPPercent                 float64       `json:"xp_percent"`
+	LastLogin                 time.Time     `json:"last_login"`
+	LastLogout                time.Time     `json:"last_logout"`
+	AutoResumeExpedition      bool          `json:"auto_resume_expedition"`
+	ExpeditionsCompletedTotal int64         `json:"expeditions_completed_total"`
+	BossesDefeatedTotal       int64         `json:"bosses_defeated_total"`
+	ExpeditionDeathsTotal     int64         `json:"expedition_deaths_total"`
+	HighestStageReached       int           `json:"highest_stage_reached"`
+	LastExpeditionDeathStage  int           `json:"last_expedition_death_stage,omitempty"`
+	ExpeditionRecoveryUntil   time.Time     `json:"expedition_recovery_until,omitempty"`
+	StarterPackClaimed        bool          `json:"starter_pack_claimed"`
+	StarterPackKey            string        `json:"starter_pack_key,omitempty"`
 }
 
 // CombatEffectEvent transporta os efeitos visuais e de impacto para o cliente.
@@ -135,22 +149,23 @@ type CombatEffectEvent struct {
 }
 
 type CombatMessage struct {
-	ProtocolVersion   int                        `json:"protocol_version,omitempty"`
-	RequestID         string                     `json:"request_id,omitempty"`
-	Sequence          uint64                     `json:"seq,omitempty"`
-	StateRevision     int64                      `json:"state_revision,omitempty"`
-	Type              string                     `json:"type"` // TICK_UPDATE, COMBAT_EVENT, LOOT_DROP, LEVEL_UP, EQUIPMENT_UPDATE, STANCE_UPDATE, SKILL_CAST, STATE_SNAPSHOT
-	Timestamp         string                     `json:"timestamp"`
-	Character         *CharacterData             `json:"character"`
-	Inventory         *InventoryData             `json:"inventory,omitempty"`
-	Monsters          []Monster                  `json:"monsters,omitempty"`
-	DamageDealt       int                        `json:"damage_dealt,omitempty"`
-	DamageTaken       int                        `json:"damage_taken,omitempty"`
-	DPS               int                        `json:"dps,omitempty"`
-	TotalAttack       int                        `json:"total_attack"`
+	ProtocolVersion         int                        `json:"protocol_version,omitempty"`
+	RequestID               string                     `json:"request_id,omitempty"`
+	Sequence                uint64                     `json:"seq,omitempty"`
+	StateRevision           int64                      `json:"state_revision,omitempty"`
+	Type                    string                     `json:"type"` // TICK_UPDATE, COMBAT_EVENT, LOOT_DROP, LEVEL_UP, EQUIPMENT_UPDATE, STANCE_UPDATE, SKILL_CAST, STATE_SNAPSHOT
+	Timestamp               string                     `json:"timestamp"`
+	Character               *CharacterData             `json:"character"`
+	Inventory               *InventoryData             `json:"inventory,omitempty"`
+	Monsters                []Monster                  `json:"monsters,omitempty"`
+	DamageDealt             int                        `json:"damage_dealt,omitempty"`
+	DamageTaken             int                        `json:"damage_taken,omitempty"`
+	DPS                     int                        `json:"dps,omitempty"`
+	TotalAttack             int                        `json:"total_attack"`
 	TotalDefense            int                        `json:"total_defense"`
 	DerivedStats            DerivedStats               `json:"derived_stats"`
 	CombatEffects           []CombatEffectEvent        `json:"combat_effects,omitempty"`
+	Arena                   *ArenaSnapshot             `json:"arena,omitempty"`
 	SkillCooldowns          map[string]int             `json:"skill_cooldowns,omitempty"`
 	AttackCooldownRemaining float64                    `json:"attack_cooldown_remaining"`
 	ActiveRegion            string                     `json:"active_region,omitempty"`
@@ -159,7 +174,8 @@ type CombatMessage struct {
 	CurrentStage            int                        `json:"current_stage"`
 	MaxStages               int                        `json:"max_stages"`
 	IsBossStage             bool                       `json:"is_boss_stage"`
-	LogText                 string                     `json:"log_text"`
+	LogText                 string                     `json:"log_text,omitempty"`
+	NotificationText        string                     `json:"notification_text,omitempty"`
 	ItemFound               *Item                      `json:"item_found,omitempty"`
 	IsActive                bool                       `json:"is_active"`
 	Camp                    *CampState                 `json:"camp,omitempty"`
@@ -168,53 +184,75 @@ type CombatMessage struct {
 	ResourceInventory       *ResourceInventorySnapshot `json:"resource_inventory,omitempty"`
 	DiscoveredLoot          []string                   `json:"discovered_loot,omitempty"`
 	AutoSellSettings        *AutoSellSettings          `json:"auto_sell_settings,omitempty"`
+	AutoPotionSettings      *AutoPotionSettings        `json:"auto_potion_settings,omitempty"`
+	AutoPotionState         *AutoPotionState           `json:"auto_potion_state,omitempty"`
 	OverflowChest           []Item                     `json:"overflow_chest"`
 	AutoSellPreview         *AutoSellEvaluationResult  `json:"auto_sell_preview,omitempty"`
 	Economy                 *EconomyState              `json:"economy,omitempty"`
+	ActiveBuffs             []ActiveBuff               `json:"active_buffs,omitempty"`
 	GatheringResult         *GatheringResult           `json:"gathering_result,omitempty"`
 	CraftPreview            *CraftPreview              `json:"craft_preview,omitempty"`
 	CraftResult             *CraftResult               `json:"craft_result,omitempty"`
 	CraftBatchResult        *CraftBatchResult          `json:"craft_batch_result,omitempty"`
+	ConsumeResult           *ConsumeResult             `json:"consume_result,omitempty"`
 }
 
 type GameSession struct {
-	Mu                       sync.Mutex
-	SequenceCounter          uint64
-	Character                *CharacterData
-	Inventory                *InventoryData
-	IsExpeditionActive       bool
-	HasBroadcastRestLog      bool
-	RecoveringFromDefeat     bool
-	AutoResumePending        bool
-	ActiveRegion             string
-	ActiveStance             string
-	CurrentStage             int
-	MaxStages                int
-	IsBossStage              bool
-	CurrentMonsters          []Monster
-	SkillCooldowns           map[string]int
-	BasicAttackCooldownSec   float64
-	ManaFractionAcc          float64
-	SendChannel              chan CombatMessage
-	StopChan                 chan struct{}
-	TickerDone               chan struct{}
-	SaveInvFunc              func(charID string, inv *InventoryData) error
-	SaveCharFunc             func(char *CharacterData) error
-	SaveCharAndInvFunc       func(char *CharacterData, inv *InventoryData) error
-	GetLootFunc              func(playerLevel int) *Item
-	GetMonsterFunc           func(region string, playerLevel int) Monster
-	Camp                     *CampState
-	Resources                map[string]int64
-	DiscoveredLoot           map[string]bool
-	RecordLootDiscoveryFunc  func(charID, itemName, rarity, regionKey, monsterKey string) (bool, error)
-	AutoSellSettings         AutoSellSettings
-	OverflowChest            []Item
-	SaveAutoSellSettingsFunc func(charID string, s AutoSellSettings) error
-	SaveOverflowChestFunc    func(charID string, items []Item) error
-	SavePendingItemFunc      func(charID string, item Item, sourceKind, referenceKey string) error
-	SaveResourcesFunc        func(charID string, drops []ResourceAmount, maxCap int64, reason, referenceKey string) (ResourceMutationResult, error)
-	ReconcileCampFunc        func(charID string, now time.Time) (*CampState, bool, error)
-	LastCampReconcileAt      time.Time
+	Mu                         sync.Mutex
+	SequenceCounter            uint64
+	Character                  *CharacterData
+	Inventory                  *InventoryData
+	IsExpeditionActive         bool
+	HasBroadcastRestLog        bool
+	RecoveringFromDefeat       bool
+	AutoResumePending          bool
+	ActiveRegion               string
+	ActiveStance               string
+	CurrentStage               int
+	MaxStages                  int
+	IsBossStage                bool
+	CurrentMonsters            []Monster
+	HeroGridX                  int
+	HeroGridY                  int
+	HeroState                  string
+	HeroTargetID               string
+	HeroMovementAccumulator    float64
+	ManualMoveDirection        string
+	ManualMoveInputAt          time.Time
+	ManualMoveLastStepAt       time.Time
+	ManualMoveAccumulator      float64
+	ManualMoveStartedAt        time.Time
+	ManualMoveReleasedAt       time.Time
+	ManualMoveMomentumDir      string
+	SkillCooldowns             map[string]int
+	BasicAttackCooldownSec     float64
+	ManaFractionAcc            float64
+	SendChannel                chan CombatMessage
+	StopChan                   chan struct{}
+	TickerDone                 chan struct{}
+	SaveInvFunc                func(charID string, inv *InventoryData) error
+	SaveCharFunc               func(char *CharacterData) error
+	SaveCharAndInvFunc         func(char *CharacterData, inv *InventoryData) error
+	GetLootFunc                func(playerLevel int) *Item
+	GetMonsterFunc             func(region string, playerLevel int) Monster
+	Camp                       *CampState
+	Resources                  map[string]int64
+	DiscoveredLoot             map[string]bool
+	RecordLootDiscoveryFunc    func(charID, itemName, rarity, regionKey, monsterKey string) (bool, error)
+	AutoSellSettings           AutoSellSettings
+	AutoPotionSettings         AutoPotionSettings
+	AutoPotionState            AutoPotionState
+	OverflowChest              []Item
+	ActiveBuffs                []ActiveBuff
+	SaveAutoSellSettingsFunc   func(charID string, s AutoSellSettings) error
+	SaveAutoPotionSettingsFunc func(charID string, s AutoPotionSettings) error
+	ResetAutoPotionStateFunc   func(charID string) (AutoPotionState, error)
+	SpendAutoPotionFunc        func(charID string, settings AutoPotionSettings, kind string, now time.Time) (AutoPotionSpendResult, error)
+	SaveOverflowChestFunc      func(charID string, items []Item) error
+	SavePendingItemFunc        func(charID string, item Item, sourceKind, referenceKey string) error
+	SaveResourcesFunc          func(charID string, drops []ResourceAmount, maxCap int64, reason, referenceKey string) (ResourceMutationResult, error)
+	ReconcileCampFunc          func(charID string, now time.Time) (*CampState, bool, error)
+	LastCampReconcileAt        time.Time
 }
 
 func GetRequiredXPForLevel(level int) int64 {
@@ -298,6 +336,7 @@ func NewGameSession(char *CharacterData, inv *InventoryData, saveInv func(string
 	if char.LearnedSkills == nil {
 		char.LearnedSkills = []string{}
 	}
+	initialSkillsUnlocked := UnlockInitialCombatSkills(char)
 	EnsureUnlockedRegionsForLevel(char)
 
 	activeReg := char.ActiveRegion
@@ -327,7 +366,11 @@ func NewGameSession(char *CharacterData, inv *InventoryData, saveInv func(string
 	recovering := false
 	autoResumePending := false
 
-	if char.AutoResumeExpedition {
+	if char.ExpeditionRecoveryUntil.After(time.Now().UTC()) {
+		isExpeditionActive = false
+		recovering = true
+		autoResumePending = char.AutoResumeExpedition
+	} else if char.AutoResumeExpedition {
 		if char.Health >= char.MaxHealth && char.Mana >= char.MaxMana {
 			isExpeditionActive = true
 			char.IsExpeditionActive = true
@@ -337,7 +380,7 @@ func NewGameSession(char *CharacterData, inv *InventoryData, saveInv func(string
 		}
 	}
 
-	return &GameSession{
+	session := &GameSession{
 		Character:            char,
 		Inventory:            inv,
 		IsExpeditionActive:   isExpeditionActive,
@@ -357,7 +400,17 @@ func NewGameSession(char *CharacterData, inv *InventoryData, saveInv func(string
 		SaveCharFunc:         saveChar,
 		GetLootFunc:          getLoot,
 		GetMonsterFunc:       getMonster,
+		AutoPotionSettings:   DefaultAutoPotionSettings(),
+		AutoPotionState:      DefaultAutoPotionState(),
 	}
+	session.resetArenaPosition()
+	// Personagens já acima do marco recebem o kit inicial ao entrar; a skill da
+	// arma atual entra ativa quando há espaço, sem apagar escolhas existentes.
+	activatedInitialSkill := ActivateInitialSkillForArchetype(char, session.CalculateDerivedStats().PrimaryArchetype)
+	if saveChar != nil && (len(initialSkillsUnlocked) > 0 || activatedInitialSkill != "") {
+		_ = saveChar(char)
+	}
+	return session
 }
 
 func (s *GameSession) syncPersistentExpeditionState() {
@@ -378,11 +431,120 @@ func GetMasteryLevel(tries int) int {
 	return 10 + int(math.Floor(math.Pow(float64(tries)/10.0, 0.45)))
 }
 
-func (s *GameSession) CalculateStats() (int, int) {
+func (s *GameSession) CalculateDerivedStats() DerivedStats {
 	stats := CalculateDerivedStats(s.Character, s.Inventory, s.ActiveStance)
+	return ApplyActiveBuffsToDerivedStats(stats, s.ActiveBuffs, time.Now().UTC())
+}
+
+func (s *GameSession) CalculateStats() (int, int) {
+	stats := s.CalculateDerivedStats()
 	s.Character.MaxHealth = stats.MaxHealth
 	s.Character.MaxMana = stats.MaxMana
 	return stats.TotalAttack, stats.TotalDefense
+}
+
+func percentOfCurrent(current, maximum int) int {
+	if maximum <= 0 {
+		return 100
+	}
+	return int(math.Max(0, math.Min(100, math.Floor(float64(current)*100.0/float64(maximum)))))
+}
+
+// spendAutoPotion delega a compra ao armazenamento quando disponível. O
+// fallback em memória existe somente para sessões de teste sem PostgreSQL.
+func (s *GameSession) spendAutoPotion(kind string, now time.Time) (AutoPotionSpendResult, bool) {
+	wasBudgetExhausted := s.AutoPotionState.BudgetExhausted
+	if s.SpendAutoPotionFunc != nil {
+		result, err := s.SpendAutoPotionFunc(s.Character.ID, s.AutoPotionSettings, kind, now)
+		if err != nil {
+			return AutoPotionSpendResult{}, false
+		}
+		s.AutoPotionState = result.State
+		if result.Applied {
+			s.Character.GoldBank = result.GoldBank
+		}
+		return result, result.Reason == "budget_exhausted" && !wasBudgetExhausted
+	}
+
+	result := AutoPotionSpendResult{PotionKey: kind, GoldBank: s.Character.GoldBank, State: s.AutoPotionState}
+	result.Reason = CanSpendAutoPotion(s.AutoPotionSettings, s.AutoPotionState, kind, s.Character.GoldBank, now)
+	if result.Reason == "budget_exhausted" {
+		s.AutoPotionState.BudgetExhausted = true
+		result.State = s.AutoPotionState
+		return result, !wasBudgetExhausted
+	}
+	if result.Reason != "" {
+		return result, false
+	}
+	s.Character.GoldBank -= AutoPotionCost(kind)
+	s.AutoPotionState = ApplyAutoPotionSpend(s.AutoPotionState, kind, now)
+	result.Applied = true
+	result.GoldBank = s.Character.GoldBank
+	result.State = s.AutoPotionState
+	return result, false
+}
+
+// tryAutoHealthPotion executa depois do dano inimigo e antes da derrota. O
+// frasco não é gasto fora do limiar configurado.
+func (s *GameSession) tryAutoHealthPotion(now time.Time) (used bool, budgetExhaustedNow bool) {
+	settings := NormalizeAutoPotionSettings(s.AutoPotionSettings)
+	if !settings.Enabled || percentOfCurrent(s.Character.Health, s.Character.MaxHealth) > settings.HealthThresholdPercent {
+		return false, false
+	}
+	result, budgetNotice := s.spendAutoPotion(AutoPotionKindHealth, now)
+	if !result.Applied {
+		return false, budgetNotice
+	}
+	heal := int(math.Ceil(float64(s.Character.MaxHealth) * float64(AutoPotionHealthRestorePercent) / 100.0))
+	if heal < 1 {
+		heal = 1
+	}
+	s.Character.Health = int(math.Min(float64(s.Character.MaxHealth), float64(s.Character.Health+heal)))
+	return true, false
+}
+
+// tryAutoManaPotion é acionada quando a mana cruza o limite configurado e há
+// uma habilidade ativa compatível que consome mana. O cooldown da habilidade
+// não bloqueia a reposição: caso contrário, o herói poderia chegar a 0 MP
+// enquanto espera a magia ficar pronta e nunca recuperar o recurso a tempo.
+func (s *GameSession) tryAutoManaPotion(now time.Time, validSkills []string) (used bool, budgetExhaustedNow bool) {
+	settings := NormalizeAutoPotionSettings(s.AutoPotionSettings)
+	if !settings.Enabled || percentOfCurrent(s.Character.Mana, s.Character.MaxMana) > settings.ManaThresholdPercent {
+		return false, false
+	}
+	hasManaSkill := false
+	for _, key := range validSkills {
+		definition, exists := GetSkillDefinition(key)
+		if !exists || definition.ManaCost <= 0 || s.Character.Level < definition.MinLevel {
+			continue
+		}
+		hasManaSkill = true
+		break
+	}
+	if !hasManaSkill {
+		return false, false
+	}
+	result, budgetNotice := s.spendAutoPotion(AutoPotionKindMana, now)
+	if !result.Applied {
+		return false, budgetNotice
+	}
+	restore := int(math.Ceil(float64(s.Character.MaxMana) * float64(AutoPotionManaRestorePercent) / 100.0))
+	if restore < 1 {
+		restore = 1
+	}
+	s.Character.Mana = int(math.Min(float64(s.Character.MaxMana), float64(s.Character.Mana+restore)))
+	return true, false
+}
+
+func (s *GameSession) resetAutoPotionState() {
+	if s.ResetAutoPotionStateFunc != nil && s.Character != nil {
+		state, err := s.ResetAutoPotionStateFunc(s.Character.ID)
+		if err == nil {
+			s.AutoPotionState = state
+		}
+		return
+	}
+	s.AutoPotionState = DefaultAutoPotionState()
 }
 
 func (s *GameSession) StartTicker() {
@@ -401,7 +563,7 @@ func (s *GameSession) StartTicker() {
 				s.HasBroadcastRestLog = false
 				s.processTick()
 			} else {
-				stats := CalculateDerivedStats(s.Character, s.Inventory, s.ActiveStance)
+				stats := s.CalculateDerivedStats()
 
 				campBonuses := CampBonuses{}
 				if s.Camp != nil {
@@ -441,9 +603,12 @@ func (s *GameSession) StartTicker() {
 				}
 				totalAtk, totalDef := s.CalculateStats()
 
-				if s.RecoveringFromDefeat && s.AutoResumePending && s.Character.AutoResumeExpedition && s.Character.Health >= s.Character.MaxHealth && s.Character.Mana >= s.Character.MaxMana {
+				recoveryReady := s.Character.ExpeditionRecoveryUntil.IsZero() || !s.Character.ExpeditionRecoveryUntil.After(time.Now().UTC())
+				if s.RecoveringFromDefeat && s.AutoResumePending && s.Character.AutoResumeExpedition && recoveryReady && s.Character.Health >= s.Character.MaxHealth && s.Character.Mana >= s.Character.MaxMana {
 					s.IsExpeditionActive = true
 					s.Character.IsExpeditionActive = true
+					s.Character.ExpeditionRecoveryUntil = time.Time{}
+					s.resetAutoPotionState()
 					s.RecoveringFromDefeat = false
 					s.AutoResumePending = false
 					s.syncPersistentExpeditionState()
@@ -495,6 +660,7 @@ func (s *GameSession) StartTicker() {
 
 func (s *GameSession) StopTicker() {
 	s.Mu.Lock()
+	s.clearManualMovement()
 	select {
 	case <-s.StopChan:
 	default:
@@ -536,6 +702,9 @@ func (s *GameSession) processTick() {
 	if s.CurrentStage <= 0 {
 		s.CurrentStage = 1
 	}
+	if s.CurrentStage > s.Character.HighestStageReached {
+		s.Character.HighestStageReached = s.CurrentStage
+	}
 	s.MaxStages = regInfo.MaxStages
 
 	if len(s.CurrentMonsters) == 0 {
@@ -555,16 +724,12 @@ func (s *GameSession) processTick() {
 				if m.AttackSpeedSeconds <= 0 {
 					m.AttackSpeedSeconds = DefaultMonsterAttackSpeed
 				}
+				if m.MovementSpeedMultiplier <= 0 {
+					m.MovementSpeedMultiplier = 1.0
+				}
 				m.AttackCooldownSec = 0.50
 				m.ID = fmt.Sprintf("mob_%d_%d", time.Now().UnixNano(), i)
-				m.GridX = (GridWidth - 2) + (i * 3) // Guarda-costas na vanguarda espaçados (ex: 13, 16)
-				laneY := HeroGridY
-				if i%2 == 0 {
-					laneY = HeroGridY - 1 // Flanco superior
-				} else {
-					laneY = HeroGridY + 1 // Flanco inferior
-				}
-				m.GridY = laneY
+				m.GridX, m.GridY = arenaSpawnPoint(i)
 				m.State = "CHASE"
 				s.CurrentMonsters = append(s.CurrentMonsters, m)
 			}
@@ -574,28 +739,32 @@ func (s *GameSession) processTick() {
 			if bossMob.AttackSpeedSeconds <= 0 {
 				bossMob.AttackSpeedSeconds = DefaultMonsterAttackSpeed
 			}
+			if bossMob.MovementSpeedMultiplier <= 0 {
+				bossMob.MovementSpeedMultiplier = 1.0
+			}
 			bossMob.AttackCooldownSec = 0.50
 			bossMob.ID = fmt.Sprintf("boss_%d", time.Now().UnixNano())
-			bossMob.GridX = GridWidth - 1 // Surge na borda direita da arena (GridX = 14)
-			bossMob.GridY = HeroGridY     // Linha central de comando (GridY = 4)
+			bossMob.GridX, bossMob.GridY = arenaSpawnPoint(2)
 			bossMob.State = "CHASE"
 			s.CurrentMonsters = append(s.CurrentMonsters, bossMob)
 
+			notification := fmt.Sprintf("🔥 FASE FINAL 5/5! O CHEFÃO [%s] APARECEU EM %s!", bossMob.Name, regInfo.Name)
 			s.broadcastMessage(CombatMessage{
-				Type:         "COMBAT_EVENT",
-				Timestamp:    time.Now().Format("15:04:05"),
-				Character:    s.Character,
-				Inventory:    s.Inventory,
-				Monsters:     s.CurrentMonsters,
-				TotalAttack:  totalAtk,
-				TotalDefense: totalDef,
-				ActiveRegion: s.ActiveRegion,
-				ActiveStance: s.ActiveStance,
-				CurrentStage: s.CurrentStage,
-				MaxStages:    s.MaxStages,
-				IsBossStage:  true,
-				LogText:      fmt.Sprintf("🔥 FASE FINAL 5/5! O CHEFÃO [%s] APARECEU EM %s!", bossMob.Name, regInfo.Name),
-				IsActive:     true,
+				Type:             "COMBAT_EVENT",
+				Timestamp:        time.Now().Format("15:04:05"),
+				Character:        s.Character,
+				Inventory:        s.Inventory,
+				Monsters:         s.CurrentMonsters,
+				TotalAttack:      totalAtk,
+				TotalDefense:     totalDef,
+				ActiveRegion:     s.ActiveRegion,
+				ActiveStance:     s.ActiveStance,
+				CurrentStage:     s.CurrentStage,
+				MaxStages:        s.MaxStages,
+				IsBossStage:      true,
+				LogText:          notification,
+				NotificationText: notification,
+				IsActive:         true,
 			})
 			return
 		} else {
@@ -616,99 +785,54 @@ func (s *GameSession) processTick() {
 				if m.AttackSpeedSeconds <= 0 {
 					m.AttackSpeedSeconds = DefaultMonsterAttackSpeed
 				}
+				if m.MovementSpeedMultiplier <= 0 {
+					m.MovementSpeedMultiplier = 1.0
+				}
 				m.AttackCooldownSec = 0.50
 				m.ID = fmt.Sprintf("mob_%d_%d", time.Now().UnixNano(), i)
-				// Espaçamento tático: monstros chegam escalonados em marcha rápida (1 tile de distância entre si)
-				m.GridX = (GridWidth - 1) + i
-				if m.GridX < HeroGridX+2 {
-					m.GridX = HeroGridX + 2
-				}
-				// Distribuição por faixas (Lanes) para visibilidade limpa de placas de vida
-				laneY := HeroGridY
-				if count > 1 {
-					if i == 1 {
-						laneY = HeroGridY - 1 // Flanco superior
-					} else if i == 2 {
-						laneY = HeroGridY + 1 // Flanco inferior
-					} else if i == 3 {
-						laneY = HeroGridY - 2 // Flanco extremo superior
-					}
-				}
-				m.GridY = laneY
+				m.GridX, m.GridY = arenaSpawnPoint(i)
 				m.State = "CHASE"
 				s.CurrentMonsters = append(s.CurrentMonsters, m)
 			}
 
+			notification := fmt.Sprintf("⚔️ FASE %d/5: Horda inimiga apareceu em %s!", s.CurrentStage, regInfo.Name)
 			s.broadcastMessage(CombatMessage{
-				Type:         "COMBAT_EVENT",
-				Timestamp:    time.Now().Format("15:04:05"),
-				Character:    s.Character,
-				Inventory:    s.Inventory,
-				Monsters:     s.CurrentMonsters,
-				TotalAttack:  totalAtk,
-				TotalDefense: totalDef,
-				ActiveRegion: s.ActiveRegion,
-				ActiveStance: s.ActiveStance,
-				CurrentStage: s.CurrentStage,
-				MaxStages:    s.MaxStages,
-				IsBossStage:  false,
-				LogText:      fmt.Sprintf("⚔️ FASE %d/5: Horda inimiga apareceu em %s!", s.CurrentStage, regInfo.Name),
-				IsActive:     true,
+				Type:             "COMBAT_EVENT",
+				Timestamp:        time.Now().Format("15:04:05"),
+				Character:        s.Character,
+				Inventory:        s.Inventory,
+				Monsters:         s.CurrentMonsters,
+				TotalAttack:      totalAtk,
+				TotalDefense:     totalDef,
+				ActiveRegion:     s.ActiveRegion,
+				ActiveStance:     s.ActiveStance,
+				CurrentStage:     s.CurrentStage,
+				MaxStages:        s.MaxStages,
+				IsBossStage:      false,
+				LogText:          notification,
+				NotificationText: notification,
+				IsActive:         true,
 			})
 			return
 		}
 	}
 
-	// FASE TÁTICA: Movimentação por Grid antes do combate
-	// Cada tick avança 1 tile na direção do confronto
-	for i := range s.CurrentMonsters {
-		mob := &s.CurrentMonsters[i]
-
-		// Transição para FLEE se HP estiver crítico (< 20%)
-		if mob.Health < int(float64(mob.MaxHealth)*0.20) && mob.State != "FLEE" {
-			mob.State = "FLEE"
-		}
-
-		// Se estiver sob efeito de Slow, pode perder passos no avanço pelo grid
-		speedMod := GetStatusSpeedModifier(mob.StatusEffects)
-		if speedMod < 1.0 && r.Float64() > speedMod {
-			// Perde o passo deste tick
-		} else {
-			switch mob.State {
-			case "FLEE":
-				// Foge para a direita (aumenta GridX)
-				if mob.GridX < GridWidth-1 {
-					mob.GridX++
-				}
-
-			case "CHASE":
-				if mob.AttackType == AttackTypeRanged {
-					// Ranged: avança até GridX = 9 (distância segura de 7 tiles do herói)
-					if mob.GridX > 9 {
-						mob.GridX--
-					} else {
-						mob.State = "KITE"
-					}
-				} else {
-					// Melee: avança até GridX = 3 (adjacente ao herói em GridX = 2)
-					if mob.GridX > HeroGridX+1 {
-						mob.GridX--
-					} else {
-						mob.State = "ATTACK"
-					}
-				}
-
-			case "KITE":
-				mob.State = "KITE"
-
-			case "ATTACK":
-				mob.State = "ATTACK"
-			}
-		}
+	// FASE TÁTICA: movimentação bidimensional autoritativa. O cliente recebe os
+	// tiles e interpola a caminhada; alcance e decisão de perseguir/fugir ficam
+	// exclusivamente no servidor. Enquanto houver uma intenção manual válida,
+	// somente a mobilidade do herói é substituída; o restante do combate segue
+	// exatamente o mesmo fluxo automático abaixo.
+	derivedStats := s.CalculateDerivedStats()
+	if s.manualMovementActive(time.Now().UTC()) {
+		now := time.Now().UTC()
+		s.moveHeroManually(s.manualHeroMovementSpeed(derivedStats.MovementSpeedMultiplier, now), now)
+	} else {
+		s.clearManualMovement()
+		s.moveHeroWithSpeed(derivedStats.PrimaryArchetype, derivedStats.MovementSpeedMultiplier)
 	}
+	s.moveMonsters()
 
 	// Estatísticas derivadas autoritativas
-	derivedStats := CalculateDerivedStats(s.Character, s.Inventory, s.ActiveStance)
 	s.Character.MaxHealth = derivedStats.MaxHealth
 	s.Character.MaxMana = derivedStats.MaxMana
 	totalAtk = derivedStats.TotalAttack
@@ -750,13 +874,25 @@ func (s *GameSession) processTick() {
 
 	// FASE 4: Execução Modular de Habilidades via SkillRegistry com Cooldowns e Gatilhos Inteligentes
 	validSkills := FilterActiveSkillsForArchetype(s.Character.ActiveSkills, derivedStats.PrimaryArchetype)
+	autoPotionBudgetExhaustedNow := false
+	if _, exhaustedNow := s.tryAutoManaPotion(time.Now().UTC(), validSkills); exhaustedNow {
+		autoPotionBudgetExhaustedNow = true
+	}
 	readySkills := make([]string, 0, len(validSkills))
 	monsterPtrs := make([]*Monster, 0, len(s.CurrentMonsters))
 	for idx := range s.CurrentMonsters {
-		if s.CurrentMonsters[idx].Health > 0 {
+		if s.CurrentMonsters[idx].Health > 0 && gridDistance(s.HeroGridX, s.HeroGridY, s.CurrentMonsters[idx].GridX, s.CurrentMonsters[idx].GridY) <= basicAttackRangeForArchetype(derivedStats.PrimaryArchetype) {
 			monsterPtrs = append(monsterPtrs, &s.CurrentMonsters[idx])
 		}
 	}
+	// O alvo da habilidade é sempre o inimigo alcançável mais próximo. A ordem
+	// de spawn não representa mais a prioridade em uma arena bidimensional,
+	// principalmente quando um monstro está recuando.
+	sort.SliceStable(monsterPtrs, func(i, j int) bool {
+		leftDistance := gridDistance(s.HeroGridX, s.HeroGridY, monsterPtrs[i].GridX, monsterPtrs[i].GridY)
+		rightDistance := gridDistance(s.HeroGridX, s.HeroGridY, monsterPtrs[j].GridX, monsterPtrs[j].GridY)
+		return leftDistance < rightDistance
+	})
 	skillCtx := &SkillContext{
 		Character:       s.Character,
 		DerivedStats:    &derivedStats,
@@ -770,14 +906,17 @@ func (s *GameSession) processTick() {
 	for _, key := range validSkills {
 		if def, exists := GetSkillDefinition(key); exists {
 			if s.SkillCooldowns[key] == 0 && s.Character.Mana >= def.ManaCost && s.Character.Level >= def.MinLevel {
-				if def.CanExecute == nil || def.CanExecute(skillCtx) {
+				// Habilidades ofensivas só entram na fila quando existe um alvo
+				// alcançável; habilidades self (como cura) não dependem de monstros.
+				hasTarget := def.TargetType == "self" || len(monsterPtrs) > 0
+				if hasTarget && (def.CanExecute == nil || def.CanExecute(skillCtx)) {
 					readySkills = append(readySkills, key)
 				}
 			}
 		}
 	}
 
-	if len(readySkills) > 0 && len(monsterPtrs) > 0 {
+	if len(readySkills) > 0 {
 		chosenKey := readySkills[r.Intn(len(readySkills))]
 		def, _ := GetSkillDefinition(chosenKey)
 		s.Character.Mana -= def.ManaCost
@@ -826,18 +965,15 @@ func (s *GameSession) processTick() {
 	tickDt := 0.75
 	s.BasicAttackCooldownSec -= tickDt
 
-	// Encontrar dinamicamente o primeiro monstro VIVO
-	var targetMonster *Monster
-	for idx := range s.CurrentMonsters {
-		if s.CurrentMonsters[idx].Health > 0 {
-			targetMonster = &s.CurrentMonsters[idx]
-			break
-		}
-	}
+	// O alvo básico é o monstro vivo mais próximo do herói, não o primeiro da
+	// lista de spawn. Isso mantém dano, efeitos e projéteis coerentes no mapa.
+	targetMonster := s.nearestLivingMonsterInRange(derivedStats.PrimaryArchetype)
 
-	shouldExecuteBasicAttack := s.BasicAttackCooldownSec <= 0 && targetMonster != nil
+	shouldExecuteBasicAttack := s.BasicAttackCooldownSec <= 0 && targetMonster != nil &&
+		gridDistance(s.HeroGridX, s.HeroGridY, targetMonster.GridX, targetMonster.GridY) <= basicAttackRangeForArchetype(derivedStats.PrimaryArchetype)
 
 	logMsg := ""
+	notificationMsg := ""
 	if shouldExecuteBasicAttack {
 		s.BasicAttackCooldownSec = derivedStats.AttackSpeedSeconds
 
@@ -901,8 +1037,9 @@ func (s *GameSession) processTick() {
 		s.CurrentMonsters[idx].StatusEffects = TickStatusEffects(s.CurrentMonsters[idx].StatusEffects)
 	}
 
-	// 2. Dano dos Monstros Ativos na Arena com Checagem de Proximidade / Colisão e Velocidade de Ataque (Attack Speed)
-	// Regra de Vantagem à Distância: Monstros Melee SÓ causam dano quando encostam no herói (GridX <= HeroGridX + 1)
+	// 2. Dano dos Monstros Ativos na Arena com checagem de proximidade 2D e
+	// velocidade de ataque. A antiga regra baseada apenas em GridX não é válida
+	// quando os atores podem se cruzar em qualquer eixo da arena.
 	totalDamageTaken := 0
 	for i := range s.CurrentMonsters {
 		mob := &s.CurrentMonsters[i]
@@ -913,16 +1050,11 @@ func (s *GameSession) processTick() {
 			mob.AttackCooldownSec -= tickDt
 
 			canHitHero := false
+			distance := gridDistance(s.HeroGridX, s.HeroGridY, mob.GridX, mob.GridY)
 			if mob.AttackType == AttackTypeRanged {
-				// Ranged: Ataca a partir da distância de tiro
-				if mob.State == "KITE" || mob.GridX <= 9 {
-					canHitHero = true
-				}
+				canHitHero = distance <= 8.0
 			} else {
-				// Melee: SÓ ataca quando chega em adjacência/colisão com o herói
-				if mob.State == "ATTACK" || mob.GridX <= HeroGridX+1 {
-					canHitHero = true
-				}
+				canHitHero = distance <= combatRangeForArchetype("melee")
 			}
 
 			if canHitHero && mob.AttackCooldownSec <= 0 {
@@ -939,7 +1071,7 @@ func (s *GameSession) processTick() {
 	if totalDamageTaken > 0 {
 		logMsg += fmt.Sprintf(" Horda inimiga contra-atacou causando %d de dano total!", totalDamageTaken)
 	} else {
-		logMsg += " (Monstros Melee avançando... herói mantém vantagem à distância!)"
+		logMsg += " (A horda reposiciona-se na arena isométrica...)"
 	}
 
 	// 3. Lifesteal Application
@@ -980,33 +1112,51 @@ func (s *GameSession) processTick() {
 			logMsg += fmt.Sprintf(" 🩸 Roubo de Vida (+%d HP)", heal)
 		}
 	}
+	if _, exhaustedNow := s.tryAutoHealthPotion(time.Now().UTC()); exhaustedNow {
+		autoPotionBudgetExhaustedNow = true
+	}
+
+	// A transição para fuga acontece no mesmo tick em que o dano cruza o limiar
+	// crítico. Assim o cliente recebe FLEE imediatamente, em vez de o monstro
+	// permanecer em CHASE/ATTACK até o próximo ciclo ou morrer antes de fugir.
+	for idx := range s.CurrentMonsters {
+		updateMonsterFleeState(&s.CurrentMonsters[idx])
+	}
 
 	// 4. Morte do Aventureiro
 	if s.Character.Health <= 0 {
+		failedStage := s.CurrentStage
 		s.Character.Health = int(float64(s.Character.MaxHealth) * 0.4)
+		s.Character.ExpeditionDeathsTotal++
+		s.Character.LastExpeditionDeathStage = failedStage
+		recoverySeconds := offlineCampRecoverySeconds(s.Character.MaxHealth, s.Character.Level, s.Character.VIT)
+		s.Character.ExpeditionRecoveryUntil = time.Now().UTC().Add(time.Duration(recoverySeconds * float64(time.Second)))
 		s.RecoveringFromDefeat = true
 		s.AutoResumePending = s.Character.AutoResumeExpedition
 		s.IsExpeditionActive = false
 		s.CurrentStage = 1
 		s.IsBossStage = false
 		s.CurrentMonsters = []Monster{}
+		s.resetArenaPosition()
 		s.syncPersistentExpeditionState()
 		if s.SaveCharFunc != nil {
 			_ = s.SaveCharFunc(s.Character)
 		}
+		notification := "Você foi gravemente ferido e resgatado para o acampamento. A fase desta caçada voltou para 1; seu progresso permanente foi preservado."
 		s.broadcastMessage(CombatMessage{
-			Type:         "COMBAT_EVENT",
-			Timestamp:    time.Now().Format("15:04:05"),
-			Character:    s.Character,
-			Inventory:    s.Inventory,
-			DamageTaken:  totalDamageTaken,
-			DamageDealt:  totalDamageDealt,
-			TotalAttack:  totalAtk,
-			TotalDefense: totalDef,
-			ActiveRegion: s.ActiveRegion,
-			ActiveStance: s.ActiveStance,
-			LogText:      "Você foi gravemente ferido e resgatado para o acampamento. Somente a fase desta caçada voltou para 1; nível, XP, ouro, equipamentos, recursos, receitas e profissões foram preservados.",
-			IsActive:     false,
+			Type:             "COMBAT_EVENT",
+			Timestamp:        time.Now().Format("15:04:05"),
+			Character:        s.Character,
+			Inventory:        s.Inventory,
+			DamageTaken:      totalDamageTaken,
+			DamageDealt:      totalDamageDealt,
+			TotalAttack:      totalAtk,
+			TotalDefense:     totalDef,
+			ActiveRegion:     s.ActiveRegion,
+			ActiveStance:     s.ActiveStance,
+			LogText:          notification,
+			NotificationText: notification,
+			IsActive:         false,
 		})
 		return
 	}
@@ -1019,7 +1169,7 @@ func (s *GameSession) processTick() {
 			aliveMonsters = append(aliveMonsters, mob)
 		} else {
 			// Recompensa XP & Ouro usando a fórmula dinâmica de MMORPG
-			xpGained := CalculateKillXP(s.Character.Level, mob.Level, mob.MaxHealth, mob.IsBoss)
+			xpGained := ApplyXPGainBuff(CalculateKillXP(s.Character.Level, mob.Level, mob.MaxHealth, mob.IsBoss), s.ActiveBuffs, time.Now().UTC())
 			goldBonusPct := 0.0
 			eqList := []*Item{
 				eq.Head, eq.Chest, eq.Legs, eq.Boots,
@@ -1037,6 +1187,7 @@ func (s *GameSession) processTick() {
 			totalXPGained += xpGained
 
 			logMsg += fmt.Sprintf(" %s derrotado! +%d XP e +%d Ouro!", mob.Name, xpGained, goldGained)
+			notificationMsg += fmt.Sprintf(" 🎖️ Recompensa: +%d XP e +%d Ouro.", xpGained, goldGained)
 
 			// Loot direto da Economia V2. A chance vem do perfil canônico e
 			// equipamentos genéricos são produzidos por crafting.
@@ -1062,6 +1213,7 @@ func (s *GameSession) processTick() {
 							}(s.Character.ID, item.Name, item.Rarity, s.ActiveRegion, mob.Key)
 						}
 						logMsg += fmt.Sprintf(" ✨ COMPÊNDIO: Você descobriu [%s] em %s!", item.Name, regInfo.Name)
+						notificationMsg += fmt.Sprintf(" ✨ Novo registro no Compêndio: [%s] em %s.", item.Name, regInfo.Name)
 					}
 
 					currentWeight := s.GetTotalWeight()
@@ -1086,6 +1238,7 @@ func (s *GameSession) processTick() {
 								_ = s.SaveCharAndInvFunc(s.Character, s.Inventory)
 							}
 							logMsg += fmt.Sprintf(" 🧹 AUTO-VENDA: %d itens vendidos por %d de ouro (80%% valor)! Espaço liberado.", len(eval.ItemsToSell), eval.TotalGoldEstimated)
+							notificationMsg += fmt.Sprintf(" 🧹 Auto-venda: %d itens vendidos por %d Ouro.", len(eval.ItemsToSell), eval.TotalGoldEstimated)
 							currentWeight = s.GetTotalWeight()
 						}
 					}
@@ -1094,6 +1247,7 @@ func (s *GameSession) processTick() {
 					if currentWeight+item.Weight <= maxWeight && len(s.Inventory.Backpack) < maxSlots {
 						s.Inventory.Backpack = append([]Item{*item}, s.Inventory.Backpack...)
 						logMsg += fmt.Sprintf(" 🎁 LOOT: [%s] adicionado à mochila!", item.Name)
+						notificationMsg += fmt.Sprintf(" 🎁 Drop: [%s] adicionado à mochila.", item.Name)
 						if s.SaveInvFunc != nil {
 							_ = s.SaveInvFunc(s.Character.ID, s.Inventory)
 						}
@@ -1106,6 +1260,7 @@ func (s *GameSession) processTick() {
 								_ = s.SaveOverflowChestFunc(s.Character.ID, s.OverflowChest)
 							}
 							logMsg += fmt.Sprintf(" 📦 BAÚ DE ACHADOS: Mochila cheia! O item protegido [%s] foi guardado no Baú de Achados!", item.Name)
+							notificationMsg += fmt.Sprintf(" 📦 Drop protegido: [%s] foi enviado ao Baú de Achados.", item.Name)
 						} else if isProtected {
 							persisted := false
 							if s.SavePendingItemFunc != nil {
@@ -1113,6 +1268,7 @@ func (s *GameSession) processTick() {
 									persisted = true
 									IncrementTelemetry("inventory_overflow_total{source=protected_drop}")
 									logMsg += fmt.Sprintf(" 📦 CARGA SEGURA: Baú lotado; [%s] foi guardado na fila de resgate, sem perda.", item.Name)
+									notificationMsg += fmt.Sprintf(" 📦 Drop protegido: [%s] foi guardado na carga segura.", item.Name)
 								}
 							}
 							if !persisted {
@@ -1123,6 +1279,7 @@ func (s *GameSession) processTick() {
 									_ = s.SaveOverflowChestFunc(s.Character.ID, s.OverflowChest)
 								}
 								logMsg += fmt.Sprintf(" 📦 RESERVA DE EMERGÊNCIA: [%s] permaneceu protegido para nova tentativa de persistência.", item.Name)
+								notificationMsg += fmt.Sprintf(" 📦 Drop protegido: [%s] aguarda persistência segura.", item.Name)
 							}
 						} else {
 							// Conversão forçada de emergência apenas para itens NÃO protegidos (50% do valor comercial)
@@ -1132,6 +1289,7 @@ func (s *GameSession) processTick() {
 							}
 							s.Character.GoldBank += goldValue
 							logMsg += fmt.Sprintf(" 💰 SUPLENTO: Sem espaço no inventário/baú! [%s] foi convertido em %d de ouro (50%% taxa emergencial)!", item.Name, goldValue)
+							notificationMsg += fmt.Sprintf(" 💰 Drop convertido em %d Ouro por falta de espaço: [%s].", goldValue, item.Name)
 							if s.SaveCharFunc != nil {
 								_ = s.SaveCharFunc(s.Character)
 							}
@@ -1174,9 +1332,11 @@ func (s *GameSession) processTick() {
 						}
 						if len(resNames) > 0 {
 							logMsg += fmt.Sprintf(" 🪵 RECURSOS: [%s]!", strings.Join(resNames, ", "))
+							notificationMsg += fmt.Sprintf(" 🪵 Recursos recebidos: %s.", strings.Join(resNames, ", "))
 						}
 						if len(mutRes.Overflow) > 0 {
 							logMsg += " 📦 (Armazém cheio: o excedente foi guardado como carga pendente)"
+							notificationMsg += " 📦 O excedente foi guardado como carga pendente por falta de espaço no armazém."
 						}
 					}
 				}
@@ -1187,8 +1347,11 @@ func (s *GameSession) processTick() {
 	// Se a horda do estágio atual foi totalmente destruída:
 	if len(aliveMonsters) == 0 {
 		if s.IsBossStage {
+			s.Character.ExpeditionsCompletedTotal++
+			s.Character.BossesDefeatedTotal++
 			// VITÓRIA CONTRA O BOSS!
 			logMsg += fmt.Sprintf(" 🏆 EXPEDIÇÃO CONCLUÍDA! O CHEFÃO DE %s FOI DERROTADO!", regInfo.Name)
+			notificationMsg += fmt.Sprintf(" 🏆 Expedição concluída: o chefão de %s foi derrotado!", regInfo.Name)
 
 			// Marcar este boss como derrotado: adicionar o ID da região atual a UnlockedRegions.
 			// CheckRegionAvailability usa esta lista para validar RequiresTierComplete.
@@ -1218,6 +1381,7 @@ func (s *GameSession) processTick() {
 					if !alreadyUnlocked {
 						s.Character.UnlockedRegions = append(s.Character.UnlockedRegions, reg.ID)
 						logMsg += fmt.Sprintf(" 🔓 NOVA EXPEDIÇÃO DESBLOQUEADA: [%s]!", reg.Name)
+						notificationMsg += fmt.Sprintf(" 🔓 Nova expedição desbloqueada: [%s].", reg.Name)
 					}
 				}
 			}
@@ -1239,6 +1403,7 @@ func (s *GameSession) processTick() {
 				nextTierRegions := GetRegionsByTier(regInfo.Tier + 1)
 				if len(nextTierRegions) > 0 {
 					logMsg += fmt.Sprintf(" 🔓✨ TIER %d COMPLETO! O Tier %d está agora disponível!", regInfo.Tier, regInfo.Tier+1)
+					notificationMsg += fmt.Sprintf(" 🔓 Tier %d completo: o Tier %d está disponível!", regInfo.Tier, regInfo.Tier+1)
 				}
 			}
 
@@ -1249,6 +1414,7 @@ func (s *GameSession) processTick() {
 			// Avançar para a próxima Fase (Stage)
 			s.CurrentStage++
 			logMsg += fmt.Sprintf(" 🚩 FASE CONCLUÍDA! Avançando para a Fase %d/%d...", s.CurrentStage, s.MaxStages)
+			notificationMsg += fmt.Sprintf(" 🚩 Fase concluída. Avançando para %d/%d.", s.CurrentStage, s.MaxStages)
 		}
 	}
 
@@ -1257,10 +1423,30 @@ func (s *GameSession) processTick() {
 	// Level Up Check: delega ao calculador canônico ApplyExperienceGain para
 	// garantir paridade total entre motor online, offline e testes.
 	if totalXPGained > 0 {
+		knownBeforeLevelUp := append([]string(nil), s.Character.LearnedSkills...)
 		leveledUp, newLevels, _ := ApplyExperienceGain(s.Character, totalXPGained)
 		if leveledUp {
 			s.CalculateStats()
 			logMsg += fmt.Sprintf(" 🌟 LEVEL UP! Você avançou %d nível(is) e chegou ao Nível %d!", newLevels, s.Character.Level)
+			notificationMsg += fmt.Sprintf(" 🌟 Level up! Você avançou %d nível(is) e chegou ao Nível %d.", newLevels, s.Character.Level)
+			newInitialSkills := make([]string, 0, len(initialCombatSkillKeys))
+			for _, key := range initialCombatSkillKeys {
+				if hasSkill(s.Character.LearnedSkills, key) && !hasSkill(knownBeforeLevelUp, key) {
+					if definition, exists := GetSkillDefinition(key); exists {
+						newInitialSkills = append(newInitialSkills, definition.Name)
+					}
+				}
+			}
+			if len(newInitialSkills) > 0 {
+				activatedKey := ActivateInitialSkillForArchetype(s.Character, derivedStats.PrimaryArchetype)
+				logMsg += fmt.Sprintf(" ✨ Habilidades iniciais desbloqueadas: %s!", strings.Join(newInitialSkills, ", "))
+				notificationMsg += fmt.Sprintf(" ✨ Novas habilidades: %s.", strings.Join(newInitialSkills, ", "))
+				if activatedKey != "" {
+					if definition, exists := GetSkillDefinition(activatedKey); exists {
+						logMsg += fmt.Sprintf(" %s foi ativada para sua arma atual.", definition.Name)
+					}
+				}
+			}
 		}
 	}
 
@@ -1274,25 +1460,35 @@ func (s *GameSession) processTick() {
 		discoveredList = append(discoveredList, k)
 	}
 
+	logForCombatEvent := notificationMsg
+	if autoPotionBudgetExhaustedNow {
+		// Não entra no log de batalha: este é o único aviso da automação, para
+		// que o jogador saiba por que ela deixou de proteger o herói.
+		notificationMsg = "🧪 Orçamento dos suprimentos automáticos esgotado nesta expedição."
+		logForCombatEvent = ""
+	}
 	s.broadcastMessage(CombatMessage{
-		Type:           "COMBAT_EVENT",
-		Timestamp:      time.Now().Format("15:04:05"),
-		Character:      s.Character,
-		Inventory:      s.Inventory,
-		Monsters:       s.CurrentMonsters,
-		DamageDealt:    totalDamageDealt,
-		DamageTaken:    totalDamageTaken,
-		DPS:            currentDPS,
-		TotalAttack:    totalAtk,
-		TotalDefense:   totalDef,
-		DerivedStats:   derivedStats,
-		CombatEffects:  combatEffects,
-		SkillCooldowns: s.SkillCooldowns,
-		ActiveRegion:   s.ActiveRegion,
-		ActiveStance:   s.ActiveStance,
-		DiscoveredLoot: discoveredList,
-		LogText:        logMsg,
-		IsActive:       true,
+		Type:               "COMBAT_EVENT",
+		Timestamp:          time.Now().Format("15:04:05"),
+		Character:          s.Character,
+		Inventory:          s.Inventory,
+		Monsters:           s.CurrentMonsters,
+		DamageDealt:        totalDamageDealt,
+		DamageTaken:        totalDamageTaken,
+		DPS:                currentDPS,
+		TotalAttack:        totalAtk,
+		TotalDefense:       totalDef,
+		DerivedStats:       derivedStats,
+		CombatEffects:      combatEffects,
+		SkillCooldowns:     s.SkillCooldowns,
+		ActiveRegion:       s.ActiveRegion,
+		ActiveStance:       s.ActiveStance,
+		DiscoveredLoot:     discoveredList,
+		AutoPotionSettings: &s.AutoPotionSettings,
+		AutoPotionState:    &s.AutoPotionState,
+		LogText:            logForCombatEvent,
+		NotificationText:   notificationMsg,
+		IsActive:           true,
 	})
 }
 
@@ -1352,7 +1548,7 @@ func (s *GameSession) EquipItem(itemID string, slot string) {
 			s.Character.LearnedSkills = append(s.Character.LearnedSkills, skillKey)
 
 			// Autoativa apenas se for compatível com o arquétipo atual e houver espaço (até 2)
-			stats := CalculateDerivedStats(s.Character, s.Inventory, s.ActiveStance)
+			stats := s.CalculateDerivedStats()
 			if IsSkillAllowedForArchetype(skillKey, stats.PrimaryArchetype) {
 				hasActive := false
 				for _, sk := range s.Character.ActiveSkills {
@@ -1540,7 +1736,7 @@ func (s *GameSession) EquipItem(itemID string, slot string) {
 			s.Character.Vocation = "Guerreiro"
 		}
 		// Filtra as habilidades ativas para manter apenas as compatíveis com o novo arquétipo
-		stats := CalculateDerivedStats(s.Character, s.Inventory, s.ActiveStance)
+		stats := s.CalculateDerivedStats()
 		s.Character.ActiveSkills = FilterActiveSkillsForArchetype(s.Character.ActiveSkills, stats.PrimaryArchetype)
 		if s.SaveCharFunc != nil {
 			_ = s.SaveCharFunc(s.Character)
@@ -1589,7 +1785,7 @@ func (s *GameSession) UnequipItem(slot string) {
 		itemToUnequip = eq.MainHand
 		eq.MainHand = nil
 		s.Character.Vocation = "Andarilho"
-		stats := CalculateDerivedStats(s.Character, s.Inventory, s.ActiveStance)
+		stats := s.CalculateDerivedStats()
 		s.Character.ActiveSkills = FilterActiveSkillsForArchetype(s.Character.ActiveSkills, stats.PrimaryArchetype)
 	case "offhand":
 		itemToUnequip = eq.OffHand
@@ -1737,7 +1933,7 @@ func (s *GameSession) BulkSell(itemIDs []string) {
 }
 
 func (s *GameSession) GetMaxWeightCapacity() float64 {
-	stats := CalculateDerivedStats(s.Character, s.Inventory, s.ActiveStance)
+	stats := s.CalculateDerivedStats()
 	return float64(stats.TotalCapacity)
 }
 
@@ -1746,7 +1942,7 @@ func (s *GameSession) GetCurrentInventoryWeight() float64 {
 }
 
 func (s *GameSession) GetMaxSlotCapacity() int {
-	stats := CalculateDerivedStats(s.Character, s.Inventory, s.ActiveStance)
+	stats := s.CalculateDerivedStats()
 	return stats.MaxSlots
 }
 
@@ -1820,6 +2016,7 @@ func (s *GameSession) SelectRegion(regionID string) bool {
 	s.Character.CurrentStage = 1
 	s.Character.IsBossStage = false
 	s.CurrentMonsters = []Monster{}
+	s.resetArenaPosition()
 	s.syncPersistentExpeditionState()
 
 	if s.SaveCharFunc != nil {
@@ -1912,6 +2109,39 @@ func (s *GameSession) UpdateAutoSellSettings(newSettings AutoSellSettings) {
 		AutoSellSettings: &s.AutoSellSettings,
 		LogText:          "⚙️ Configurações de venda automática atualizadas com sucesso!",
 		IsActive:         s.IsExpeditionActive,
+	})
+}
+
+// UpdateAutoPotionSettings persiste os limites escolhidos pelo jogador. Mudar
+// o painel não renova o orçamento já gasto: isso só ocorre ao iniciar uma nova
+// expedição de forma explícita.
+func (s *GameSession) UpdateAutoPotionSettings(newSettings AutoPotionSettings) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	previousSettings := s.AutoPotionSettings
+	newSettings = NormalizeAutoPotionSettings(newSettings)
+	s.AutoPotionSettings = newSettings
+	if s.SaveAutoPotionSettingsFunc != nil {
+		if err := s.SaveAutoPotionSettingsFunc(s.Character.ID, newSettings); err != nil {
+			s.AutoPotionSettings = previousSettings
+			s.broadcastMessage(CombatMessage{
+				Type:               "ECONOMY_ERROR",
+				Timestamp:          time.Now().Format("15:04:05"),
+				AutoPotionSettings: &s.AutoPotionSettings,
+				AutoPotionState:    &s.AutoPotionState,
+				LogText:            "Não foi possível salvar os suprimentos automáticos. Nenhuma configuração foi alterada.",
+				IsActive:           s.IsExpeditionActive,
+			})
+			return
+		}
+	}
+	s.broadcastMessage(CombatMessage{
+		Type:               "AUTO_POTION_SETTINGS_UPDATED",
+		Timestamp:          time.Now().Format("15:04:05"),
+		AutoPotionSettings: &s.AutoPotionSettings,
+		AutoPotionState:    &s.AutoPotionState,
+		LogText:            "⚙️ Suprimentos automáticos atualizados.",
+		IsActive:           s.IsExpeditionActive,
 	})
 }
 
@@ -2151,6 +2381,16 @@ func CloneCampSnapshot(camp *CampState) *CampState {
 
 func (s *GameSession) broadcastMessage(msg CombatMessage) {
 	s.syncPersistentExpeditionState()
+	// Mensagens econômicas e do acampamento frequentemente carregam somente o
+	// delta de domínio. Como o protocolo V2 ainda serializa campos de combate
+	// não opcionais, complete-os com o snapshot da sessão para nunca emitir
+	// atributos zerados, expedição falsa ou carga segura vazia por omissão.
+	if msg.Character == nil {
+		msg.Character = s.Character
+	}
+	if msg.Inventory == nil {
+		msg.Inventory = s.Inventory
+	}
 	if msg.ActiveBiome == "" {
 		if region, exists := GetExpeditionRegion(s.ActiveRegion); exists {
 			msg.ActiveBiome = region.BiomeKey
@@ -2159,7 +2399,19 @@ func (s *GameSession) broadcastMessage(msg CombatMessage) {
 	msg.Character = cloneCharacterData(msg.Character)
 	msg.Inventory = cloneInventoryData(msg.Inventory)
 	msg.Monsters = append([]Monster(nil), msg.Monsters...)
-	msg.DerivedStats = CalculateDerivedStats(msg.Character, msg.Inventory, s.ActiveStance)
+	msg.Arena = s.buildArenaSnapshot()
+	// O combate já usa os buffs no cálculo da sessão. Reaplicá-los aqui mantém
+	// ataque/DPS exibidos no cliente iguais aos valores efetivos do combate.
+	msg.DerivedStats = ApplyActiveBuffsToDerivedStats(
+		CalculateDerivedStats(msg.Character, msg.Inventory, s.ActiveStance),
+		s.ActiveBuffs,
+		time.Now().UTC(),
+	)
+	msg.TotalAttack = msg.DerivedStats.TotalAttack
+	msg.TotalDefense = msg.DerivedStats.TotalDefense
+	msg.ActiveBuffs = append([]ActiveBuff(nil), s.ActiveBuffs...)
+	msg.IsActive = s.IsExpeditionActive
+	msg.OverflowChest = append([]Item(nil), s.OverflowChest...)
 	msg.AttackCooldownRemaining = math.Max(0, math.Round(s.BasicAttackCooldownSec*100)/100)
 
 	if s.Camp != nil && msg.Camp == nil {
@@ -2280,24 +2532,26 @@ func (s *GameSession) RequestStateSync() {
 	sort.Strings(discoveredList)
 
 	s.broadcastMessage(CombatMessage{
-		Type:             "STATE_SNAPSHOT",
-		Timestamp:        time.Now().Format("15:04:05"),
-		Character:        s.Character,
-		Inventory:        s.Inventory,
-		Monsters:         s.CurrentMonsters,
-		TotalAttack:      totalAtk,
-		TotalDefense:     totalDef,
-		ActiveRegion:     s.ActiveRegion,
-		ActiveStance:     s.ActiveStance,
-		CurrentStage:     s.CurrentStage,
-		MaxStages:        s.MaxStages,
-		IsBossStage:      s.IsBossStage,
-		IsActive:         s.IsExpeditionActive,
-		Camp:             s.Camp,
-		DiscoveredLoot:   discoveredList,
-		AutoSellSettings: &s.AutoSellSettings,
-		OverflowChest:    s.OverflowChest,
-		LogText:          "🔄 Estado sincronizado com sucesso com o servidor autoritativo.",
+		Type:               "STATE_SNAPSHOT",
+		Timestamp:          time.Now().Format("15:04:05"),
+		Character:          s.Character,
+		Inventory:          s.Inventory,
+		Monsters:           s.CurrentMonsters,
+		TotalAttack:        totalAtk,
+		TotalDefense:       totalDef,
+		ActiveRegion:       s.ActiveRegion,
+		ActiveStance:       s.ActiveStance,
+		CurrentStage:       s.CurrentStage,
+		MaxStages:          s.MaxStages,
+		IsBossStage:        s.IsBossStage,
+		IsActive:           s.IsExpeditionActive,
+		Camp:               s.Camp,
+		DiscoveredLoot:     discoveredList,
+		AutoSellSettings:   &s.AutoSellSettings,
+		AutoPotionSettings: &s.AutoPotionSettings,
+		AutoPotionState:    &s.AutoPotionState,
+		OverflowChest:      s.OverflowChest,
+		LogText:            "🔄 Estado sincronizado com sucesso com o servidor autoritativo.",
 	})
 }
 
@@ -2306,8 +2560,13 @@ func (s *GameSession) ToggleExpedition() bool {
 	s.IsExpeditionActive = !s.IsExpeditionActive
 	s.RecoveringFromDefeat = false
 	s.AutoResumePending = false
+	if s.IsExpeditionActive {
+		s.Character.ExpeditionRecoveryUntil = time.Time{}
+		s.resetAutoPotionState()
+	}
 	if !s.IsExpeditionActive {
 		s.CurrentMonsters = []Monster{}
+		s.resetArenaPosition()
 	}
 	s.syncPersistentExpeditionState()
 	if s.SaveCharFunc != nil {
@@ -2324,20 +2583,22 @@ func (s *GameSession) ToggleExpedition() bool {
 	s.EnsureTickerRunning()
 
 	s.broadcastMessage(CombatMessage{
-		Type:         "EXPEDITION_STATUS",
-		Timestamp:    time.Now().Format("15:04:05"),
-		Character:    s.Character,
-		Inventory:    s.Inventory,
-		Monsters:     s.CurrentMonsters,
-		TotalAttack:  totalAtk,
-		TotalDefense: totalDef,
-		ActiveRegion: s.ActiveRegion,
-		ActiveStance: s.ActiveStance,
-		CurrentStage: s.CurrentStage,
-		MaxStages:    s.MaxStages,
-		IsBossStage:  s.IsBossStage,
-		LogText:      logMsg,
-		IsActive:     s.IsExpeditionActive,
+		Type:               "EXPEDITION_STATUS",
+		Timestamp:          time.Now().Format("15:04:05"),
+		Character:          s.Character,
+		Inventory:          s.Inventory,
+		Monsters:           s.CurrentMonsters,
+		TotalAttack:        totalAtk,
+		TotalDefense:       totalDef,
+		AutoPotionSettings: &s.AutoPotionSettings,
+		AutoPotionState:    &s.AutoPotionState,
+		ActiveRegion:       s.ActiveRegion,
+		ActiveStance:       s.ActiveStance,
+		CurrentStage:       s.CurrentStage,
+		MaxStages:          s.MaxStages,
+		IsBossStage:        s.IsBossStage,
+		LogText:            logMsg,
+		IsActive:           s.IsExpeditionActive,
 	})
 
 	return s.IsExpeditionActive
@@ -2381,7 +2642,7 @@ func (s *GameSession) ToggleSkill(skillKey string) {
 	}
 
 	// Verifica compatibilidade com o arquétipo da arma atual
-	stats := CalculateDerivedStats(s.Character, s.Inventory, s.ActiveStance)
+	stats := s.CalculateDerivedStats()
 	if !IsSkillAllowedForArchetype(skillKey, stats.PrimaryArchetype) {
 		s.broadcastMessage(CombatMessage{
 			Type:      "SKILL_ERROR",

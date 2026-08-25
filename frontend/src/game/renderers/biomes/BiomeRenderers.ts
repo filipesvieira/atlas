@@ -3,7 +3,7 @@
  * Cada bioma foi decomposto em seu respectivo módulo para fácil manutenção e escalabilidade.
  */
 
-export { getForestBackground, getCampBackground, drawTree } from './forest';
+export { getForestBackground, getForestArenaBackground, renderForestArenaDynamic, getCampBackground, drawTree } from './forest';
 export { getSherequeBackground } from './swamp';
 export { getChapolinBackground } from './sea';
 export { getOrcRuinsBackground } from './orcRuins';

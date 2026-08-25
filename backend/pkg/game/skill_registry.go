@@ -47,6 +47,57 @@ type SkillDefinition struct {
 
 var skillRegistry = map[string]SkillDefinition{}
 
+// InitialCombatSkillUnlockLevel libera o kit base de combate sem depender de
+// livros. Como Atlas é classless, o personagem recebe as três opções iniciais
+// e usa automaticamente apenas a que corresponde à arma equipada.
+const InitialCombatSkillUnlockLevel = 10
+
+var initialCombatSkillKeys = []string{"whirlwind", "multishot", "arcane_nova"}
+
+func hasSkill(skills []string, key string) bool {
+	for _, skill := range skills {
+		if skill == key {
+			return true
+		}
+	}
+	return false
+}
+
+// UnlockInitialCombatSkills é idempotente e também atualiza personagens que
+// já ultrapassaram o nível 10 antes desta regra existir.
+func UnlockInitialCombatSkills(char *CharacterData) []string {
+	if char == nil || char.Level < InitialCombatSkillUnlockLevel {
+		return nil
+	}
+	if char.LearnedSkills == nil {
+		char.LearnedSkills = []string{}
+	}
+	unlocked := make([]string, 0, len(initialCombatSkillKeys))
+	for _, key := range initialCombatSkillKeys {
+		if !hasSkill(char.LearnedSkills, key) {
+			char.LearnedSkills = append(char.LearnedSkills, key)
+			unlocked = append(unlocked, key)
+		}
+	}
+	return unlocked
+}
+
+// ActivateInitialSkillForArchetype deixa a primeira habilidade da arma atual
+// pronta para uso sem substituir escolhas ativas já existentes.
+func ActivateInitialSkillForArchetype(char *CharacterData, archetype string) string {
+	if char == nil || char.Level < InitialCombatSkillUnlockLevel || len(char.ActiveSkills) >= 2 {
+		return ""
+	}
+	for _, key := range initialCombatSkillKeys {
+		if !hasSkill(char.LearnedSkills, key) || hasSkill(char.ActiveSkills, key) || !IsSkillAllowedForArchetype(key, archetype) {
+			continue
+		}
+		char.ActiveSkills = append(char.ActiveSkills, key)
+		return key
+	}
+	return ""
+}
+
 func init() {
 	// 1. WHIRLWIND (Golpe Giratório) — Melee em Área (Cooldown: 3 ticks / 2.25s)
 	RegisterSkill(SkillDefinition{
@@ -55,7 +106,7 @@ func init() {
 		Icon:              "🌀",
 		Description:       "Gira 360° desferindo 90% do dano de ataque a toda a horda inimiga.",
 		ManaCost:          18,
-		MinLevel:          1,
+		MinLevel:          InitialCombatSkillUnlockLevel,
 		CooldownTicks:     3,
 		CooldownSeconds:   2.25,
 		AllowedArchetypes: []string{"melee"},
@@ -149,7 +200,7 @@ func init() {
 		Icon:              "🏹",
 		Description:       "Dispara uma salva de 4 flechas velozes (80% do ataque cada) contra a horda.",
 		ManaCost:          16,
-		MinLevel:          1,
+		MinLevel:          InitialCombatSkillUnlockLevel,
 		CooldownTicks:     3,
 		CooldownSeconds:   2.25,
 		AllowedArchetypes: []string{"distance"},
@@ -297,7 +348,48 @@ func init() {
 		},
 	})
 
-	// 7. DIVINE HEAL (Cura Divina) — Magia Sagrada de Suporte com Gatilho Inteligente (Cooldown: 7 ticks / 5.25s)
+	// 7. ARCANE NOVA (Nova Arcana) — Magia Inicial em Área (Cooldown: 6 ticks / 4.50s)
+	RegisterSkill(SkillDefinition{
+		Key:               "arcane_nova",
+		Name:              "Nova Arcana",
+		Icon:              "✦",
+		Description:       "Libera uma explosão arcana que atinge até 4 inimigos próximos com dano mágico moderado.",
+		ManaCost:          24,
+		MinLevel:          InitialCombatSkillUnlockLevel,
+		CooldownTicks:     6,
+		CooldownSeconds:   4.50,
+		AllowedArchetypes: []string{"magic"},
+		TargetType:        "area",
+		VisualKey:         "arcane_nova",
+		Execute: func(ctx *SkillContext) *SkillResult {
+			damagePerTarget := 18 + int(float64(ctx.MagicMasteryLvl)*1.8) + (ctx.Character.Level / 3) + int(float64(ctx.DerivedStats.EffectiveINT)*0.5)
+			if damagePerTarget < 1 {
+				damagePerTarget = 1
+			}
+			targetIDs := make([]string, 0, 4)
+			totalDamage := 0
+			for _, monster := range ctx.Monsters {
+				if monster.Health <= 0 || len(targetIDs) >= 4 {
+					continue
+				}
+				monster.Health -= damagePerTarget
+				targetIDs = append(targetIDs, monster.ID)
+				totalDamage += damagePerTarget
+			}
+			if len(targetIDs) == 0 {
+				return nil
+			}
+			return &SkillResult{
+				DamageDealt:  totalDamage,
+				TargetIDs:    targetIDs,
+				MasteryTries: map[string]int{"magic": 2},
+				VisualKey:    "arcane_nova",
+				LogMessage:   fmt.Sprintf(" [MAGIA: Nova Arcana] Custo: 24 Mana | %d de dano em %d alvo(s)!", totalDamage, len(targetIDs)),
+			}
+		},
+	})
+
+	// 8. DIVINE HEAL (Cura Divina) — Magia Sagrada de Suporte com Gatilho Inteligente (Cooldown: 7 ticks / 5.25s)
 	RegisterSkill(SkillDefinition{
 		Key:               "divine_heal",
 		Name:              "Cura Divina",

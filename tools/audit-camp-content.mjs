@@ -55,7 +55,7 @@ for (const match of buildingSource.matchAll(/Key:\s*"([^"]+)",\s*Quantity:/gm)) 
 // 4. Validar Renderizadores Visuais no Frontend
 const rendererDir = path.join(root, 'frontend/src/game/camp/renderers');
 const rendererFiles = fs.readdirSync(rendererDir);
-const expectedRenderers = ['CampfireRenderer.ts', 'ArcaneSpringRenderer.ts', 'HutRenderer.ts', 'WarehouseRenderer.ts', 'WorkbenchRenderer.ts'];
+const expectedRenderers = ['CampfireRenderer.ts', 'ArcaneSpringRenderer.ts', 'HutRenderer.ts', 'WarehouseRenderer.ts', 'WorkbenchRenderer.ts', 'KitchenRenderer.ts'];
 
 for (const expected of expectedRenderers) {
   if (!rendererFiles.includes(expected)) {
@@ -72,12 +72,32 @@ for (const slot of requiredSlots) {
   }
 }
 
+
+// 6. Garantir que frontend e backend concordem com o terreno V3.
+const backendLayoutSource = read('backend/pkg/game/camp_layout.go');
+const frontendWidth = Number(layoutSource.match(/CAMP_GRID_WIDTH\s*=\s*(\d+)/)?.[1] || 0);
+const frontendHeight = Number(layoutSource.match(/CAMP_GRID_HEIGHT\s*=\s*(\d+)/)?.[1] || 0);
+const backendWidth = Number(backendLayoutSource.match(/CampGridWidth\s*=\s*(\d+)/)?.[1] || 0);
+const backendHeight = Number(backendLayoutSource.match(/CampGridHeight\s*=\s*(\d+)/)?.[1] || 0);
+const backendLayoutVersion = Number(backendLayoutSource.match(/CampLayoutVersion\s*=\s*(\d+)/)?.[1] || 0);
+if (frontendWidth !== backendWidth || frontendHeight !== backendHeight) {
+  errors.push(`Grid divergente entre frontend (${frontendWidth}x${frontendHeight}) e backend (${backendWidth}x${backendHeight})`);
+}
+if (frontendWidth !== 24 || frontendHeight !== 18) {
+  errors.push(`Layout V3 deveria usar 24x18 tiles; encontrado ${frontendWidth}x${frontendHeight}`);
+}
+if (backendLayoutVersion !== 3) {
+  errors.push(`CampLayoutVersion deveria ser 3; encontrado ${backendLayoutVersion}`);
+}
+
 const summary = {
   registeredResources: resourceKeys.size,
   monsterProfiles: profileKeys.size,
   campBuildings: buildingKeys.size,
   renderedBuildings: rendererFiles.length,
   layoutSlots: requiredSlots.length,
+  isometricGrid: `${frontendWidth}x${frontendHeight}`,
+  layoutVersion: backendLayoutVersion,
   errors: errors.length,
 };
 

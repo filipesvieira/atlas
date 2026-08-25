@@ -12,7 +12,7 @@ type BuildingBlueprintProgress struct {
 	DiscoveredAt     time.Time `json:"discovered_at"`
 }
 
-// BuildingSlot representa uma construção alocada em um slot fixo do acampamento.
+// BuildingSlot representa uma instância persistente de construção. SlotKey é mantido como ID legado; TileX/TileY governam o layout V2 livre.
 type BuildingSlot struct {
 	SlotKey            string     `json:"slot_key"`
 	BuildingKey        string     `json:"building_key"`
@@ -20,6 +20,10 @@ type BuildingSlot struct {
 	UpgradeTargetLevel int        `json:"upgrade_target_level,omitempty"`
 	UpgradeStartedAt   *time.Time `json:"upgrade_started_at,omitempty"`
 	UpgradeEndsAt      *time.Time `json:"upgrade_ends_at,omitempty"`
+	TileX              int        `json:"tile_x"`
+	TileY              int        `json:"tile_y"`
+	Rotation           int        `json:"rotation"`
+	Discovered         bool       `json:"-"`
 	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
@@ -62,11 +66,14 @@ type BuildingLevelDefinition struct {
 
 // BuildingDefinition define os metadados de um tipo de construção.
 type BuildingDefinition struct {
-	Key         string                    `json:"key"`
-	Name        string                    `json:"name"`
-	Icon        string                    `json:"icon"`
-	Description string                    `json:"description"`
-	SlotType    string                    `json:"slot_type"`
-	MaxLevel    int                       `json:"max_level"`
-	Levels      []BuildingLevelDefinition `json:"levels"`
+	Key         string `json:"key"`
+	Name        string `json:"name"`
+	Icon        string `json:"icon"`
+	Description string `json:"description"`
+	// SlotType é mantido no catálogo para compatibilidade com clientes antigos.
+	// No layout V2 a posição física vem de BuildingSlot.TileX/TileY.
+	SlotType        string                    `json:"slot_type"`
+	DefaultUnlocked bool                      `json:"default_unlocked"`
+	MaxLevel        int                       `json:"max_level"`
+	Levels          []BuildingLevelDefinition `json:"levels"`
 }
