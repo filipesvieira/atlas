@@ -63,8 +63,8 @@ export function AuthScreen({ onSuccess }: AuthScreenProps) {
           <div className="w-14 h-14 rounded-lg pixel-slot flex items-center justify-center font-pixel-heading text-amber-400 text-3xl shadow-lg mb-4 border-amber-500">
             A
           </div>
-          <h1 className="font-pixel-heading text-xl text-amber-400">PROJECT ATLAS</h1>
-          <p className="font-pixel-body text-xs text-slate-400 mt-1.5">Standalone IDLE MMORPG Assíncrono</p>
+          <h1 className="font-pixel-heading text-xl text-amber-400">REINO DO AVESSO</h1>
+          <p className="font-pixel-body text-xs text-slate-400 mt-1.5">MMORPG Pixel de Sobrevivência</p>
         </div>
 
         {/* Tab Selector */}
@@ -103,7 +103,7 @@ export function AuthScreen({ onSuccess }: AuthScreenProps) {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="aventureiro@projectatlas.com"
+              placeholder="aventureiro@reinoavesso.com"
               className="w-full bg-slate-950 border-2 border-slate-800 rounded px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-400 transition-colors"
             />
           </div>

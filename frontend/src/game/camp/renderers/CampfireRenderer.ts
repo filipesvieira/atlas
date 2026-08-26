@@ -1,30 +1,40 @@
 import { BuildingRenderContext } from '../types';
 import { drawIsoBox, drawIsoFootprint, drawIsoShadow } from './IsoBuildingPrimitives';
+import { CAMP_VISUAL_PALETTE, drawCampEmbers, drawPixelSmoke } from '../CampVisualStyle';
 
 function drawCampfireFlame(ctx: CanvasRenderingContext2D, time: number, height: number, radius: number) {
-  const shift = Math.sin(time / 80) * 2;
+  const flicker = Math.round(Math.sin(time / 80) * 2 + Math.sin(time / 47) * 1.2);
   const glow = ctx.createRadialGradient(0, -height * 0.42, 3, 0, -height * 0.42, radius);
-  glow.addColorStop(0, 'rgba(249, 115, 22, 0.58)');
+  glow.addColorStop(0, `rgba(249, 115, 22, ${0.48 + Math.sin(time / 95) * 0.12})`);
   glow.addColorStop(1, 'rgba(249, 115, 22, 0)');
   ctx.fillStyle = glow;
   ctx.beginPath();
   ctx.arc(0, -height * 0.42, radius, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = '#ea580c';
-  ctx.beginPath();
-  ctx.moveTo(-radius * 0.34, -4);
-  ctx.lineTo(shift, -height);
-  ctx.lineTo(radius * 0.34, -4);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#fbbf24';
-  ctx.beginPath();
-  ctx.moveTo(-radius * 0.2, -4);
-  ctx.lineTo(shift * 0.5, -height * 0.72);
-  ctx.lineTo(radius * 0.2, -4);
-  ctx.closePath();
-  ctx.fill();
+  // Chama em degraus, e não em triângulos vetoriais. A mesma peça atende
+  // fogueiras de acampamento e de expedição sem perder a leitura pixel art.
+  const unit = Math.max(2, Math.round(height / 15));
+  const baseY = -4;
+  ctx.fillStyle = CAMP_VISUAL_PALETTE.ember;
+  ctx.fillRect(-4 * unit, baseY - 3 * unit, 8 * unit, 3 * unit);
+  ctx.fillRect(-3 * unit, baseY - 6 * unit, 6 * unit, 3 * unit);
+  ctx.fillRect(-2 * unit + flicker, baseY - 9 * unit, 4 * unit, 3 * unit);
+  ctx.fillRect(-unit + flicker, baseY - 12 * unit, 2 * unit, 3 * unit);
+
+  ctx.fillStyle = CAMP_VISUAL_PALETTE.flame;
+  ctx.fillRect(-2 * unit, baseY - 3 * unit, 4 * unit, 3 * unit);
+  ctx.fillRect(-unit, baseY - 6 * unit, 3 * unit, 3 * unit);
+  ctx.fillRect(-unit + flicker, baseY - 9 * unit, 2 * unit, 3 * unit);
+
+  ctx.fillStyle = '#fff7ed';
+  ctx.fillRect(-unit, baseY - 3 * unit, 2 * unit, 3 * unit);
+  ctx.fillRect(-unit + flicker, baseY - 6 * unit, unit, 3 * unit);
+
+  // Um lóbulo lateral muda a silhueta a cada frame, visível mesmo no zoom
+  // padrão da expedição.
+  ctx.fillStyle = '#fb923c';
+  ctx.fillRect(-4 * unit - flicker, baseY - 4 * unit, 2 * unit, 2 * unit);
 }
 
 /** Fogueira do Acampamento — níveis 0 a 3 alinhados ao terreno isométrico. */
@@ -51,6 +61,8 @@ export function renderCampfire(ctx: CanvasRenderingContext2D, renderCtx: Buildin
     stones.forEach(([stoneX, stoneY]) => drawIsoBox(ctx, { x: stoneX, y: stoneY, width: 7, depth: 5, height: 4, top: '#64748b', left: '#475569', right: '#334155' }));
     drawIsoBox(ctx, { width: 23, depth: 8, height: 4, top: '#78350f', left: '#451a03', right: '#5c2d11' });
     drawCampfireFlame(ctx, time, 22 + Math.sin(time / 100) * 4, 42);
+    drawCampEmbers(ctx, time, 0, -6, 4, 8);
+    drawPixelSmoke(ctx, time, 0, -21, 5, 28, 0.54);
     ctx.restore();
     return;
   }
@@ -71,6 +83,7 @@ export function renderCampfire(ctx: CanvasRenderingContext2D, renderCtx: Buildin
     ctx.lineTo(0, -34);
     ctx.lineTo(17, 0);
     ctx.stroke();
+    drawCampEmbers(ctx, time, 0, -10, 6, 13);
     ctx.restore();
     return;
   }
@@ -80,13 +93,6 @@ export function renderCampfire(ctx: CanvasRenderingContext2D, renderCtx: Buildin
   drawIsoBox(ctx, { width: 54, depth: 30, height: 8, top: '#475569', left: '#334155', right: '#1e293b' });
   drawIsoBox(ctx, { width: 34, depth: 16, height: 6, top: '#7c2d12', left: '#451a03', right: '#5c2d11' });
   drawCampfireFlame(ctx, time, 46 + Math.sin(time / 80) * 7, 92);
-  ctx.fillStyle = '#fffbeb';
-  ctx.beginPath();
-  ctx.moveTo(-5, -12);
-  ctx.lineTo(0, -20);
-  ctx.lineTo(5, -12);
-  ctx.closePath();
-  ctx.fill();
   ctx.fillStyle = '#fde047';
   for (let i = 0; i < 5; i++) {
     const sparkProgress = (time * 0.002 + i * 0.22) % 1;
@@ -95,5 +101,6 @@ export function renderCampfire(ctx: CanvasRenderingContext2D, renderCtx: Buildin
     ctx.fillStyle = `rgba(253, 224, 71, ${Math.sin(sparkProgress * Math.PI)})`;
     ctx.fillRect(sparkX, sparkY, 2, 2);
   }
+  drawPixelSmoke(ctx, time, 0, -48, 5, 34);
   ctx.restore();
 }

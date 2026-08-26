@@ -431,6 +431,16 @@ func GetMasteryLevel(tries int) int {
 	return 10 + int(math.Floor(math.Pow(float64(tries)/10.0, 0.45)))
 }
 
+// shieldMasteryTriesForDamage awards at most one shield mastery try per combat
+// tick. Blocking damage is the shield's training event; attacking while merely
+// carrying an off-hand item is not.
+func shieldMasteryTriesForDamage(inventory *InventoryData, damageTaken int) int {
+	if damageTaken <= 0 || inventory == nil || GetItemWeaponType(inventory.Equipment.OffHand) != WeaponTypeShield {
+		return 0
+	}
+	return 1
+}
+
 func (s *GameSession) CalculateDerivedStats() DerivedStats {
 	stats := CalculateDerivedStats(s.Character, s.Inventory, s.ActiveStance)
 	return ApplyActiveBuffsToDerivedStats(stats, s.ActiveBuffs, time.Now().UTC())
@@ -1020,9 +1030,6 @@ func (s *GameSession) processTick() {
 			s.Character.Masteries.SwordMastery += 1
 		}
 
-		if s.Inventory.Equipment.OffHand != nil {
-			s.Character.Masteries.ShieldMastery += 1
-		}
 	} else if skillCastLog != "" {
 		logMsg = skillCastLog
 	} else {
@@ -1068,6 +1075,7 @@ func (s *GameSession) processTick() {
 		}
 	}
 	s.Character.Health -= totalDamageTaken
+	s.Character.Masteries.ShieldMastery += shieldMasteryTriesForDamage(s.Inventory, totalDamageTaken)
 	if totalDamageTaken > 0 {
 		logMsg += fmt.Sprintf(" Horda inimiga contra-atacou causando %d de dano total!", totalDamageTaken)
 	} else {

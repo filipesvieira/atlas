@@ -10,6 +10,7 @@ import {
   getRogartesBackground,
   getSherequeBackground,
   renderForestArenaDynamic,
+  renderCampDynamic,
 } from '../renderers/biomes/BiomeRenderers';
 import { Registry } from './Registry';
 
@@ -31,7 +32,11 @@ class GameBiomeRegistry extends Registry<BiomeDefinition> {
   }
 
   public renderDynamic(biomeKey: string, ctx: CanvasRenderingContext2D, width: number, height: number, time: number): void {
-    this.get(biomeKey)?.renderDynamic?.(ctx, width, height, time);
+    // O renderer estático usa floresta como fallback. A camada dinâmica precisa
+    // seguir a mesma regra, senão uma região com alias desconhecido mostra o
+    // mapa, mas perde água, fogueira e demais animações do bioma.
+    const definition = this.get(biomeKey) ?? this.get('forest');
+    definition?.renderDynamic?.(ctx, width, height, time);
   }
 }
 
@@ -40,7 +45,7 @@ class GameBiomeRegistry extends Registry<BiomeDefinition> {
  * regiões concretas; novos biomas são conectados apenas neste registry.
  */
 export const biomeRegistry = new GameBiomeRegistry().registerAll([
-  { key: 'camp', aliases: ['campamento', 'acampamento'], render: getCampBackground },
+  { key: 'camp', aliases: ['campamento', 'acampamento'], render: getCampBackground, renderDynamic: renderCampDynamic },
   { key: 'forest', render: getForestArenaBackground, renderDynamic: renderForestArenaDynamic },
   { key: 'shereque', render: getSherequeBackground },
   { key: 'chapolin', render: getChapolinBackground },

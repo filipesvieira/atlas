@@ -1,4 +1,5 @@
 import { biomeRegistry } from '../../game/registries/BiomeRegistry';
+import { renderForestArenaDynamic } from '../../game/renderers/biomes/BiomeRenderers';
 import { heroRegistry } from '../../game/registries/HeroRegistry';
 import { SkinRegistryService } from '../../game/registries/SkinRegistry';
 import { monsterRegistry } from '../../game/registries/MonsterRegistry';
@@ -956,8 +957,14 @@ export class GameViewport {
       this.heroBaseY = BATTLE_GROUND_Y;
     }
     ctx.drawImage(bgBuffer, 0, 0, this.width, this.height);
-    if (this.isActive) {
-      biomeRegistry.renderDynamic(biomeKey, ctx, this.width, this.height, performance.now());
+    // A primeira arena isométrica possui objetos que obrigatoriamente precisam
+    // redesenhar a cada frame (rio e fogueira). A chamada direta evita que uma
+    // mudança transitória de `regionId` causada por snapshots de combate
+    // silencie a camada dinâmica enquanto a arena forest continua visível.
+    if (this.isActive && this.isIsoArena) {
+      renderForestArenaDynamic(ctx, frameTime);
+    } else {
+      biomeRegistry.renderDynamic(biomeKey, ctx, this.width, this.height, frameTime);
     }
 
     // 1.1 Desenhar Construções Dinâmicas do Acampamento

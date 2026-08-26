@@ -111,7 +111,27 @@ export function drawIsoWalls(
   top = '#713f12',
   edge = '#1c1917'
 ) {
+  const corners = getCorners(width, depth, height);
   drawIsoBox(ctx, { width, depth, height, left, right, top, edge });
+
+  // Faixas discretas de tábuas dão materialidade às paredes sem depender de
+  // sprites rasterizados diferentes para cada construção.
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 224, 178, 0.12)';
+  ctx.lineWidth = 1;
+  for (const amount of [0.24, 0.48, 0.72]) {
+    const leftA = lerp(corners.topWest, corners.west, amount);
+    const leftB = lerp(corners.topSouth, corners.south, amount);
+    const rightA = lerp(corners.topSouth, corners.south, amount);
+    const rightB = lerp(corners.topEast, corners.east, amount);
+    ctx.beginPath();
+    ctx.moveTo(leftA.x, leftA.y);
+    ctx.lineTo(leftB.x, leftB.y);
+    ctx.moveTo(rightA.x, rightA.y);
+    ctx.lineTo(rightB.x, rightB.y);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 export function drawIsoRoof(
@@ -141,6 +161,23 @@ export function drawIsoRoof(
   ctx.moveTo(ridge.x, ridge.y);
   ctx.lineTo(corners.topSouth.x, corners.topSouth.y);
   ctx.stroke();
+
+  // Sulcos de telha seguem as quatro águas e mantêm o volume legível nos
+  // níveis 1–3, inclusive quando a câmera aproxima.
+  ctx.strokeStyle = 'rgba(20, 10, 16, 0.34)';
+  ctx.lineWidth = 1;
+  for (const amount of [0.25, 0.5, 0.75]) {
+    const leftStart = lerp(corners.topWest, ridge, amount);
+    const leftEnd = lerp(corners.topNorth, ridge, amount);
+    const rightStart = lerp(corners.topEast, ridge, amount);
+    const rightEnd = lerp(corners.topNorth, ridge, amount);
+    ctx.beginPath();
+    ctx.moveTo(leftStart.x, leftStart.y);
+    ctx.lineTo(leftEnd.x, leftEnd.y);
+    ctx.moveTo(rightStart.x, rightStart.y);
+    ctx.lineTo(rightEnd.x, rightEnd.y);
+    ctx.stroke();
+  }
 }
 
 export function drawIsoPanel(ctx: CanvasRenderingContext2D, options: IsoPanelOptions): IsoPoint[] {

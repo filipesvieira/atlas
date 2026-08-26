@@ -1,11 +1,20 @@
 import { BuildingRenderContext } from '../types';
 import { drawIsoBox, drawIsoFootprint, drawIsoShadow } from './IsoBuildingPrimitives';
+import { CAMP_VISUAL_PALETTE, drawMagicRipple } from '../CampVisualStyle';
 
 function drawWaterSurface(ctx: CanvasRenderingContext2D, width: number, depth: number, y: number, color: string) {
   ctx.save();
   ctx.translate(0, y);
   drawIsoFootprint(ctx, width, depth, color, '#0c4a6e');
   ctx.restore();
+}
+
+function drawSpringRipples(ctx: CanvasRenderingContext2D, time: number, width: number, y: number) {
+  drawMagicRipple(ctx, time, -width * 0.18, y + 1, width);
+  drawMagicRipple(ctx, time + 460, width * 0.12, y + 3, width * 0.78);
+  ctx.fillStyle = CAMP_VISUAL_PALETTE.magicLight;
+  const glint = Math.floor((time / 160) % 3);
+  ctx.fillRect(-width * 0.08 + glint, y - 3, 3, 2);
 }
 
 function drawManaParticles(ctx: CanvasRenderingContext2D, time: number, count: number, spread: number, rise: number) {
@@ -39,6 +48,7 @@ export function renderArcaneSpring(ctx: CanvasRenderingContext2D, renderCtx: Bui
     drawIsoShadow(ctx, 44, 32);
     drawIsoFootprint(ctx, 40, 28, '#1e293b', '#0c4a6e');
     drawWaterSurface(ctx, 32, 21, -4, '#0284c7');
+    drawSpringRipples(ctx, time, 30, -7);
     const stones = [[-16, 1], [-9, -5], [0, -7], [9, -5], [16, 1]];
     stones.forEach(([stoneX, stoneY]) => drawIsoBox(ctx, { x: stoneX, y: stoneY, width: 7, depth: 5, height: 4, top: '#64748b', left: '#475569', right: '#334155' }));
     const glow = ctx.createRadialGradient(0, -7, 2, 0, -7, 28);
@@ -58,6 +68,7 @@ export function renderArcaneSpring(ctx: CanvasRenderingContext2D, renderCtx: Bui
     drawIsoFootprint(ctx, 54, 36, '#334155', '#1e293b');
     drawIsoBox(ctx, { width: 48, depth: 30, height: 9, top: '#475569', left: '#334155', right: '#1e293b' });
     drawWaterSurface(ctx, 38, 23, -10, '#0284c7');
+    drawSpringRipples(ctx, time, 38, -13);
     drawIsoBox(ctx, { x: -24, y: -4, width: 8, depth: 8, height: 26, top: '#475569', left: '#334155', right: '#1e293b' });
     drawIsoBox(ctx, { x: 24, y: -4, width: 8, depth: 8, height: 26, top: '#475569', left: '#334155', right: '#1e293b' });
     ctx.fillStyle = '#38bdf8';
@@ -74,6 +85,7 @@ export function renderArcaneSpring(ctx: CanvasRenderingContext2D, renderCtx: Bui
   drawIsoFootprint(ctx, 68, 42, '#1e1b4b', '#312e81');
   drawIsoBox(ctx, { width: 62, depth: 36, height: 10, top: '#312e81', left: '#1e1b4b', right: '#172554' });
   drawWaterSurface(ctx, 44, 25, -11, '#0284c7');
+  drawSpringRipples(ctx, time, 44, -14);
 
   // Obeliscos e feixe continuam animados, mas agora partem de uma base em
   // losango e ocupam as laterais do santuário, em vez de uma faixa frontal.

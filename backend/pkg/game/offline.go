@@ -59,6 +59,7 @@ type OfflineResult struct {
 	GoldGained           int64            `json:"gold_gained"`
 	AutoPotionGoldSpent  int64            `json:"auto_potion_gold_spent,omitempty"`
 	AutoPotionState      AutoPotionState  `json:"auto_potion_state"`
+	ShieldMasteryTries   int              `json:"shield_mastery_tries,omitempty"`
 	ItemsFound           []Item           `json:"items_found"`
 	ItemsPending         []Item           `json:"items_pending,omitempty"`
 	ItemsConverted       []Item           `json:"items_converted,omitempty"`
@@ -170,12 +171,13 @@ func offlineBossRewardBudget(minutes int) int {
 }
 
 type offlineWaveSimulation struct {
-	completed      bool
-	defeated       bool
-	elapsedSeconds float64
-	healthAfter    float64
-	damageTaken    int
-	killTimes      []float64
+	completed          bool
+	defeated           bool
+	elapsedSeconds     float64
+	healthAfter        float64
+	damageTaken        int
+	shieldMasteryTries int
+	killTimes          []float64
 }
 
 // offlineAutoPotionRuntime mantém a mesma carteira e o mesmo orçamento da
@@ -318,6 +320,7 @@ func simulateOfflineWave(input OfflineSimulationInput, playerLevel int, wave []M
 				taken += int(math.Max(1, math.Round(rawAttack*(1.0-mitigation))))
 			}
 		}
+		result.shieldMasteryTries += shieldMasteryTriesForDamage(input.Inventory, taken)
 		result.damageTaken += taken
 		result.healthAfter -= float64(taken)
 		if lifesteal > 0 && dealt > 0 {
@@ -513,6 +516,7 @@ func CalculateOfflineProgress(input OfflineSimulationInput) OfflineResult {
 		}
 
 		waveResult := simulateOfflineWave(input, simulatedLevel, wave, currentHealth, remainingSeconds, waveStartedAt, rng, autoPotions)
+		result.ShieldMasteryTries += waveResult.shieldMasteryTries
 		if !waveResult.completed {
 			currentHealth = waveResult.healthAfter
 			for _, efficiency := range waveEfficiencies {

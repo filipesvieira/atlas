@@ -21,7 +21,7 @@ export const AVAILABLE_SKINS: HeroSkin[] = [
     id: 'peasant',
     name: 'Camponês Aventureiro',
     subtitle: 'Traje Clássico de Aprendiz',
-    description: 'Camisa rústica de linho marfim com colete escuro bordado a carmim, culote ocre e botas altas de couro. O traje tradicional de todo jovem herói em Atlas.',
+    description: 'Camisa rústica de linho marfim com colete escuro bordado a carmim, culote ocre e botas altas de couro. O traje tradicional de todo jovem herói de Valdória.',
     rarity: 'Comum',
     icon: '🌾',
     attackStyle: 'melee',

@@ -9,6 +9,7 @@ import {
   tileToScreen,
 } from '../../camp/CampLayoutRegistry';
 import { renderCampfire } from '../../camp/renderers/CampfireRenderer';
+import { FOREST_NIGHT_PALETTE, stableVisualVariant, WORLD_VISUAL_CONTRACT } from '../../WorldVisualStyle';
 
 export function drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
   ctx.fillStyle = '#451a03';
@@ -91,14 +92,14 @@ export function getForestBackground(w = 500, h = 260): HTMLCanvasElement {
 
 /** Cenário: Acampamento / Safezone em perspectiva isométrica. */
 export function getCampBackground(w = 960, h = 420): HTMLCanvasElement {
-  return getOffscreenCanvas('bg_camp_iso_v3', w, h, (ctx) => {
-    ctx.fillStyle = '#07111f';
+  return getOffscreenCanvas('bg_camp_iso_v4', w, h, (ctx) => {
+    ctx.fillStyle = FOREST_NIGHT_PALETTE.void;
     ctx.fillRect(0, 0, w, h);
 
     const horizon = Math.max(92, Math.round(h * 0.25));
     const sky = ctx.createLinearGradient(0, 0, 0, horizon);
-    sky.addColorStop(0, '#020617');
-    sky.addColorStop(1, '#172554');
+    sky.addColorStop(0, FOREST_NIGHT_PALETTE.horizonTop);
+    sky.addColorStop(1, FOREST_NIGHT_PALETTE.horizonBottom);
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, horizon + 10);
 
@@ -116,18 +117,15 @@ export function getCampBackground(w = 960, h = 420): HTMLCanvasElement {
     for (let tx = 0; tx < CAMP_GRID_WIDTH; tx++) {
       for (let ty = 0; ty < CAMP_GRID_HEIGHT; ty++) {
         const c = tileToScreen(tx, ty);
-        ctx.beginPath();
-        ctx.moveTo(c.x, c.y - ISO_TILE_HEIGHT / 2);
-        ctx.lineTo(c.x + ISO_TILE_WIDTH / 2, c.y);
-        ctx.lineTo(c.x, c.y + ISO_TILE_HEIGHT / 2);
-        ctx.lineTo(c.x - ISO_TILE_WIDTH / 2, c.y);
-        ctx.closePath();
         const edge = tx === 0 || ty === 0 || tx === CAMP_GRID_WIDTH - 1 || ty === CAMP_GRID_HEIGHT - 1;
-        ctx.fillStyle = edge ? '#20382d' : ((tx + ty) % 2 === 0 ? '#284b38' : '#2d553e');
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(148,163,184,0.055)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        const grassVariant = stableVisualVariant(tx, ty, FOREST_NIGHT_PALETTE.grass.length);
+        const fill = edge
+          ? FOREST_NIGHT_PALETTE.grassEdge
+          : FOREST_NIGHT_PALETTE.grass[grassVariant];
+        drawIsoTile(ctx, tx, ty, fill, undefined, edge ? WORLD_VISUAL_CONTRACT.isoTile.edgeDepth : 0);
+        if (!edge && stableVisualVariant(tx, ty, 15) === 0) {
+          drawForestTuft(ctx, c.x + 4, c.y + 1, grassVariant);
+        }
       }
     }
 
@@ -146,17 +144,7 @@ export function getCampBackground(w = 960, h = 420): HTMLCanvasElement {
 
     pathTiles.forEach((entry) => {
       const [tx, ty] = entry.split(',').map(Number);
-      const c = tileToScreen(tx, ty);
-      ctx.beginPath();
-      ctx.moveTo(c.x, c.y - ISO_TILE_HEIGHT / 2);
-      ctx.lineTo(c.x + ISO_TILE_WIDTH / 2, c.y);
-      ctx.lineTo(c.x, c.y + ISO_TILE_HEIGHT / 2);
-      ctx.lineTo(c.x - ISO_TILE_WIDTH / 2, c.y);
-      ctx.closePath();
-      ctx.fillStyle = '#6b4f32';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(120,83,45,0.52)';
-      ctx.stroke();
+      drawIsoTile(ctx, tx, ty, stableVisualVariant(tx, ty, 2) === 0 ? FOREST_NIGHT_PALETTE.path : FOREST_NIGHT_PALETTE.pathLight, 'rgba(120,83,45,0.52)');
     });
 
     // Vegetação fica nas bordas externas e acompanha o próprio grid, evitando
@@ -167,29 +155,42 @@ export function getCampBackground(w = 960, h = 420): HTMLCanvasElement {
     ];
     treeTiles.forEach(([tx, ty, variant]) => {
       const p = tileToScreen(tx, ty);
-      const trunkH = 13 + variant * 2;
-      ctx.fillStyle = '#4a2c16';
-      ctx.fillRect(p.x - 3, p.y - trunkH, 6, trunkH + 3);
-      ctx.fillStyle = variant % 2 === 0 ? '#14532d' : '#166534';
-      ctx.fillRect(p.x - 11, p.y - trunkH - 14, 22, 10);
-      ctx.fillStyle = '#0f3f2b';
-      ctx.fillRect(p.x - 8, p.y - trunkH - 22, 16, 10);
+      drawForestTree(ctx, p.x, p.y, variant);
     });
 
     const stoneTiles: Array<[number, number]> = [[3, 11], [6, 2], [18, 3], [21, 13], [12, 16], [2, 6]];
-    ctx.fillStyle = '#64748b';
     stoneTiles.forEach(([tx, ty]) => {
       const p = tileToScreen(tx, ty);
-      ctx.fillRect(p.x - 3, p.y - 2, 6, 3);
-      ctx.fillRect(p.x - 1, p.y - 4, 5, 3);
+      drawForestRock(ctx, p.x, p.y, stableVisualVariant(tx, ty, 3));
     });
+    const log = tileToScreen(4, 12);
+    drawFallenLog(ctx, log.x, log.y - 2);
+    const sign = tileToScreen(18, 5);
+    drawForestSign(ctx, sign.x, sign.y - 1);
   });
 }
 
+/** Partículas ambientais do acampamento, desenhadas antes dos atores/prédios. */
+export function renderCampDynamic(ctx: CanvasRenderingContext2D, _width: number, _height: number, time: number) {
+  const fireflies: Array<[number, number, number]> = [
+    [8, 5, 0], [16, 6, 1], [5, 12, 2], [18, 12, 3], [11, 3, 4],
+  ];
+  ctx.save();
+  fireflies.forEach(([tx, ty, phase]) => {
+    const point = tileToScreen(tx, ty);
+    const pulse = 0.25 + (Math.sin(time * 0.003 + phase) + 1) * 0.22;
+    ctx.fillStyle = `rgba(253, 224, 71, ${pulse})`;
+    ctx.fillRect(Math.round(point.x + Math.sin(time * 0.0015 + phase) * 5), Math.round(point.y - 14 + Math.cos(time * 0.0018 + phase) * 4), 2, 2);
+  });
+  ctx.restore();
+}
+
 const forestRiverTiles: Array<[number, number]> = [
-  [2, 7], [3, 7], [4, 8], [5, 8], [6, 9], [7, 9], [8, 10], [9, 10],
+  // O curso d'água entra pela borda noroeste e sai pela borda sudeste; não é
+  // mais uma decoração que começa e termina dentro da própria arena.
+  [0, 5], [1, 6], [2, 7], [3, 7], [4, 8], [5, 8], [6, 9], [7, 9], [8, 10], [9, 10],
   [10, 11], [11, 11], [12, 12], [13, 12], [14, 13], [15, 13], [16, 14],
-  [17, 14], [18, 15], [19, 15],
+  [17, 14], [18, 15], [19, 15], [20, 16], [21, 16], [22, 17],
 ];
 
 const forestPathTiles = new Set<string>([
@@ -198,8 +199,27 @@ const forestPathTiles = new Set<string>([
   '10,9', '11,9', '12,9', '13,9',
 ]);
 
-function drawIsoTile(ctx: CanvasRenderingContext2D, tx: number, ty: number, fill: string, stroke = 'rgba(148,163,184,0.055)') {
+function drawIsoTile(
+  ctx: CanvasRenderingContext2D,
+  tx: number,
+  ty: number,
+  fill: string,
+  stroke = 'rgba(148,163,184,0.055)',
+  edgeDepth = 0,
+) {
   const c = tileToScreen(tx, ty);
+  if (edgeDepth > 0) {
+    ctx.fillStyle = FOREST_NIGHT_PALETTE.grassSide;
+    ctx.beginPath();
+    ctx.moveTo(c.x - ISO_TILE_WIDTH / 2, c.y);
+    ctx.lineTo(c.x, c.y + ISO_TILE_HEIGHT / 2);
+    ctx.lineTo(c.x + ISO_TILE_WIDTH / 2, c.y);
+    ctx.lineTo(c.x + ISO_TILE_WIDTH / 2, c.y + edgeDepth);
+    ctx.lineTo(c.x, c.y + ISO_TILE_HEIGHT / 2 + edgeDepth);
+    ctx.lineTo(c.x - ISO_TILE_WIDTH / 2, c.y + edgeDepth);
+    ctx.closePath();
+    ctx.fill();
+  }
   ctx.beginPath();
   ctx.moveTo(c.x, c.y - ISO_TILE_HEIGHT / 2);
   ctx.lineTo(c.x + ISO_TILE_WIDTH / 2, c.y);
@@ -213,16 +233,94 @@ function drawIsoTile(ctx: CanvasRenderingContext2D, tx: number, ty: number, fill
   ctx.stroke();
 }
 
+function drawForestTuft(ctx: CanvasRenderingContext2D, x: number, y: number, variant: number) {
+  const colors = ['#2d6d47', '#245e3f', '#367c4d'];
+  ctx.fillStyle = colors[variant % colors.length];
+  ctx.fillRect(x - 4, y - 2, 2, 4);
+  ctx.fillRect(x - 1, y - 4, 2, 6);
+  ctx.fillRect(x + 2, y - 3, 2, 5);
+}
+
+function drawForestRock(ctx: CanvasRenderingContext2D, x: number, y: number, variant: number) {
+  const width = variant % 2 === 0 ? 7 : 9;
+  ctx.fillStyle = WORLD_VISUAL_CONTRACT.outline;
+  ctx.fillRect(x - Math.floor(width / 2) - 1, y - 4, width + 2, 6);
+  ctx.fillStyle = FOREST_NIGHT_PALETTE.rockDark;
+  ctx.fillRect(x - Math.floor(width / 2), y - 4, width, 5);
+  ctx.fillStyle = FOREST_NIGHT_PALETTE.rockMid;
+  ctx.fillRect(x - Math.floor(width / 2) + 1, y - 5, width - 3, 3);
+  ctx.fillStyle = FOREST_NIGHT_PALETTE.rockLight;
+  ctx.fillRect(x - Math.floor(width / 2) + 2, y - 5, 2, 1);
+}
+
+function drawForestTree(ctx: CanvasRenderingContext2D, x: number, y: number, variant: number) {
+  const scale = variant % 3 === 0 ? 1 : variant % 3 === 1 ? 0.82 : 1.18;
+  const trunkH = Math.round(18 * scale);
+  const crownW = Math.round(22 * scale);
+  const crownH = Math.round(28 * scale);
+  ctx.fillStyle = WORLD_VISUAL_CONTRACT.outline;
+  ctx.fillRect(x - 3, y - trunkH, 6, trunkH + 4);
+  ctx.fillStyle = FOREST_NIGHT_PALETTE.trunk;
+  ctx.fillRect(x - 2, y - trunkH, 4, trunkH + 2);
+  ctx.fillStyle = FOREST_NIGHT_PALETTE.trunkLight;
+  ctx.fillRect(x, y - trunkH + 3, 2, trunkH - 5);
+  ctx.fillStyle = WORLD_VISUAL_CONTRACT.outline;
+  ctx.beginPath();
+  ctx.moveTo(x, y - trunkH - crownH + 5);
+  ctx.lineTo(x - crownW / 2 - 2, y - trunkH + 3);
+  ctx.lineTo(x + crownW / 2 + 2, y - trunkH + 3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = FOREST_NIGHT_PALETTE.pineDark;
+  ctx.beginPath();
+  ctx.moveTo(x, y - trunkH - crownH + 7);
+  ctx.lineTo(x - crownW / 2, y - trunkH + 2);
+  ctx.lineTo(x + crownW / 2, y - trunkH + 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = FOREST_NIGHT_PALETTE.pineMid;
+  ctx.beginPath();
+  ctx.moveTo(x - 1, y - trunkH - crownH + 11);
+  ctx.lineTo(x - crownW / 2 + 5, y - trunkH - 1);
+  ctx.lineTo(x + 2, y - trunkH - 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = FOREST_NIGHT_PALETTE.pineLight;
+  ctx.fillRect(x - Math.round(crownW / 4), y - trunkH - Math.round(crownH / 2), Math.round(crownW / 3), 3);
+}
+
+function drawFallenLog(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.fillStyle = WORLD_VISUAL_CONTRACT.outline;
+  ctx.fillRect(x - 10, y - 5, 21, 7);
+  ctx.fillStyle = FOREST_NIGHT_PALETTE.trunk;
+  ctx.fillRect(x - 9, y - 4, 18, 5);
+  ctx.fillStyle = FOREST_NIGHT_PALETTE.trunkLight;
+  ctx.fillRect(x - 7, y - 3, 12, 2);
+  ctx.fillStyle = '#c1844c';
+  ctx.fillRect(x + 7, y - 3, 2, 3);
+}
+
+function drawForestSign(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.fillStyle = WORLD_VISUAL_CONTRACT.outline;
+  ctx.fillRect(x - 2, y - 16, 5, 18);
+  ctx.fillStyle = FOREST_NIGHT_PALETTE.trunk;
+  ctx.fillRect(x - 1, y - 15, 3, 16);
+  ctx.fillStyle = WORLD_VISUAL_CONTRACT.outline;
+  ctx.fillRect(x - 9, y - 17, 17, 7);
+  ctx.fillStyle = '#a36a36';
+  ctx.fillRect(x - 8, y - 16, 15, 5);
+}
+
 /** Floresta da primeira expedição em uma arena isométrica de 24x18 tiles. */
 export function getForestArenaBackground(w = 960, h = 420): HTMLCanvasElement {
-  return getOffscreenCanvas('bg_forest_iso_arena_v1', w, h, (ctx) => {
-    ctx.fillStyle = '#07111f';
+  return getOffscreenCanvas('bg_forest_iso_arena_v2', w, h, (ctx) => {
+    ctx.fillStyle = FOREST_NIGHT_PALETTE.void;
     ctx.fillRect(0, 0, w, h);
 
     const horizon = Math.max(92, Math.round(h * 0.25));
     const sky = ctx.createLinearGradient(0, 0, 0, horizon);
-    sky.addColorStop(0, '#05052a');
-    sky.addColorStop(1, '#172554');
+    sky.addColorStop(0, FOREST_NIGHT_PALETTE.horizonTop);
+    sky.addColorStop(1, FOREST_NIGHT_PALETTE.horizonBottom);
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, horizon + 12);
 
@@ -239,57 +337,70 @@ export function getForestArenaBackground(w = 960, h = 420): HTMLCanvasElement {
         const isRiver = forestRiverTiles.some(([riverX, riverY]) => riverX === tx && riverY === ty);
         const isPath = forestPathTiles.has(key);
         const isArenaEdge = tx === 0 || ty === 0 || tx === CAMP_GRID_WIDTH - 1 || ty === CAMP_GRID_HEIGHT - 1;
+        const grassVariant = stableVisualVariant(tx, ty, FOREST_NIGHT_PALETTE.grass.length);
         const fill = isRiver
-          ? '#075985'
+          ? (stableVisualVariant(tx, ty, 2) === 0 ? FOREST_NIGHT_PALETTE.river : FOREST_NIGHT_PALETTE.riverDeep)
           : isPath
-            ? '#76502d'
+            ? (stableVisualVariant(tx, ty, 2) === 0 ? FOREST_NIGHT_PALETTE.path : FOREST_NIGHT_PALETTE.pathLight)
             : isArenaEdge
-              ? '#20382d'
-              : ((tx + ty) % 2 === 0 ? '#215238' : '#285f40');
-        drawIsoTile(ctx, tx, ty, fill, isRiver ? 'rgba(125,211,252,0.25)' : undefined);
+              ? FOREST_NIGHT_PALETTE.grassEdge
+              : FOREST_NIGHT_PALETTE.grass[grassVariant];
+        drawIsoTile(
+          ctx,
+          tx,
+          ty,
+          fill,
+          isRiver ? 'rgba(125,211,252,0.25)' : undefined,
+          isArenaEdge ? WORLD_VISUAL_CONTRACT.isoTile.edgeDepth : 0,
+        );
+        if (!isRiver && !isPath && !isArenaEdge && stableVisualVariant(tx, ty, 13) === 0) {
+          const p = tileToScreen(tx, ty);
+          drawForestTuft(ctx, p.x + 4, p.y + 1, grassVariant);
+        }
       }
     }
 
-    // Margens, pedras e vegetação definem o clima de floresta sem bloquear os
-    // atores. A colisão autoritativa continuará sendo adicionada ao catálogo
-    // da arena quando novos obstáculos entrarem no design.
+    // Silhuetas e objetos baixos ficam atrás dos atores e não alteram colisão.
     const treeTiles: Array<[number, number, number]> = [
       [1, 3, 0], [3, 15, 1], [6, 16, 2], [17, 1, 1], [21, 4, 0], [22, 11, 2], [20, 16, 1],
+      [7, 3, 2], [18, 2, 1], [22, 8, 0], [12, 16, 2], [5, 14, 1],
     ];
     treeTiles.forEach(([tx, ty, variant]) => {
       const p = tileToScreen(tx, ty);
-      const trunkH = 13 + variant * 2;
-      ctx.fillStyle = '#4a2c16';
-      ctx.fillRect(p.x - 3, p.y - trunkH, 6, trunkH + 3);
-      ctx.fillStyle = variant % 2 === 0 ? '#14532d' : '#166534';
-      ctx.fillRect(p.x - 11, p.y - trunkH - 14, 22, 10);
-      ctx.fillStyle = '#0f3f2b';
-      ctx.fillRect(p.x - 8, p.y - trunkH - 22, 16, 10);
+      drawForestTree(ctx, p.x, p.y, variant);
     });
 
-    [[4, 5], [5, 13], [18, 4], [21, 13], [15, 3], [2, 11]].forEach(([tx, ty]) => {
+    [[4, 5], [5, 13], [18, 4], [21, 13], [15, 3], [2, 11], [11, 4], [7, 13]].forEach(([tx, ty]) => {
       const p = tileToScreen(tx, ty);
-      ctx.fillStyle = '#64748b';
-      ctx.fillRect(p.x - 3, p.y - 2, 6, 3);
-      ctx.fillRect(p.x - 1, p.y - 4, 5, 3);
+      drawForestRock(ctx, p.x, p.y, stableVisualVariant(tx, ty, 3));
     });
+    const log = tileToScreen(3, 9);
+    drawFallenLog(ctx, log.x, log.y - 2);
+    const sign = tileToScreen(19, 9);
+    drawForestSign(ctx, sign.x, sign.y - 1);
   });
 }
 
 /** Camada não cacheada da floresta: água e fogueira precisam animar a 60 FPS. */
+function drawForestRiverWave(ctx: CanvasRenderingContext2D, x: number, y: number, time: number, index: number) {
+  const phase = (time * 0.0012 + index * 0.16) % 1;
+  const travel = Math.round((phase * 2 - 1) * 10);
+  const shimmer = 0.54 + Math.sin(time * 0.003 + index) * 0.16;
+  ctx.save();
+  ctx.strokeStyle = `rgba(125, 211, 252, ${shimmer})`;
+  ctx.fillStyle = `rgba(125, 211, 252, ${shimmer})`;
+  ctx.fillRect(x - 10 + travel, y - 3, 8, 2);
+  ctx.fillRect(x - 1 + travel, y - 2, 5, 2);
+  ctx.fillStyle = `rgba(186, 230, 253, ${shimmer * 0.8})`;
+  ctx.fillRect(x - 5 - travel, y + 2, 7, 2);
+  ctx.fillRect(x + 4 - travel, y + 3, 3, 1);
+  ctx.restore();
+}
+
 export function renderForestArenaDynamic(ctx: CanvasRenderingContext2D, time: number) {
   forestRiverTiles.forEach(([tx, ty], index) => {
     const p = tileToScreen(tx, ty);
-    const flow = (time * 0.04 + index * 7) % 28;
-    ctx.save();
-    ctx.globalAlpha = 0.28 + Math.sin(time / 260 + index) * 0.08;
-    ctx.strokeStyle = '#7dd3fc';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(p.x - 8 + flow - 14, p.y - 1);
-    ctx.lineTo(p.x + flow - 14, p.y - 1);
-    ctx.stroke();
-    ctx.restore();
+    drawForestRiverWave(ctx, p.x, p.y, time, index);
   });
 
   const fire = tileToScreen(12, 9);

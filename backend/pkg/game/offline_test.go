@@ -78,6 +78,22 @@ func TestEquipmentChangesOfflineEfficiency(t *testing.T) {
 	}
 }
 
+func TestShieldMasteryRequiresDamageAndShield(t *testing.T) {
+	shield := &Item{WeaponType: WeaponTypeShield}
+	withShield := &InventoryData{Equipment: EquipmentSlots{OffHand: shield}}
+	withoutShield := &InventoryData{Equipment: EquipmentSlots{}}
+
+	if got := shieldMasteryTriesForDamage(withShield, 0); got != 0 {
+		t.Fatalf("ataque sem dano não deveria conceder maestria de escudo: %d", got)
+	}
+	if got := shieldMasteryTriesForDamage(withoutShield, 10); got != 0 {
+		t.Fatalf("dano sem escudo não deveria conceder maestria de escudo: %d", got)
+	}
+	if got := shieldMasteryTriesForDamage(withShield, 10); got != 1 {
+		t.Fatalf("dano com escudo deveria conceder exatamente uma tentativa: %d", got)
+	}
+}
+
 func TestOfflineProgressAdvancesStagesAndUnlocksBossRegion(t *testing.T) {
 	input := offlineFixture()
 	result := CalculateOfflineProgress(input)

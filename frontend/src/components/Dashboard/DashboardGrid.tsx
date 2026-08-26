@@ -26,6 +26,9 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
   const [isSkinModalOpen, setIsSkinModalOpen] = useState(false);
   const [isEconomyOpen, setIsEconomyOpen] = useState(false);
   const [showAdvancedStats, setShowAdvancedStats] = useState(false);
+  const [isWorldFocusMode, setIsWorldFocusMode] = useState(false);
+  const [backpackOpenRequest, setBackpackOpenRequest] = useState(0);
+  const [mapOpenRequest, setMapOpenRequest] = useState(0);
   const { catalog } = useGameCatalog();
 
   const {
@@ -154,6 +157,7 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
             onUnequipItem={unequipItem}
             onBulkSell={bulkSell}
             onLearnBlueprint={learnBuildingBlueprint}
+            openBackpackRequest={backpackOpenRequest}
           />
 
           {/* Card de Status & Experiência Balanceada (Abaixo de Equipamentos) */}
@@ -314,6 +318,16 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
 			onUpdateAutoPotionSettings={updateAutoPotionSettings}
             onMoveHero={moveHero}
             onMoveCampBuilding={moveCampBuilding}
+            isWorldFocusMode={isWorldFocusMode}
+            onWorldFocusModeChange={setIsWorldFocusMode}
+            onOpenBackpack={() => setBackpackOpenRequest((request) => request + 1)}
+            onOpenDepot={() => setIsDepotOpen(true)}
+            onOpenCamp={() => setIsCampModalOpen(true)}
+            onOpenSettlement={() => setIsEconomyOpen(true)}
+            onOpenWorldMap={() => setMapOpenRequest((request) => request + 1)}
+            onToggleExpedition={toggleExpedition}
+            isExpeditionActive={isExpeditionActive}
+            isConnected={connected}
           />
 
           {/* O chat técnico permanece separado da central de notificações da barra superior. */}
@@ -389,6 +403,7 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
             maxStages={maxStages}
             isBossStage={isBossStage}
             compact
+			openMapRequest={mapOpenRequest}
 			onSelectRegion={selectCombatRegionSafely}
           />
 

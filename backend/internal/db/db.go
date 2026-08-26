@@ -912,6 +912,10 @@ func claimOfflineProgressOnce(accountID, charID string, now time.Time) (*Offline
 			character.ProgressionVersion = gameChar.ProgressionVersion
 			character.UnspentPoints = gameChar.UnspentPoints
 		}
+		if result.ShieldMasteryTries > 0 {
+			gameChar.Masteries.ShieldMastery += result.ShieldMasteryTries
+			character.Masteries = gameChar.Masteries
+		}
 		result.LevelAfter = character.Level
 		game.EnsureUnlockedRegionsForLevel(gameChar)
 		character.UnlockedRegions = gameChar.UnlockedRegions

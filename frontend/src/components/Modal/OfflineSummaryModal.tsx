@@ -28,6 +28,7 @@ interface OfflineSummaryData {
   efficiency: number;
   xp_gained: number;
   gold_gained: number;
+  shield_mastery_tries?: number;
   converted_gold?: number;
   drops_auto_converted?: number;
   level_before: number;
@@ -86,6 +87,7 @@ export function OfflineSummaryModal({ data, onClose }: OfflineSummaryModalProps)
           <div className="flex justify-between border-b border-slate-800 pb-1.5"><span className="text-slate-400">Ouro total</span><span className="text-amber-300 font-bold">+{data.gold_gained}</span></div>
           {(data.converted_gold ?? 0) > 0 && <div className="flex justify-between border-b border-slate-800 pb-1.5"><span className="text-slate-400">Conversão por limite</span><span className="text-amber-200">+{data.converted_gold}</span></div>}
           <div className="flex justify-between"><span className="text-slate-400">Nível</span><span className={leveledUp ? 'text-purple-300 font-bold font-pixel-heading' : 'text-slate-300'}>{data.level_before} → {data.level_after}</span></div>
+          {(data.shield_mastery_tries ?? 0) > 0 && <div className="flex justify-between"><span className="text-slate-400">Maestria de escudo</span><span className="text-sky-300 font-bold">+{data.shield_mastery_tries} tentativas</span></div>}
         </div>
 
         {(data.regions_unlocked?.length ?? 0) > 0 && (

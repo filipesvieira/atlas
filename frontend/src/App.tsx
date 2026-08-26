@@ -5,11 +5,16 @@ import { DashboardGrid } from './components/Dashboard/DashboardGrid';
 import { OfflineSummaryModal } from './components/Modal/OfflineSummaryModal';
 import { GameTutorialModal } from './components/Modal/GameTutorialModal';
 import { NotificationBell } from './components/Notifications/NotificationBell';
+import { PrologueOverlay } from './components/Prologue/PrologueOverlay';
+import { PROLOGUE_VERSION } from './components/Prologue/PrologueData';
 import type { ImportantNotification } from './types/notifications';
 import { API_BASE_URL, CLIENT_CONFIG_ERROR } from './config';
 
 const AUTH_TOKEN_KEY = 'atlas_token';
 const AUTH_ACCOUNT_KEY = 'atlas_account';
+const PROLOGUE_STORAGE_PREFIX = 'reino_do_avesso_prologue';
+
+const prologueStorageKey = (characterId: string) => `${PROLOGUE_STORAGE_PREFIX}:v${PROLOGUE_VERSION}:${characterId}`;
 
 function readStoredToken(): string | null {
   try {
@@ -66,6 +71,7 @@ export function App() {
   const [offlineData, setOfflineData] = useState<any | null>(null);
   const [notifications, setNotifications] = useState<ImportantNotification[]>([]);
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
+  const [isPrologueOpen, setIsPrologueOpen] = useState(false);
   const [selectingCharacterId, setSelectingCharacterId] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
 
@@ -78,13 +84,39 @@ export function App() {
 
   // Abertura automática no primeiro acesso ao selecionar o personagem
   useEffect(() => {
-    if (character) {
+    if (character && !isPrologueOpen) {
       const dontShow = localStorage.getItem('atlas_tutorial_dont_show_auto') === 'true';
       if (!dontShow) {
         const timer = setTimeout(() => setIsTutorialOpen(true), 600);
         return () => clearTimeout(timer);
       }
     }
+  }, [character?.id, isPrologueOpen]);
+
+  // A primeira versão usa uma flag por personagem e por versão no navegador.
+  // O formato já permite migrar a mesma decisão para o perfil persistido no backend.
+  useEffect(() => {
+    if (!character?.id) {
+      setIsPrologueOpen(false);
+      return;
+    }
+    try {
+      setIsPrologueOpen(localStorage.getItem(prologueStorageKey(character.id)) !== 'seen');
+    } catch {
+      // Se o navegador bloquear storage, o prólogo ainda pode ser fechado nesta sessão.
+      setIsPrologueOpen(true);
+    }
+  }, [character?.id]);
+
+  const finishPrologue = useCallback(() => {
+    if (character?.id) {
+      try {
+        localStorage.setItem(prologueStorageKey(character.id), 'seen');
+      } catch {
+        // Persistência local indisponível: mantém a navegação funcional nesta sessão.
+      }
+    }
+    setIsPrologueOpen(false);
   }, [character?.id]);
 
   const handleAuthSuccess = (newToken: string, authenticatedAccount: any) => {
@@ -233,8 +265,8 @@ export function App() {
                 A
               </div>
               <div>
-                <h1 className="font-pixel-heading text-sm text-amber-400 leading-none">PROJECT ATLAS</h1>
-                <span className="text-[9px] text-slate-400 font-pixel-body">Standalone IDLE MMORPG</span>
+                <h1 className="font-pixel-heading text-sm text-amber-400 leading-none">REINO DO AVESSO</h1>
+                <span className="text-[9px] text-slate-400 font-pixel-body">MMORPG Pixel de Sobrevivência</span>
               </div>
             </div>
 
@@ -263,6 +295,14 @@ export function App() {
               </button>
 
               <button
+                onClick={() => setIsPrologueOpen(true)}
+                className="pixel-btn pixel-btn-dark px-2.5 py-1 text-xs"
+                title="📜 Ver a história de Reino do Avesso"
+              >
+                <span>📜 História</span>
+              </button>
+
+              <button
                 onClick={handleLogout}
                 className="pixel-btn pixel-btn-crimson px-3 py-1 text-xs"
               >
@@ -286,6 +326,7 @@ export function App() {
             isOpen={isTutorialOpen}
             onClose={() => setIsTutorialOpen(false)}
           />
+          <PrologueOverlay isOpen={isPrologueOpen} onFinish={finishPrologue} />
         </>
       )}
     </div>

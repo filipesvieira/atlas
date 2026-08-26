@@ -129,7 +129,7 @@ export function CharacterScreen({ token, isAdmin = false, onSelectCharacter, onL
             <div className="w-8 h-8 rounded pixel-slot flex items-center justify-center font-pixel-heading text-amber-400 text-base shadow border-amber-500">
               A
             </div>
-            <span className="font-pixel-heading text-sm text-amber-400">PROJECT ATLAS</span>
+            <span className="font-pixel-heading text-sm text-amber-400">REINO DO AVESSO</span>
           </div>
           <button
             onClick={onLogout}
@@ -144,7 +144,7 @@ export function CharacterScreen({ token, isAdmin = false, onSelectCharacter, onL
             {isCreating ? 'Crie seu Aventureiro' : 'Selecione seu Personagem'}
           </h2>
           <p className="text-xs text-slate-400 mt-1 font-pixel-body">
-            Project Atlas — Crie sua jornada (Sistema Classless)
+            Reino do Avesso — Crie sua jornada (Sistema Classless)
           </p>
         </div>
 

@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Atlas",
+  "productName": "Reino do Avesso",
   "version": "0.1.0",
   "identifier": "com.atlas.game",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Atlas - MMORPG Retro Pixel Art",
+        "title": "Reino do Avesso - MMORPG Retro Pixel Art",
         "width": 1360,
         "height": 840,
         "minWidth": 1024,

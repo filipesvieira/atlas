@@ -111,11 +111,15 @@ export function renderPeasant(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.fillStyle = '#09090b'; // Solado
   ctx.fillRect(25 + walkStep, 42, 7, 2);
 
-  // Cintura
+  // Cintura e cinto. A antiga faixa vertical até as pernas criava uma leitura
+  // indesejada durante o ciclo de caminhada; o entrepernas agora permanece
+  // aberto e neutro, definido apenas pelas duas calças separadas.
   ctx.fillStyle = '#d97706';
-  ctx.fillRect(17, 23, 14, 4);
+  ctx.fillRect(17, 23, 14, 3);
   ctx.fillStyle = '#b45309';
-  ctx.fillRect(22, 26, 4, 7);
+  ctx.fillRect(17, 26, 14, 2);
+  ctx.fillStyle = '#fbbf24';
+  ctx.fillRect(23, 26, 2, 2);
 
   // 2. Braço Esquerdo (Mão apoiada no quadril)
   ctx.fillStyle = '#fef3c7'; // Manga bufante marfim
@@ -963,7 +967,7 @@ export function renderHeroSkin(
 // ───────────────────────────────────────────────────────────────────────────
 
 export function getPeasantSprite(size = 48): HTMLCanvasElement {
-  return getOffscreenCanvas('sprite_peasant', size, (ctx) => renderPeasant(ctx, 24, 24, { size: 48 }));
+  return getOffscreenCanvas('sprite_peasant_v2', size, (ctx) => renderPeasant(ctx, 24, 24, { size: 48 }));
 }
 
 export function getWandererSprite(size = 48): HTMLCanvasElement {

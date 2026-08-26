@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameCatalog } from '../../hooks/useGameCatalog';
 import { ExpeditionSelectionModal } from './ExpeditionSelectionModal';
 
@@ -11,6 +11,7 @@ interface ExpeditionRegionSelectorProps {
   maxStages?: number;
   isBossStage?: boolean;
   onSelectRegion: (regionId: string) => void;
+  openMapRequest?: number;
   compact?: boolean;
 }
 
@@ -23,10 +24,16 @@ export function ExpeditionRegionSelector({
   maxStages = 5,
   isBossStage = false,
   onSelectRegion,
+  openMapRequest = 0,
   compact = false,
 }: ExpeditionRegionSelectorProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { catalog, error: catalogError } = useGameCatalog();
+
+  // Reaproveita o seletor/modal já existente quando o acesso vier do HUD.
+  useEffect(() => {
+    if (openMapRequest > 0) setIsModalOpen(true);
+  }, [openMapRequest]);
 
   const activeRegionData = catalog?.regions.find((r) => r.id === currentRegion) || catalog?.regions[0];
   const displayStage = currentStage > 0 ? currentStage : 1;

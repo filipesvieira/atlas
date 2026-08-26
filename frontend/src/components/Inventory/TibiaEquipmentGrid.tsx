@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TibiaBackpackModal, Item, EquipmentSlots } from './TibiaBackpackModal';
 import { ItemIcon, getCleanItemName, getItemAttack, getItemStatBadge, getRarityStyle, BonusBadges, getSlotLabel, getHandsBadge } from './ItemIcon';
 import { PixelItemSprite } from '../../game/registries/PixelArtItemRegistry';
@@ -25,6 +25,7 @@ export interface TibiaEquipmentGridProps {
   onUnequipItem?: (slot: string) => void;
   onBulkSell?: (itemIds: string[]) => void;
   onLearnBlueprint?: (itemId: string) => void;
+  openBackpackRequest?: number;
   compact?: boolean;
 }
 
@@ -175,9 +176,16 @@ export function TibiaEquipmentGrid({
   onUnequipItem,
   onBulkSell,
   onLearnBlueprint,
+  openBackpackRequest = 0,
   compact = false,
 }: TibiaEquipmentGridProps) {
   const [isBackpackOpen, setIsBackpackOpen] = useState(false);
+
+  // O card continua sendo a fonte única do modal. O HUD do Modo Mundo apenas
+  // dispara esta abertura, sem duplicar inventário ou regras de equipamento.
+  useEffect(() => {
+    if (openBackpackRequest > 0) setIsBackpackOpen(true);
+  }, [openBackpackRequest]);
 
   const safeBackpack = Array.isArray(backpack) ? backpack : [];
   const safeEquipment = equipment || {};
