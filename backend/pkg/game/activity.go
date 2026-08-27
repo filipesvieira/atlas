@@ -46,6 +46,7 @@ type GatheringActivity struct {
 	WageReserved        int64                  `json:"wage_reserved"`
 	WagePaid            int64                  `json:"wage_paid"`
 	WageRuleVersion     int                    `json:"wage_rule_version"`
+	HeroGoldDelta       int64                  `json:"hero_gold_delta,omitempty"`
 }
 
 type GatheringResult struct {

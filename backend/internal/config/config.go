@@ -8,14 +8,15 @@ import (
 
 // Config centraliza as configurações da aplicação com validação de ambiente.
 type Config struct {
-	Environment      string
-	Port             string
-	JWTSecret        []byte
-	DatabaseURL      string
-	AllowedOrigins   []string
-	DevToolsEnabled  bool
-	DevAdminEmail    string
-	DevAdminPassword string
+	Environment       string
+	Port              string
+	JWTSecret         []byte
+	DatabaseURL       string
+	AllowedOrigins    []string
+	TrustProxyHeaders bool
+	DevToolsEnabled   bool
+	DevAdminEmail     string
+	DevAdminPassword  string
 }
 
 // LoadConfig carrega as configurações das variáveis de ambiente e valida restrições.
@@ -55,7 +56,18 @@ func LoadConfig() (*Config, error) {
 			allowedOrigins = append(allowedOrigins, trimmed)
 		}
 	}
+	if env == "production" || env == "staging" {
+		if strings.TrimSpace(os.Getenv("ALLOWED_ORIGINS")) == "" {
+			return nil, fmt.Errorf("ALLOWED_ORIGINS é obrigatório em ambiente %s", env)
+		}
+		for _, allowed := range allowedOrigins {
+			if strings.TrimSpace(allowed) == "*" {
+				return nil, fmt.Errorf("ALLOWED_ORIGINS não pode conter '*' em ambiente %s", env)
+			}
+		}
+	}
 
+	trustProxyHeaders := strings.EqualFold(getEnv("TRUST_PROXY_HEADERS", "false"), "true")
 	devToolsEnabled := strings.EqualFold(getEnv("ATLAS_DEV_TOOLS_ENABLED", "true"), "true")
 	devAdminEmail := strings.ToLower(strings.TrimSpace(getEnv("ATLAS_DEV_ADMIN_EMAIL", "atlas-admin@local.test")))
 	devAdminPassword := getEnv("ATLAS_DEV_ADMIN_PASSWORD", "AtlasTest!2026")
@@ -73,14 +85,15 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &Config{
-		Environment:      env,
-		Port:             port,
-		JWTSecret:        []byte(secretStr),
-		DatabaseURL:      dbURL,
-		AllowedOrigins:   allowedOrigins,
-		DevToolsEnabled:  devToolsEnabled,
-		DevAdminEmail:    devAdminEmail,
-		DevAdminPassword: devAdminPassword,
+		Environment:       env,
+		Port:              port,
+		JWTSecret:         []byte(secretStr),
+		DatabaseURL:       dbURL,
+		AllowedOrigins:    allowedOrigins,
+		TrustProxyHeaders: trustProxyHeaders,
+		DevToolsEnabled:   devToolsEnabled,
+		DevAdminEmail:     devAdminEmail,
+		DevAdminPassword:  devAdminPassword,
 	}, nil
 }
 

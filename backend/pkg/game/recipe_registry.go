@@ -19,6 +19,8 @@ type RecipeDefinition struct {
 	Description             string           `json:"description"`
 	Kind                    RecipeKind       `json:"kind"`
 	OutputTemplateKey       string           `json:"output_template_key,omitempty"`
+	VisualKey               string           `json:"visual_key,omitempty"`
+	SetKey                  string           `json:"set_key,omitempty"`
 	OutputResourceKey       string           `json:"output_resource_key,omitempty"`
 	OutputQuantity          int64            `json:"output_quantity,omitempty"`
 	ProfessionKey           string           `json:"profession_key"`
@@ -59,6 +61,8 @@ func buildRecipeRegistry() map[string]RecipeDefinition {
 	registry := map[string]RecipeDefinition{
 		"process_treated_plank":  {Key: "process_treated_plank", Name: "Serrar Tábuas Tratadas", Description: "Transforma troncos e resina em tábuas para equipamentos.", Kind: RecipeKindProcessing, OutputResourceKey: "treated_plank", OutputQuantity: 2, ProfessionKey: "woodworker", RequiredProfessionLevel: 1, Tier: 1, Ingredients: []ResourceAmount{{Key: "wood", Quantity: 4}, {Key: "resin", Quantity: 1}}, GoldCost: 20, CraftSeconds: 20, DefaultUnlocked: true, ContentVersion: 1},
 		"process_iron_ingot":     {Key: "process_iron_ingot", Name: "Fundir Lingotes de Ferro", Description: "Funde minério e carvão em lingotes.", Kind: RecipeKindProcessing, OutputResourceKey: "iron_ingot", OutputQuantity: 2, ProfessionKey: "blacksmith", RequiredProfessionLevel: 1, Tier: 1, Ingredients: []ResourceAmount{{Key: "iron", Quantity: 4}, {Key: "coal", Quantity: 1}}, GoldCost: 25, CraftSeconds: 25, DefaultUnlocked: true, ContentVersion: 1},
+		"process_copper_ingot":   {Key: "process_copper_ingot", Name: "Fundir Lingotes de Cobre", Description: "Funde minério de cobre e carvão em metal técnico para infraestrutura.", Kind: RecipeKindProcessing, OutputResourceKey: "copper_ingot", OutputQuantity: 2, ProfessionKey: "blacksmith", RequiredProfessionLevel: 1, Tier: 1, Ingredients: []ResourceAmount{{Key: "copper_ore", Quantity: 4}, {Key: "coal", Quantity: 1}}, GoldCost: 22, CraftSeconds: 25, DefaultUnlocked: true, ContentVersion: 1},
+		"process_bone_meal":      {Key: "process_bone_meal", Name: "Triturar Farinha de Osso", Description: "Limpa e tritura ossos de caça em reagente alquímico.", Kind: RecipeKindProcessing, OutputResourceKey: "bone_meal", OutputQuantity: 2, ProfessionKey: "alchemist", RequiredProfessionLevel: 1, Tier: 1, StationKey: "alchemy_bench", RequiredStationLevel: 1, Ingredients: []ResourceAmount{{Key: "animal_bone", Quantity: 4}, {Key: "herbs", Quantity: 1}}, GoldCost: 18, CraftSeconds: 20, DefaultUnlocked: true, ContentVersion: 1},
 		"process_woven_cloth":    {Key: "process_woven_cloth", Name: "Trançar Tecido", Description: "Transforma fibras em tecido resistente.", Kind: RecipeKindProcessing, OutputResourceKey: "woven_cloth", OutputQuantity: 2, ProfessionKey: "tailor", RequiredProfessionLevel: 1, Tier: 1, Ingredients: []ResourceAmount{{Key: "fiber", Quantity: 5}}, GoldCost: 15, CraftSeconds: 20, DefaultUnlocked: true, ContentVersion: 1},
 		"process_tanned_leather": {Key: "process_tanned_leather", Name: "Curtir Couro", Description: "Prepara couro cru com resina natural.", Kind: RecipeKindProcessing, OutputResourceKey: "tanned_leather", OutputQuantity: 2, ProfessionKey: "leatherworker", RequiredProfessionLevel: 1, Tier: 1, Ingredients: []ResourceAmount{{Key: "raw_hide", Quantity: 4}, {Key: "resin", Quantity: 1}}, GoldCost: 20, CraftSeconds: 25, DefaultUnlocked: true, ContentVersion: 1},
 		"process_flour":          {Key: "process_flour", Name: "Moer Farinha", Description: "Transforma trigo em farinha.", Kind: RecipeKindProcessing, OutputResourceKey: "flour", OutputQuantity: 3, ProfessionKey: "farmer", RequiredProfessionLevel: 1, Tier: 1, Ingredients: []ResourceAmount{{Key: "wheat", Quantity: 5}}, GoldCost: 10, CraftSeconds: 15, DefaultUnlocked: true, ContentVersion: 1},
@@ -78,7 +82,7 @@ func buildRecipeRegistry() map[string]RecipeDefinition {
 
 		// Alquimia: poções iniciais usam recursos comuns e ocupam uma categoria
 		// própria de buff, permitindo uma refeição e uma poção ativas ao mesmo tempo.
-		"alchemy_minor_strength": {Key: "alchemy_minor_strength", Name: "Destilar Tônico de Força", Description: "Tônico simples que aumenta o poder de ataque por uma expedição curta.", Kind: RecipeKindConsumable, OutputResourceKey: "minor_strength_elixir", OutputQuantity: 1, ProfessionKey: "alchemist", RequiredProfessionLevel: 1, Tier: 1, StationKey: "alchemy_bench", RequiredStationLevel: 1, Ingredients: []ResourceAmount{{Key: "herbs", Quantity: 2}, {Key: "seeds", Quantity: 1}}, GoldCost: 25, CraftSeconds: 35, DefaultUnlocked: true, ContentVersion: 1},
+		"alchemy_minor_strength": {Key: "alchemy_minor_strength", Name: "Destilar Tônico de Força", Description: "Tônico simples que aumenta o poder de ataque por uma expedição curta.", Kind: RecipeKindConsumable, OutputResourceKey: "minor_strength_elixir", OutputQuantity: 1, ProfessionKey: "alchemist", RequiredProfessionLevel: 1, Tier: 1, StationKey: "alchemy_bench", RequiredStationLevel: 1, Ingredients: []ResourceAmount{{Key: "herbs", Quantity: 2}, {Key: "seeds", Quantity: 1}, {Key: "bone_meal", Quantity: 1}}, GoldCost: 25, CraftSeconds: 35, DefaultUnlocked: true, ContentVersion: 1},
 		"alchemy_focus_tonic":    {Key: "alchemy_focus_tonic", Name: "Preparar Tônico de Foco", Description: "Infusão de ervas que melhora o aprendizado em combate por uma expedição curta.", Kind: RecipeKindConsumable, OutputResourceKey: "focus_tonic", OutputQuantity: 1, ProfessionKey: "alchemist", RequiredProfessionLevel: 1, Tier: 1, StationKey: "alchemy_bench", RequiredStationLevel: 1, Ingredients: []ResourceAmount{{Key: "herbs", Quantity: 2}, {Key: "raw_fish", Quantity: 1}}, GoldCost: 25, CraftSeconds: 35, DefaultUnlocked: true, ContentVersion: 1},
 		"alchemy_arcane_draught": {Key: "alchemy_arcane_draught", Name: "Destilar Elixir Arcano", Description: "Elixir intermediário para expedições longas, exigindo resíduo arcano refinado.", Kind: RecipeKindConsumable, OutputResourceKey: "arcane_draught", OutputQuantity: 1, ProfessionKey: "alchemist", RequiredProfessionLevel: 8, Tier: 2, StationKey: "alchemy_bench", RequiredStationLevel: 2, Ingredients: []ResourceAmount{{Key: "herbs", Quantity: 4}, {Key: "arcane_scrap", Quantity: 2}, {Key: "seeds", Quantity: 2}}, GoldCost: 140, CraftSeconds: 100, DefaultUnlocked: true, ContentVersion: 1},
 	}
@@ -95,14 +99,14 @@ func buildRecipeRegistry() map[string]RecipeDefinition {
 		profession := professionForTemplate(template)
 		part := monsterPartForTemplate(template, tierPartCursor[tier])
 		tierPartCursor[tier]++
-		ingredients := ingredientsForTemplate(template, part)
+		balance := buildEquipmentCraftBalance(template, part)
 		minRarity, maxRarity := rarityBoundsForTier(tier)
 		key := "craft_" + template.Key
 		registry[key] = RecipeDefinition{
 			Key: key, Name: "Forjar: " + template.Name, Description: "Produz " + template.Name + " combinando recursos profissionais e partes de monstros.",
-			Kind: RecipeKindEquipment, OutputTemplateKey: template.Key, ProfessionKey: profession,
-			RequiredProfessionLevel: 1 + (tier-1)*8, Tier: tier, StationKey: stationForTier(tier), RequiredStationLevel: stationLevelForTier(tier),
-			Ingredients: ingredients, GoldCost: int64(150 * tier * tier), CraftSeconds: int64(30 * tier),
+			Kind: RecipeKindEquipment, OutputTemplateKey: template.Key, VisualKey: template.VisualKey, SetKey: template.SetKey, ProfessionKey: profession,
+			RequiredProfessionLevel: balance.RequiredProfessionLevel, Tier: tier, StationKey: stationForTier(tier), RequiredStationLevel: stationLevelForTier(tier),
+			Ingredients: balance.Ingredients, GoldCost: balance.GoldCost, CraftSeconds: balance.CraftSeconds,
 			MinimumRarity: minRarity, MaximumRarity: maxRarity, DefaultUnlocked: tier == 1,
 			UnlockTrophyKey: trophyForTier(tier), ContentVersion: 1,
 			SlotType:               string(template.Slot),
@@ -125,6 +129,74 @@ func buildRecipeRegistry() map[string]RecipeDefinition {
 		}
 	}
 	return registry
+}
+
+type equipmentCraftBalance struct {
+	Ingredients             []ResourceAmount
+	GoldCost                int64
+	CraftSeconds            int64
+	RequiredProfessionLevel int
+}
+
+// buildEquipmentCraftBalance define custos pelo papel do equipamento, não apenas
+// pelo Tier. O objetivo é que uma arma temática exija preparo de recursos,
+// ouro e caçada suficientes para ter valor em um jogo idle.
+func buildEquipmentCraftBalance(template LootTemplate, monsterPart string) equipmentCraftBalance {
+	tier := template.Tier
+	if tier < 1 {
+		tier = 1
+	}
+	if tier > 1 {
+		return equipmentCraftBalance{
+			Ingredients:             ingredientsForTemplate(template, monsterPart),
+			GoldCost:                int64(150 * tier * tier),
+			CraftSeconds:            int64(30 * tier),
+			RequiredProfessionLevel: 1 + (tier-1)*8,
+		}
+	}
+
+	// O Cajado de Pirulito é a primeira arma temática de alcance: sua receita
+	// não pode ser completada com uma única migalha encontrada por acaso.
+	if template.Key == "cajado_de_pirulito" {
+		return equipmentCraftBalance{Ingredients: []ResourceAmount{{Key: "iron_ingot", Quantity: 6}, {Key: "treated_plank", Quantity: 4}, {Key: "part_cookie_crumb", Quantity: 4}}, GoldCost: 350, CraftSeconds: 75, RequiredProfessionLevel: 2}
+	}
+
+	// Recompensas temáticas de chefes: raras, mas ainda realizáveis durante a
+	// primeira fase. Cada peça pede três troféus/partes do próprio encontro.
+	if template.SetKey != "" {
+		if template.Slot == SlotMainHand || template.Slot == SlotOffHand {
+			ingredients := []ResourceAmount{{Key: "iron_ingot", Quantity: 6}, {Key: "treated_plank", Quantity: 4}, {Key: monsterPart, Quantity: 3}}
+			if template.WeaponType == WeaponTypeBow || template.WeaponType == WeaponTypeWand {
+				ingredients = []ResourceAmount{{Key: "treated_plank", Quantity: 6}, {Key: "woven_cloth", Quantity: 3}, {Key: monsterPart, Quantity: 3}}
+			}
+			return equipmentCraftBalance{Ingredients: ingredients, GoldCost: 400, CraftSeconds: 80, RequiredProfessionLevel: 3}
+		}
+		return equipmentCraftBalance{Ingredients: []ResourceAmount{{Key: "tanned_leather", Quantity: 5}, {Key: "woven_cloth", Quantity: 4}, {Key: monsterPart, Quantity: 3}}, GoldCost: 350, CraftSeconds: 75, RequiredProfessionLevel: 3}
+	}
+
+	switch template.Slot {
+	case SlotMainHand:
+		switch template.WeaponType {
+		case WeaponTypeBow:
+			return equipmentCraftBalance{Ingredients: []ResourceAmount{{Key: "treated_plank", Quantity: 5}, {Key: "woven_cloth", Quantity: 2}, {Key: monsterPart, Quantity: 2}}, GoldCost: 220, CraftSeconds: 50, RequiredProfessionLevel: 1}
+		case WeaponTypeWand:
+			return equipmentCraftBalance{Ingredients: []ResourceAmount{{Key: "treated_plank", Quantity: 4}, {Key: "woven_cloth", Quantity: 2}, {Key: monsterPart, Quantity: 2}}, GoldCost: 220, CraftSeconds: 50, RequiredProfessionLevel: 1}
+		default:
+			ingots, planks, parts, gold := int64(4), int64(3), int64(2), int64(220)
+			if template.Hands == 2 {
+				ingots, planks, parts, gold = 6, 4, 3, 300
+			}
+			return equipmentCraftBalance{Ingredients: []ResourceAmount{{Key: "iron_ingot", Quantity: ingots}, {Key: "treated_plank", Quantity: planks}, {Key: monsterPart, Quantity: parts}}, GoldCost: gold, CraftSeconds: 55, RequiredProfessionLevel: 1}
+		}
+	case SlotOffHand:
+		return equipmentCraftBalance{Ingredients: []ResourceAmount{{Key: "treated_plank", Quantity: 5}, {Key: "iron_ingot", Quantity: 2}, {Key: monsterPart, Quantity: 2}}, GoldCost: 200, CraftSeconds: 45, RequiredProfessionLevel: 1}
+	case SlotAmmo:
+		return equipmentCraftBalance{Ingredients: []ResourceAmount{{Key: "treated_plank", Quantity: 3}, {Key: "woven_cloth", Quantity: 2}, {Key: monsterPart, Quantity: 2}}, GoldCost: 160, CraftSeconds: 40, RequiredProfessionLevel: 1}
+	case SlotHead, SlotChest, SlotLegs, SlotBoots, SlotBag:
+		return equipmentCraftBalance{Ingredients: []ResourceAmount{{Key: "tanned_leather", Quantity: 4}, {Key: "woven_cloth", Quantity: 3}, {Key: monsterPart, Quantity: 2}}, GoldCost: 180, CraftSeconds: 45, RequiredProfessionLevel: 1}
+	default:
+		return equipmentCraftBalance{Ingredients: []ResourceAmount{{Key: "woven_cloth", Quantity: 3}, {Key: "fish_scale", Quantity: 2}, {Key: monsterPart, Quantity: 2}}, GoldCost: 180, CraftSeconds: 45, RequiredProfessionLevel: 1}
+	}
 }
 
 func professionForTemplate(template LootTemplate) string {
@@ -179,17 +251,31 @@ func monsterPartForTemplate(template LootTemplate, cursor int) string {
 		tier = 1
 	}
 	if tier == 1 {
+		switch template.SetKey {
+		case "urso_ranzinza":
+			return "part_bear_claw"
+		case "feiona":
+			return "part_fiona_tiara_shard"
+		case "biscoito_encantado":
+			return "part_cookie_crumb"
+		}
 		switch template.Key {
 		case "espada_do_aprendiz":
 			return "part_goblin_ear"
 		case "varinha_do_aprendiz":
 			return "part_spider_silk"
+		case "cajado_de_pirulito":
+			return "part_cookie_crumb"
 		case "arco_curvo":
 			return "part_wolf_fang"
 		case "capacete_de_couro":
 			return "part_wolf_fang"
 		case "tunica_de_couro":
 			return "part_goblin_ear"
+		case "calca_de_couro_pioneiro":
+			return "part_wolf_fang"
+		case "botas_de_couro_pioneiro":
+			return "part_wolf_fang"
 		case "calca_de_tecido":
 			return "part_spider_silk"
 		case "sandalias_ageis":
@@ -286,6 +372,9 @@ func GetRecipeDefinition(key string) (RecipeDefinition, bool) {
 func ListRecipeDefinitions() []RecipeDefinition {
 	result := make([]RecipeDefinition, 0, len(RecipeRegistry))
 	for _, definition := range RecipeRegistry {
+		if !IsRecipeReleased(definition) {
+			continue
+		}
 		result = append(result, definition)
 	}
 	sort.Slice(result, func(i, j int) bool {

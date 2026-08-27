@@ -42,6 +42,9 @@ export interface Item {
   weapon_type?: string;
   slot_type?: string;
   item_kind?: 'equipment' | 'skill_book' | 'construction_manual' | 'quest';
+  template_key?: string;
+  visual_key?: string;
+  set_key?: string;
 }
 
 export interface EquipmentSlots {
@@ -833,6 +836,9 @@ export function TibiaBackpackModal({
                           name={item.name}
                           slotType={slotType}
                           weaponType={item.weapon_type}
+                          templateKey={item.template_key}
+                          visualKey={item.visual_key}
+                          setKey={item.set_key}
                           specialEffect={item.special_effect}
                           rarity={item.rarity}
                           size="md"
@@ -913,6 +919,9 @@ export function TibiaBackpackModal({
                       name={activeInspectedItem.name}
                       slotType={inspectedSlot}
                       weaponType={activeInspectedItem.weapon_type}
+                      templateKey={activeInspectedItem.template_key}
+                      visualKey={activeInspectedItem.visual_key}
+                      setKey={activeInspectedItem.set_key}
                       specialEffect={activeInspectedItem.special_effect}
                       rarity={activeInspectedItem.rarity}
                       size="md"

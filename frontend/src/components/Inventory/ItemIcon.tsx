@@ -8,6 +8,9 @@ export interface ItemIconProps {
   className?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   rarity?: string;
+  templateKey?: string;
+  visualKey?: string;
+  setKey?: string;
 }
 
 export function ItemIcon({
@@ -17,6 +20,9 @@ export function ItemIcon({
   className = '',
   size = 'md',
   rarity = 'Comum',
+  templateKey = '',
+  visualKey = '',
+  setKey = '',
 }: ItemIconProps) {
   return (
     <PixelItemSprite
@@ -24,6 +30,9 @@ export function ItemIcon({
       slotType={slotType}
       weaponType={weaponType}
       rarity={rarity}
+      templateKey={templateKey}
+      visualKey={visualKey}
+      setKey={setKey}
       size={size}
       className={className}
     />

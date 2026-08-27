@@ -1,15 +1,22 @@
 import { CampBuildingSlotConfig } from './types';
+import {
+  ISO_ARENA_GEOMETRY,
+  tileToScreen as isoTileToScreen,
+  screenToTile as isoScreenToTile,
+} from '../IsoWorldGeometry';
+
+export { ISO_ARENA_GEOMETRY } from '../IsoWorldGeometry';
 
 /**
  * Layout V3: terreno maior para o assentamento crescer sem transformar o
  * viewport em um amontoado de prédios/NPCs. O backend usa os mesmos limites.
  */
-export const CAMP_GRID_WIDTH = 24;
-export const CAMP_GRID_HEIGHT = 18;
-export const ISO_TILE_WIDTH = 32;
-export const ISO_TILE_HEIGHT = 16;
-export const ISO_ORIGIN_X = 480;
-export const ISO_ORIGIN_Y = 58;
+export const CAMP_GRID_WIDTH = ISO_ARENA_GEOMETRY.gridWidth;
+export const CAMP_GRID_HEIGHT = ISO_ARENA_GEOMETRY.gridHeight;
+export const ISO_TILE_WIDTH = ISO_ARENA_GEOMETRY.tileWidth;
+export const ISO_TILE_HEIGHT = ISO_ARENA_GEOMETRY.tileHeight;
+export const ISO_ORIGIN_X = ISO_ARENA_GEOMETRY.originX;
+export const ISO_ORIGIN_Y = ISO_ARENA_GEOMETRY.originY;
 
 export const BuildingGridFootprints: Record<string, { width: number; height: number }> = {
   campfire: { width: 2, height: 2 },
@@ -65,19 +72,11 @@ export const LegacySlotDefaults: Record<string, { tileX: number; tileY: number }
 };
 
 export function tileToScreen(tileX: number, tileY: number) {
-  return {
-    x: ISO_ORIGIN_X + (tileX - tileY) * (ISO_TILE_WIDTH / 2),
-    y: ISO_ORIGIN_Y + (tileX + tileY) * (ISO_TILE_HEIGHT / 2),
-  };
+  return isoTileToScreen(tileX, tileY, ISO_ARENA_GEOMETRY);
 }
 
 export function screenToTile(screenX: number, screenY: number) {
-  const dx = screenX - ISO_ORIGIN_X;
-  const dy = screenY - ISO_ORIGIN_Y;
-  return {
-    tileX: Math.round(dx / ISO_TILE_WIDTH + dy / ISO_TILE_HEIGHT),
-    tileY: Math.round(dy / ISO_TILE_HEIGHT - dx / ISO_TILE_WIDTH),
-  };
+  return isoScreenToTile(screenX, screenY, ISO_ARENA_GEOMETRY);
 }
 
 export function getGridFootprint(buildingKey: string, rotation = 0) {

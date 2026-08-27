@@ -8,7 +8,7 @@ var economyMonsterProfilesOnce sync.Once
 // temático. Recursos de profissão nunca aparecem neste catálogo.
 var MonsterPartByMonster = map[string]string{
 	"forest_goblin": "part_goblin_ear", "forest_wolf": "part_wolf_fang", "forest_spider": "part_spider_silk", "forest_boss_bear": "part_bear_claw",
-	"shereque_ogre": "part_ogre_wart", "shereque_donkey": "part_donkey_tooth", "shereque_boss_fiona": "part_fiona_tiara_shard",
+	"shereque_ogre": "part_ogre_wart", "shereque_donkey": "part_donkey_tooth", "shereque_cookie": "part_cookie_crumb", "shereque_boss_fiona": "part_fiona_tiara_shard",
 	"chapolin_pirate": "part_pirate_hook", "chapolin_tripa": "part_tripa_belt", "chapolin_bandit": "part_bandit_mask", "chapolin_boss_alma": "part_black_soul_emblem",
 	"orcruins_orc": "part_orc_tusk", "orcruins_orc_mage": "part_orc_rune", "orcruins_skeleton": "part_skeleton_bone", "orcruins_orc_archer": "part_orc_bowstring", "orcruins_berserker": "part_berserker_buckle", "orcruins_boss_skeleton": "part_skeleton_bone",
 	"esgotos_ninja": "part_ninja_cloth", "esgotos_rat": "part_rat_tongue", "esgotos_boss_destroyer": "part_destroyer_blade",

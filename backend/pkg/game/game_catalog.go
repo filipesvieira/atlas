@@ -1,6 +1,6 @@
 package game
 
-const GameCatalogVersion = "2026.08-isometric-food-v2"
+const GameCatalogVersion = "2026.08-performance-v2-equipment-identity-v1"
 
 type ExpeditionCatalogEntry struct {
 	ID                   string   `json:"id"`
@@ -32,6 +32,7 @@ type GameCatalog struct {
 	GatheringExpeditions []GatheringExpeditionDefinition `json:"gathering_expeditions"`
 	Recipes              []RecipeDefinition              `json:"recipes"`
 	Consumables          []ConsumableDefinition          `json:"consumables"`
+	EquipmentSets        []EquipmentSetDefinition        `json:"equipment_sets"`
 	EconomyPolicy        EconomyPolicy                   `json:"economy_policy"`
 }
 
@@ -46,7 +47,7 @@ func BuildGameCatalog() GameCatalog {
 			Tier: region.Tier, Order: region.Order, MinLevel: region.MinLevel, MaxLevel: region.MaxLevel,
 			Description: region.Description, Icon: region.Icon, MaxStages: region.MaxStages,
 			RequiresUnlockFrom: region.RequiresUnlockFrom, RequiresTierComplete: region.RequiresTierComplete,
-			DropsPreview: region.DropsPreview,
+			DropsPreview: filterReleasedItemNames(region.DropsPreview),
 			BossName:     region.Boss.Name, IsSecret: region.IsSecret,
 		})
 	}
@@ -63,6 +64,7 @@ func BuildGameCatalog() GameCatalog {
 		GatheringExpeditions: ListGatheringExpeditions(),
 		Recipes:              ListRecipeDefinitions(),
 		Consumables:          ListConsumableDefinitions(),
+		EquipmentSets:        ListReleasedEquipmentSetDefinitions(),
 		EconomyPolicy:        CurrentEconomyPolicy(),
 	}
 }

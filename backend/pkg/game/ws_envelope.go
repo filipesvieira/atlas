@@ -17,7 +17,7 @@ const (
 	EventCategoryEphemeral
 )
 
-// WsEnvelope representa o contrato oficial padronizado do WebSocket V2.
+// WsEnvelope representa o contrato oficial padronizado do WebSocket V3.
 type WsEnvelope struct {
 	ProtocolVersion int             `json:"protocol_version"`
 	RequestID       string          `json:"request_id,omitempty"`
@@ -29,7 +29,7 @@ type WsEnvelope struct {
 	Error           string          `json:"error,omitempty"`
 }
 
-// ClientMessageV2 representa uma intenção de comando enviada pelo cliente no protocolo V2.
+// ClientMessageV2 representa uma intenção de comando enviada pelo cliente no protocolo V3.
 type ClientMessageV2 struct {
 	ProtocolVersion  int             `json:"protocol_version"`
 	RequestID        string          `json:"request_id,omitempty"`
@@ -101,7 +101,7 @@ func NewWsEnvelope(seq uint64, msgType string, reqID string, rev int64, payload 
 		raw = b
 	}
 	return WsEnvelope{
-		ProtocolVersion: 2,
+		ProtocolVersion: 3,
 		RequestID:       reqID,
 		Sequence:        seq,
 		Type:            msgType,

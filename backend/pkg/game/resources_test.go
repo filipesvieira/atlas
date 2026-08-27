@@ -190,3 +190,19 @@ func TestSalvageBatch_SafeMode(t *testing.T) {
 		t.Error("Esperado rendimento com bônus de 30% no Nv 3")
 	}
 }
+func TestCopperAndBoneNowHaveProcessingChains(t *testing.T) {
+	EnsureEconomyResourcesRegistered()
+	for _, key := range []string{"copper_ingot", "bone_meal"} {
+		if _, ok := GetResourceDefinition(key); !ok {
+			t.Fatalf("recurso processado ausente: %s", key)
+		}
+	}
+	copper, ok := GetRecipeDefinition("process_copper_ingot")
+	if !ok || copper.OutputResourceKey != "copper_ingot" {
+		t.Fatalf("cadeia de cobre ausente: %+v", copper)
+	}
+	bone, ok := GetRecipeDefinition("process_bone_meal")
+	if !ok || bone.OutputResourceKey != "bone_meal" {
+		t.Fatalf("cadeia de osso ausente: %+v", bone)
+	}
+}

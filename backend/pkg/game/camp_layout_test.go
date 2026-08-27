@@ -80,3 +80,14 @@ func TestFindFirstFreeCampPlacementPrefersCenter(t *testing.T) {
 		t.Fatalf("primeira posição livre = (%d,%d); esperado centro (%d,%d)", x, y, centerX, centerY)
 	}
 }
+func TestAlphaBuildingsAreVisibleWithoutManuals(t *testing.T) {
+	for _, key := range []string{"campfire", "warehouse", "adventurer_hut", "arcane_spring", "workbench", "kitchen", "alchemy_bench"} {
+		definition, ok := GetBuildingDefinition(key)
+		if !ok {
+			t.Fatalf("construção básica ausente: %s", key)
+		}
+		if !definition.DefaultUnlocked {
+			t.Errorf("construção básica %s deveria estar liberada na alpha", key)
+		}
+	}
+}

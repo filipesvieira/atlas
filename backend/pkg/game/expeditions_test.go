@@ -49,6 +49,49 @@ func TestGetRandomMonsterForRegionRegressionCases(t *testing.T) {
 	}
 }
 
+func TestSherequeMonsterRosterAndDisplayNames(t *testing.T) {
+	region, ok := ExpeditionRegions["shereque"]
+	if !ok {
+		t.Fatal("região shereque não encontrada")
+	}
+
+	var ogre, cookie *Monster
+	for i := range region.Monsters {
+		monster := &region.Monsters[i]
+		switch monster.Key {
+		case "shereque_ogre":
+			ogre = monster
+		case "shereque_cookie":
+			cookie = monster
+		}
+	}
+
+	if ogre == nil || ogre.Name != "Ogro Verde" {
+		t.Fatalf("Ogro Verde não foi cadastrado com o nome exibido esperado: %+v", ogre)
+	}
+	if region.Boss.Name != "Feiona Arrazadora 🐸" {
+		t.Fatalf("boss de Shereque não foi renomeado para Feiona: %q", region.Boss.Name)
+	}
+	if cookie == nil {
+		t.Fatal("Biscoito Encantado não foi adicionado à fase de Shereque")
+	}
+	if cookie.Name != "Biscoito Encantado" || cookie.VisualKey != "shereque_cookie" {
+		t.Fatalf("cadastro visual do Biscoito inválido: %+v", *cookie)
+	}
+	if cookie.AttackType != AttackTypeRanged {
+		t.Fatalf("Biscoito Encantado deve atacar à distância, tipo obtido: %v", cookie.AttackType)
+	}
+	if cookie.MovementSpeedMultiplier <= 1 || cookie.Health >= ogre.Health || cookie.Attack >= ogre.Attack {
+		t.Fatalf("Biscoito deve ser rápido, mas menos forte que o Ogro: velocidade=%.2f hp=%d atk=%d", cookie.MovementSpeedMultiplier, cookie.Health, cookie.Attack)
+	}
+	if MonsterPartByMonster[cookie.Key] != "part_cookie_crumb" {
+		t.Fatalf("Biscoito Encantado não possui material temático configurado")
+	}
+	if _, ok := MonsterLootProfileMap[cookie.Key]; !ok {
+		t.Fatalf("Biscoito Encantado não possui perfil de loot compatível")
+	}
+}
+
 func TestBuildOfflineWaveRespectsFixedLevels(t *testing.T) {
 	rng := rand.New(rand.NewSource(123))
 	reg := ExpeditionRegions["esgotos"]

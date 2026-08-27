@@ -1,13 +1,13 @@
 import { biomeRegistry } from '../../game/registries/BiomeRegistry';
-import { renderForestArenaDynamic } from '../../game/renderers/biomes/BiomeRenderers';
 import { heroRegistry } from '../../game/registries/HeroRegistry';
 import { SkinRegistryService } from '../../game/registries/SkinRegistry';
 import { monsterRegistry } from '../../game/registries/MonsterRegistry';
 import { CombatEffectRegistry } from '../../game/effects/CombatEffectRegistry';
 import { Position } from '../../game/effects/types';
 import { campSceneRenderer } from '../../game/camp/CampSceneRenderer';
-import { CAMP_GRID_HEIGHT, CAMP_GRID_WIDTH, getGridFootprint, screenToTile, tileToScreen } from '../../game/camp/CampLayoutRegistry';
-import { drawWandStar, drawStaffVortex, drawFireballComet, drawIceOrbComet, drawRealArrow } from '../../game/effects/renderers/projectileSprites';
+import { getGridFootprint, screenToTile, tileToScreen } from '../../game/camp/CampLayoutRegistry';
+import { ISO_ARENA_GEOMETRY, IsoWorldGeometry, clampIsoTile, tileToScreen as isoTileToScreen } from '../../game/IsoWorldGeometry';
+import { drawWandStar, drawStaffVortex, drawFireballComet, drawIceOrbComet, drawRealArrow, drawLollipopBolt } from '../../game/effects/renderers/projectileSprites';
 import type { CampState, SettlementState } from '../../hooks/useGameSocket';
 
 interface FloatingText {
@@ -91,6 +91,8 @@ interface RenderMonster {
   walkDistance: number;
   isWalking: boolean;
   hitFlashTimer: number; // >0 faz o monstro piscar em vermelho ao levar dano
+  attackTimer: number;
+  attackDuration: number;
   spawnTimer: number;
   spawnDuration: number;
 }
@@ -141,6 +143,7 @@ export class GameViewport {
   private heroTargetId = '';
   private arenaInitialized = false;
   private isIsoArena = false;
+  private arenaGeometry: IsoWorldGeometry | null = null;
   private heroLeapTimer = 0;
   private heroLeapDuration = 0.3;
   private heroLeapStartX = 100;
@@ -187,10 +190,10 @@ export class GameViewport {
   private cameraFocusY = this.height / 2;
 
   private arenaActorScreenPosition(gridX: number, gridY: number) {
-    const safeX = Math.max(0, Math.min(CAMP_GRID_WIDTH - 1, Math.round(gridX)));
-    const safeY = Math.max(0, Math.min(CAMP_GRID_HEIGHT - 1, Math.round(gridY)));
-    const ground = tileToScreen(safeX, safeY);
-    return { x: ground.x, y: ground.y - 24, depth: ground.y };
+    const geometry = this.arenaGeometry || ISO_ARENA_GEOMETRY;
+    const safe = clampIsoTile(gridX, gridY, geometry);
+    const ground = isoTileToScreen(safe.tileX, safe.tileY, geometry);
+    return { x: ground.x, y: ground.y - geometry.actorFootOffset, depth: ground.y };
   }
 
   constructor() {}
@@ -699,6 +702,9 @@ export class GameViewport {
       if (m.hitFlashTimer > 0) {
         m.hitFlashTimer -= 1;
       }
+      if (m.attackTimer > 0) {
+        m.attackTimer = Math.max(0, m.attackTimer - _dt);
+      }
     });
 
     // A posição interpolada muda entre os ticks autoritativos. Recalcular a
@@ -776,6 +782,17 @@ export class GameViewport {
             size: 1.8 + Math.random() * 2,
             color: iceColors[Math.floor(Math.random() * iceColors.length)],
           });
+        } else if (p.type === 'lollipop') {
+          const candyColors = ['#f472b6', '#ec4899', '#22d3ee', '#fef08a', '#c084fc'];
+          p.trail.push({
+            x: p.currentX + (Math.random() * 5 - 2.5),
+            y: p.currentY + (Math.random() * 5 - 2.5),
+            vx: -(10 + Math.random() * 18),
+            vy: (Math.random() - 0.5) * 12,
+            alpha: 0.9,
+            size: 1.5 + Math.random() * 2,
+            color: candyColors[Math.floor(Math.random() * candyColors.length)],
+          });
         }
 
         // Checar impacto direto no corpo do monstro
@@ -837,6 +854,21 @@ export class GameViewport {
                 vx: Math.cos(ang) * spd,
                 vy: Math.sin(ang) * spd * 0.7,
                 size: 1.5 + Math.random() * 2,
+                color: hitColors[Math.floor(Math.random() * hitColors.length)],
+                alpha: 1.0,
+              });
+            }
+          } else if (p.type === 'lollipop') {
+            const hitColors = ['#f472b6', '#ec4899', '#22d3ee', '#fef08a', '#c084fc'];
+            for (let k = 0; k < 10; k++) {
+              const ang = Math.random() * Math.PI * 2;
+              const spd = 30 + Math.random() * 55;
+              p.impactParticles.push({
+                x: 0,
+                y: 0,
+                vx: Math.cos(ang) * spd,
+                vy: Math.sin(ang) * spd * 0.7,
+                size: 1.5 + Math.random() * 2.5,
                 color: hitColors[Math.floor(Math.random() * hitColors.length)],
                 alpha: 1.0,
               });
@@ -929,7 +961,7 @@ export class GameViewport {
     // zoom.
     const frameTime = performance.now();
     if (!this.isActive) {
-      const campHero = campSceneRenderer.getHeroSceneState(frameTime);
+      const campHero = campSceneRenderer.getHeroSceneState(frameTime, this.camp);
       this.heroX = campHero.x;
       this.heroY = campHero.y;
     }
@@ -945,27 +977,24 @@ export class GameViewport {
 
     // 1. Desenhar cenário
     const biomeKey = this.isActive ? this.regionId : 'camp';
+    const activeGeometry = biomeRegistry.getIsoGeometry(biomeKey);
+    this.arenaGeometry = this.isActive ? (activeGeometry || null) : biomeRegistry.getIsoGeometry('camp') || null;
+    this.isIsoArena = this.isActive && Boolean(activeGeometry);
     const bgBuffer = biomeRegistry.render(biomeKey, this.width, this.height);
     if (this.isActive && this.isIsoArena && !this.arenaInitialized) {
       const fallbackHero = this.arenaActorScreenPosition(this.heroGridX, this.heroGridY);
       this.heroBaseX = fallbackHero.x;
       this.heroBaseY = fallbackHero.y;
     } else if (this.isActive && !this.isIsoArena) {
-      // As demais regiões permanecem no renderer legado até cada bioma receber
-      // sua própria malha visual e regras de obstáculos.
+      // Regiões que ainda não receberam uma malha isométrica continuam no
+      // renderer legado até serem convertidas individualmente.
       this.heroBaseX = 140;
       this.heroBaseY = BATTLE_GROUND_Y;
     }
     ctx.drawImage(bgBuffer, 0, 0, this.width, this.height);
-    // A primeira arena isométrica possui objetos que obrigatoriamente precisam
-    // redesenhar a cada frame (rio e fogueira). A chamada direta evita que uma
-    // mudança transitória de `regionId` causada por snapshots de combate
-    // silencie a camada dinâmica enquanto a arena forest continua visível.
-    if (this.isActive && this.isIsoArena) {
-      renderForestArenaDynamic(ctx, frameTime);
-    } else {
-      biomeRegistry.renderDynamic(biomeKey, ctx, this.width, this.height, frameTime);
-    }
+    // Cada bioma decide sua própria camada dinâmica. O viewport não precisa
+    // conhecer floresta, Shereque ou qualquer fase futura individualmente.
+    biomeRegistry.renderDynamic(biomeKey, ctx, this.width, this.height, frameTime);
 
     // 1.1 Desenhar Construções Dinâmicas do Acampamento
     let campHeroRendered = false;
@@ -1034,7 +1063,16 @@ export class GameViewport {
         render: () => this.renderMonsterActor(ctx, m),
       });
     });
-    actorEntries.sort((a, b) => a.depth - b.depth).forEach((entry) => entry.render());
+    // Objetos grandes, como a casa de Shereque, participam da mesma fila de
+    // profundidade. A casa é desenhada depois dos atores que estão atrás dela
+    // e antes dos que estão à frente, evitando que alguém pareça sobre o
+    // telhado só porque o cenário veio de um canvas cacheado.
+    const depthObjects = this.isActive
+      ? biomeRegistry.getDepthObjects(biomeKey, ctx, this.width, this.height, frameTime)
+      : [];
+    [...actorEntries, ...depthObjects]
+      .sort((a, b) => a.depth - b.depth)
+      .forEach((entry) => entry.render());
 
     // 4. Desenhar Efeitos Modulares de Habilidades e Combate
     this.effectRegistry.render(ctx);
@@ -1064,6 +1102,9 @@ export class GameViewport {
         } else if (p.type === 'ice_shard') {
           const angle = Math.atan2(p.targetY - p.startY, p.targetX - p.startX);
           drawIceOrbComet(ctx, p.currentX, p.currentY, angle, 1.35);
+        } else if (p.type === 'lollipop') {
+          const angle = Math.atan2(p.targetY - p.startY, p.targetX - p.startX);
+          drawLollipopBolt(ctx, p.currentX, p.currentY, angle, 1.25);
         } else {
           // Flecha real do arqueiro pixel art (Img 1)
           const angle = Math.atan2(p.targetY - p.startY, p.targetX - p.startX);
@@ -1121,6 +1162,19 @@ export class GameViewport {
             ctx.arc(0, 0, 5, 0, Math.PI * 2);
             ctx.fill();
           }
+        } else if (p.type === 'lollipop') {
+          // Impacto doce e colorido do cajado-pirulito.
+          ctx.strokeStyle = `rgba(244, 114, 182, ${alpha * 0.9})`;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, 6 + expProg * 18, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.strokeStyle = `rgba(34, 211, 238, ${alpha * 0.75})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, 3 + expProg * 11, 0, Math.PI * 2);
+          ctx.stroke();
         }
 
         // Desenhar partículas de impacto
@@ -1290,8 +1344,9 @@ export class GameViewport {
       : 1;
     const mobBob = Math.sin(this.heroWalkFrame * 0.8) * 2;
     const isBoss = m.isBoss || false;
-    const mobSpriteSize = isBoss ? 64 : 48;
     const visualKey = m.visualKey || m.key || m.name;
+    const mobSpriteSize = isBoss ? 64 : 48;
+    const visualScale = monsterRegistry.getVisualScale(visualKey);
 
     if (m.spawnTimer > 0) {
       this.renderTeleportPortal(ctx, m.currentX, m.currentY, spawnProgress);
@@ -1301,7 +1356,7 @@ export class GameViewport {
     ctx.globalAlpha = entranceAlpha;
     ctx.translate(m.currentX, m.currentY + mobBob);
     const spawnScale = m.spawnTimer > 0 ? 0.72 + spawnProgress * 0.28 : 1;
-    ctx.scale(spawnScale, spawnScale);
+    ctx.scale(spawnScale * visualScale, spawnScale * visualScale);
 
     if (isBoss) {
       const auraRadius = 24 + Math.sin(Date.now() / 200) * 4;
@@ -1327,11 +1382,13 @@ export class GameViewport {
       isMoving: m.isWalking,
       hitFlash: m.hitFlashTimer > 0,
       state: m.state,
+      isAttacking: m.attackTimer > 0,
+      attackProgress: m.attackDuration > 0 ? 1 - m.attackTimer / m.attackDuration : 0,
     });
     ctx.restore();
 
     if (m.spawnTimer <= 0 || spawnProgress > 0.55) {
-      const plateOffsetY = isBoss ? 42 : 30;
+      const plateOffsetY = monsterRegistry.getNameplateOffsetY(visualKey, isBoss ? 42 : 30) * visualScale;
       this.drawMonsterPlate(ctx, m.currentX, m.currentY - plateOffsetY + mobBob, m, entranceAlpha);
     }
   }
@@ -1507,7 +1564,9 @@ export class GameViewport {
     }
 
     if (msg.arena?.hero) {
-      this.isIsoArena = msg.arena.key === 'forest' || msg.active_biome === 'forest' || msg.active_region === 'forest' || this.regionId === 'forest';
+      const arenaKey = msg.arena.key || msg.active_biome || msg.active_region || this.regionId;
+      this.arenaGeometry = biomeRegistry.getIsoGeometry(arenaKey) || null;
+      this.isIsoArena = Boolean(this.arenaGeometry);
       if (!this.isIsoArena) {
         this.arenaInitialized = false;
       }
@@ -1566,6 +1625,9 @@ export class GameViewport {
     // 2. Atualizar Bioma da Região
     if (msg.active_biome || msg.active_region || msg.region_id || msg.region || msg.regionId || msg.activeRegion) {
       this.regionId = msg.active_biome || msg.active_region || msg.region_id || msg.region || msg.regionId || msg.activeRegion;
+      this.arenaGeometry = this.isActive ? biomeRegistry.getIsoGeometry(this.regionId) || null : biomeRegistry.getIsoGeometry('camp') || null;
+      this.isIsoArena = this.isActive && Boolean(this.arenaGeometry);
+      if (!this.isIsoArena) this.arenaInitialized = false;
     }
 
     // 3. Sincronizar Monstros Ativos
@@ -1585,6 +1647,9 @@ export class GameViewport {
 
       const activeMonsters: any[] = msg.monsters || (msg.monster ? [msg.monster] : []);
       const activeIds = new Set<string>();
+      const hasAuthoritativeBiome = Boolean(
+        msg.arena?.key || msg.active_biome || msg.active_region || msg.region_id || msg.region || msg.regionId || msg.activeRegion,
+      );
 
       activeMonsters.forEach((mob: any, idx: number) => {
         if (!mob) return;
@@ -1597,13 +1662,18 @@ export class GameViewport {
         activeIds.add(mobId);
 
         const vKey = (mob.visual_key || mob.key || mob.name || '').toLowerCase();
-        this.regionId = monsterRegistry.getBiomeKey(vKey) || this.regionId;
+        // O snapshot de região é a fonte autoritativa. O visual do monstro só
+        // serve como fallback para mensagens antigas que não carregavam o
+        // bioma; ele não pode trocar a arena no meio de uma luta.
+        if (!hasAuthoritativeBiome) {
+          this.regionId = monsterRegistry.getBiomeKey(vKey) || this.regionId;
+        }
 
         const gridX = Number(mob.grid_x ?? 22 - (idx % 3));
         const gridY = Number(mob.grid_y ?? 9);
         const isRanged = (mob.attack_type || mob.attackType || '').toLowerCase() === 'ranged';
         const isoPosition = this.arenaActorScreenPosition(gridX, gridY);
-        const isIsoMessage = this.isIsoArena || msg.arena?.key === 'forest';
+        const isIsoMessage = this.isIsoArena;
         const combatWidthScale = this.width / 680;
         const defaultBattleX = isRanged
           ? Math.min(this.width - 100, (270 + (activeMonsters.length - 1 - idx) * 40) * combatWidthScale)
@@ -1643,6 +1713,8 @@ export class GameViewport {
             walkDistance: 0,
             isWalking: false,
             hitFlashTimer: 0,
+            attackTimer: 0,
+            attackDuration: 0.34,
             spawnTimer: 0.85,
             spawnDuration: 0.85,
           };
@@ -1755,11 +1827,23 @@ export class GameViewport {
 
       // Disparo de magia/fogo de monstros à distância contra o herói
       this.monsters.forEach((m) => {
+        // O evento confirma que pelo menos um inimigo acertou o herói. Como o
+        // snapshot não informa o atacante individual, todos recebem um pulso
+        // visual curto; isso evita que ataques corpo a corpo pareçam estáticos.
+        m.attackTimer = m.attackDuration;
         if (m.attackType === 'ranged') {
           const projectile = monsterRegistry.getProjectile(m.visualKey || m.key || '');
           const isMagicMob = (projectile.type as string) === 'spell' || projectile.color.includes('38bdf8') || projectile.color.includes('purple');
           const isStaffMob = (m.visualKey || m.key || '').includes('mage') || (m.visualKey || m.key || '').includes('darkmage') || (m.visualKey || m.key || '').includes('necromancer');
-          const mobProjType = projectile.type === 'fireball' ? 'fireball' : isStaffMob ? 'staff_vortex' : isMagicMob ? 'wand_star' : 'arrow';
+          const mobProjType = projectile.type === 'lollipop'
+            ? 'lollipop'
+            : projectile.type === 'fireball'
+              ? 'fireball'
+              : isStaffMob
+                ? 'staff_vortex'
+                : isMagicMob
+                  ? 'wand_star'
+                  : 'arrow';
 
           this.projectiles.push({
             id: `enemy_proj_${Date.now()}_${Math.random()}`,

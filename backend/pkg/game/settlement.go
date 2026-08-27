@@ -148,7 +148,11 @@ type SettlementAutomationResult struct {
 	CraftResult       *CraftResult               `json:"craft_result,omitempty"`
 	Inventory         *InventoryData             `json:"inventory,omitempty"`
 	GoldBank          int64                      `json:"gold_bank"`
-	CharacterRevision int64                      `json:"character_revision"`
+	// GoldDelta é a mutação aplicada pelo banco nesta operação específica.
+	// Quando a sessão possui ouro ainda não checkpointado, aplicar o delta em
+	// memória é mais seguro do que substituir pelo saldo absoluto lido do DB.
+	GoldDelta         int64 `json:"gold_delta,omitempty"`
+	CharacterRevision int64 `json:"character_revision"`
 }
 
 var settlementRarityOrder = map[string]int{

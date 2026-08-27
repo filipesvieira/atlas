@@ -126,7 +126,7 @@ var (
 		},
 		"trophy_shereque_fiona": {
 			Key:                 "trophy_shereque_fiona",
-			Name:                "Troféu: Tiara da Fiona Arrazadora",
+			Name:                "Troféu: Tiara da Feiona Arrazadora",
 			Icon:                "🐸",
 			Rarity:              "Raro",
 			Description:         "Adorno régio resgatado do pântano de Shereque.",

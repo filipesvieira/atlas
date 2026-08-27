@@ -190,12 +190,15 @@ var ExpeditionRegions = map[string]ExpeditionRegion{
 		Icon:               "🍞",
 		MaxStages:          5,
 		RequiresUnlockFrom: "",
-		DropsPreview:       []string{"Clava de Madeira", "Machadinha de Madeira", "Broquel de Madeira", "Túnica de Couro", "Sandálias Ágeis", "Tome: Golpe Giratório", "Manual: Cabana do Aventureiro"},
+		DropsPreview:       []string{"Clava de Madeira", "Machadinha de Madeira", "Cajado de Pirulito", "Broquel de Madeira", "Túnica de Couro", "Sandálias Ágeis", "Tome: Golpe Giratório", "Manual: Cabana do Aventureiro"},
 		Monsters: []Monster{
-			{Key: "shereque_ogre", VisualKey: "shereque_ogre", Name: "Ogre Verde", Level: 2, Health: 80, MaxHealth: 80, Attack: 9, AttackType: AttackTypeMelee},
+			{Key: "shereque_ogre", VisualKey: "shereque_ogre", Name: "Ogro Verde", Level: 2, Health: 80, MaxHealth: 80, Attack: 9, AttackType: AttackTypeMelee},
 			{Key: "shereque_donkey", VisualKey: "shereque_donkey", Name: "Burro Falante", Level: 4, Health: 100, MaxHealth: 100, Attack: 12, AttackType: AttackTypeMelee},
+			// Ágil e à distância, mas menos resistente e menos perigoso que os
+			// demais inimigos da vila para preservar a curva inicial.
+			{Key: "shereque_cookie", VisualKey: "shereque_cookie", Name: "Biscoito Encantado", Level: 3, Health: 75, MaxHealth: 75, Attack: 8, AttackType: AttackTypeRanged, MovementSpeedMultiplier: 1.18},
 		},
-		Boss: Monster{Key: "shereque_boss_fiona", VisualKey: "shereque_boss_fiona", IsBoss: true, Name: "Fiona Arrazadora 🐸", Level: 5, Health: 560, MaxHealth: 560, Attack: 30, AttackType: AttackTypeMelee},
+		Boss: Monster{Key: "shereque_boss_fiona", VisualKey: "shereque_boss_fiona", IsBoss: true, Name: "Feiona Arrazadora 🐸", Level: 5, Health: 560, MaxHealth: 560, Attack: 30, AttackType: AttackTypeMelee},
 	},
 	"chapolin": {
 		ID:                 "chapolin",

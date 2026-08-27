@@ -25,8 +25,8 @@ for (const match of profileSource.matchAll(/"([^"]+)":\s*\{\s*(?:GuaranteedDrops
 for (const match of profileSource.matchAll(/"([a-z0-9_]+)":\s*"part_[a-z0-9_]+"/gm)) {
   profileKeys.add(match[1]);
 }
-if (profileKeys.size !== 39) {
-  errors.push(`Esperados 39 perfis temáticos de monstro, encontrados ${profileKeys.size}`);
+if (profileKeys.size !== 40) {
+  errors.push(`Esperados 40 perfis temáticos de monstro, encontrados ${profileKeys.size}`);
 }
 
 // Verificar recursos referenciados nos perfis
@@ -65,6 +65,7 @@ for (const expected of expectedRenderers) {
 
 // 5. Validar Layout dos Slots
 const layoutSource = read('frontend/src/game/camp/CampLayoutRegistry.ts');
+const isoGeometrySource = read('frontend/src/game/IsoWorldGeometry.ts');
 const requiredSlots = ['center', 'north', 'west', 'east', 'south'];
 for (const slot of requiredSlots) {
   if (!layoutSource.includes(`${slot}:`)) {
@@ -75,8 +76,8 @@ for (const slot of requiredSlots) {
 
 // 6. Garantir que frontend e backend concordem com o terreno V3.
 const backendLayoutSource = read('backend/pkg/game/camp_layout.go');
-const frontendWidth = Number(layoutSource.match(/CAMP_GRID_WIDTH\s*=\s*(\d+)/)?.[1] || 0);
-const frontendHeight = Number(layoutSource.match(/CAMP_GRID_HEIGHT\s*=\s*(\d+)/)?.[1] || 0);
+const frontendWidth = Number(isoGeometrySource.match(/gridWidth:\s*(\d+)/)?.[1] || 0);
+const frontendHeight = Number(isoGeometrySource.match(/gridHeight:\s*(\d+)/)?.[1] || 0);
 const backendWidth = Number(backendLayoutSource.match(/CampGridWidth\s*=\s*(\d+)/)?.[1] || 0);
 const backendHeight = Number(backendLayoutSource.match(/CampGridHeight\s*=\s*(\d+)/)?.[1] || 0);
 const backendLayoutVersion = Number(backendLayoutSource.match(/CampLayoutVersion\s*=\s*(\d+)/)?.[1] || 0);

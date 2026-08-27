@@ -10,6 +10,14 @@ import {
 } from './CampLayoutRegistry';
 import { BuildingRenderContext, CampPlacementPreview } from './types';
 import { constructionOverlayRenderer } from './renderers/ConstructionOverlayRenderer';
+import {
+  buildCampScreenRoute,
+  CampObstacle,
+  CampRoute,
+  findNearestCampWalkableTile,
+  getCampObstacles,
+  sampleCampScreenRoute,
+} from './CampCollision';
 
 interface SceneRenderEntry {
   depth: number;
@@ -44,6 +52,34 @@ const MAX_VISIBLE_RESIDENTS = 10;
 export class CampSceneRenderer {
   private hitRegions = new Map<string, { x: number; y: number; width: number; height: number }>();
   private placementPreview: CampPlacementPreview | null = null;
+  private collisionObstacles: CampObstacle[] = [];
+  private collisionSignature = '';
+  private collisionRoutes = new Map<string, CampRoute>();
+
+  private refreshCollision(camp: CampState | null) {
+    const obstacles = getCampObstacles(camp);
+    const signature = obstacles
+      .map((obstacle) => `${obstacle.slotKey}:${obstacle.tileX},${obstacle.tileY},${obstacle.width},${obstacle.height}`)
+      .sort()
+      .join('|');
+    if (signature === this.collisionSignature) return;
+    this.collisionSignature = signature;
+    this.collisionObstacles = obstacles;
+    this.collisionRoutes.clear();
+  }
+
+  private getCollisionRoute(startX: number, startY: number, endX: number, endY: number) {
+    const key = `${startX},${startY}->${endX},${endY}`;
+    const cached = this.collisionRoutes.get(key);
+    if (cached) return cached;
+    const route = buildCampScreenRoute(
+      { x: startX, y: startY },
+      { x: endX, y: endY },
+      this.collisionObstacles,
+    );
+    this.collisionRoutes.set(key, route);
+    return route;
+  }
 
   public setPlacementPreview(preview: CampPlacementPreview | null) {
     this.placementPreview = preview;
@@ -72,9 +108,11 @@ export class CampSceneRenderer {
   }
 
   /** Posição visual do herói no acampamento, compartilhando a malha dos moradores. */
-  public getHeroSceneState(time: number): CampHeroSceneState {
-    const start = tileToScreen(8, 14);
-    const end = tileToScreen(15, 9);
+  public getHeroSceneState(time: number, camp: CampState | null = null): CampHeroSceneState {
+    this.refreshCollision(camp);
+    const route = this.getCollisionRoute(8, 14, 15, 9);
+    const start = sampleCampScreenRoute(route, 0);
+    const end = sampleCampScreenRoute(route, 1);
     const cycle = 18000;
     const progress = (time % cycle) / cycle;
     let x = start.x;
@@ -116,6 +154,7 @@ export class CampSceneRenderer {
   ) {
     const slotsMap = camp?.buildings || {};
     const blueprintsMap = camp?.blueprints || {};
+    this.refreshCollision(camp);
     this.hitRegions.clear();
 
     const renderQueue: SceneRenderEntry[] = [];
@@ -201,7 +240,7 @@ export class CampSceneRenderer {
     }
 
     if (heroRenderer) {
-      const heroState = this.getHeroSceneState(time);
+      const heroState = this.getHeroSceneState(time, camp);
       renderQueue.push({
         depth: heroState.groundY,
         stableOrder: stableOrder++,
@@ -271,11 +310,10 @@ export class CampSceneRenderer {
     const visibleResidents = [...craftingResidents.slice(0, MAX_VISIBLE_RESIDENTS), ...visibleIdle]
       .slice(0, MAX_VISIBLE_RESIDENTS);
 
-    const route = (sx: number, sy: number, ex: number, ey: number) => {
-      const start = tileToScreen(sx, sy);
-      const end = tileToScreen(ex, ey);
-      return { startX: start.x, startY: start.y, endX: end.x, endY: end.y };
-    };
+    this.refreshCollision(camp);
+    const route = (sx: number, sy: number, ex: number, ey: number) => (
+      this.getCollisionRoute(sx, sy, ex, ey)
+    );
 
     // Rotas longas e espalhadas pelo terreno V3. Com 20+ moradores o sistema
     // simula a população inteira, mas somente um subconjunto representativo é
@@ -313,6 +351,8 @@ export class CampSceneRenderer {
       let currentY: number;
       let isWalking = false;
       let facing = 1;
+      const start = sampleCampScreenRoute(selectedRoute, 0);
+      const end = sampleCampScreenRoute(selectedRoute, 1);
 
       if (isCrafting) {
         const target = this.resolveWorkPoint(camp, skills, index);
@@ -320,23 +360,25 @@ export class CampSceneRenderer {
         currentY = target.y;
       } else if (cycleProgress < 0.43) {
         const t = cycleProgress / 0.43;
-        currentX = selectedRoute.startX + (selectedRoute.endX - selectedRoute.startX) * t;
-        currentY = selectedRoute.startY + (selectedRoute.endY - selectedRoute.startY) * t + Math.sin(t * Math.PI * 4) * 1.5;
+        const point = sampleCampScreenRoute(selectedRoute, t);
+        currentX = point.x;
+        currentY = point.y + Math.sin(t * Math.PI * 4) * 1.5;
         isWalking = true;
-        facing = selectedRoute.endX >= selectedRoute.startX ? 1 : -1;
+        facing = end.x >= start.x ? 1 : -1;
       } else if (cycleProgress < 0.52) {
-        currentX = selectedRoute.endX;
-        currentY = selectedRoute.endY;
+        currentX = end.x;
+        currentY = end.y;
         facing = 1;
       } else if (cycleProgress < 0.94) {
         const t = (cycleProgress - 0.52) / 0.42;
-        currentX = selectedRoute.endX + (selectedRoute.startX - selectedRoute.endX) * t;
-        currentY = selectedRoute.endY + (selectedRoute.startY - selectedRoute.endY) * t + Math.sin(t * Math.PI * 4) * 1.5;
+        const point = sampleCampScreenRoute(selectedRoute, 1 - t);
+        currentX = point.x;
+        currentY = point.y + Math.sin(t * Math.PI * 4) * 1.5;
         isWalking = true;
-        facing = selectedRoute.endX >= selectedRoute.startX ? -1 : 1;
+        facing = end.x >= start.x ? -1 : 1;
       } else {
-        currentX = selectedRoute.startX;
-        currentY = selectedRoute.startY;
+        currentX = start.x;
+        currentY = start.y;
         facing = -1;
       }
 
@@ -366,17 +408,24 @@ export class CampSceneRenderer {
     else if (skills.has('alchemist')) preferredBuilding = 'alchemy_bench';
 
     const building = Object.values(camp?.buildings || {}).find((slot) => slot.building_key === preferredBuilding && slot.level > 0);
+    this.refreshCollision(camp);
+    const obstacles = this.collisionObstacles;
     if (!building) {
-      const fallback = tileToScreen(12 + (index % 3), 10 + (index % 2));
+      const fallbackTile = findNearestCampWalkableTile({ x: 12 + (index % 3), y: 10 + (index % 2) }, obstacles);
+      const fallback = tileToScreen(fallbackTile.x, fallbackTile.y);
       return { x: fallback.x + (index % 2 === 0 ? -7 : 7), y: fallback.y };
     }
 
     const fp = getGridFootprint(building.building_key, building.rotation || 0);
-    const center = tileToScreen(building.tile_x + (fp.width - 1) / 2, building.tile_y + (fp.height - 1) / 2);
+    const accessTile = findNearestCampWalkableTile({
+      x: building.tile_x + Math.floor(fp.width / 2),
+      y: building.tile_y + fp.height,
+    }, obstacles);
+    const center = tileToScreen(accessTile.x, accessTile.y);
     const lane = index % 3;
     return {
-      x: center.x + (lane - 1) * 13,
-      y: center.y + fp.height * 4 + 10 + (lane % 2) * 4,
+      x: center.x + (lane - 1) * 6,
+      y: center.y + (lane % 2) * 3,
     };
   }
 

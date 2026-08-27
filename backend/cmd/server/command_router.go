@@ -30,17 +30,17 @@ var economyCommandLimiter = struct {
 func economyCommandLimit(action string) (int, time.Duration, bool) {
 	switch action {
 	case "MOVE_HERO":
-		return 20, time.Second, true
-	case "REQUEST_CRAFT_PREVIEW":
-		return 20, time.Second, true
-	case "REQUEST_ECONOMY_SYNC":
-		return 10, time.Second, true
+		return 30, time.Second, true
+	case "REQUEST_CRAFT_PREVIEW", "REQUEST_ECONOMY_SYNC", "REQUEST_STATE_SYNC", "SALVAGE_PREVIEW", "REQUEST_AUTO_SELL_PREVIEW":
+		return 8, time.Second, true
 	case "CRAFT_ITEM":
-		return 50, 2 * time.Second, true
-	case "START_GATHERING", "CANCEL_GATHERING", "CLAIM_GATHERING_REWARDS", "CLAIM_PENDING_CRAFT", "CLAIM_PENDING_RESOURCES", "CREATE_HERO_DESIRE", "CANCEL_HERO_DESIRE", "CLAIM_ARMORY_ITEM", "TRANSFER_TREASURY_GOLD", "UPDATE_TREASURY_POLICY", "MOVE_CAMP_BUILDING", "CONSUME_FOOD":
-		return 10, 2 * time.Second, true
+		return 4, 2 * time.Second, true
+	case "START_GATHERING", "CANCEL_GATHERING", "CLAIM_GATHERING_REWARDS", "CLAIM_PENDING_CRAFT", "CLAIM_PENDING_RESOURCES", "CREATE_HERO_DESIRE", "CANCEL_HERO_DESIRE", "CLAIM_ARMORY_ITEM", "TRANSFER_TREASURY_GOLD", "UPDATE_TREASURY_POLICY", "MOVE_CAMP_BUILDING", "START_BUILDING_UPGRADE", "DISCARD_RESOURCE", "SALVAGE_ITEM", "SALVAGE_BATCH", "LEARN_BUILDING_BLUEPRINT", "CONSUME_FOOD":
+		return 6, 2 * time.Second, true
 	default:
-		return 0, 0, false
+		// Toda ação conhecida tem uma barreira global. Isso impede que comandos
+		// baratos individualmente sejam combinados para criar um flood caro.
+		return 30, time.Second, true
 	}
 }
 
@@ -49,21 +49,34 @@ func allowEconomyCommand(charID, action string, now time.Time) bool {
 	if !limited {
 		return true
 	}
-	key := charID + ":" + action
 	economyCommandLimiter.Lock()
 	defer economyCommandLimiter.Unlock()
-	cutoff := now.Add(-window)
-	recent := economyCommandLimiter.hits[key][:0]
-	for _, hit := range economyCommandLimiter.hits[key] {
-		if hit.After(cutoff) {
-			recent = append(recent, hit)
+
+	allowKey := func(key string, keyLimit int, keyWindow time.Duration) bool {
+		cutoff := now.Add(-keyWindow)
+		recent := economyCommandLimiter.hits[key][:0]
+		for _, hit := range economyCommandLimiter.hits[key] {
+			if hit.After(cutoff) {
+				recent = append(recent, hit)
+			}
 		}
+		if len(recent) >= keyLimit {
+			economyCommandLimiter.hits[key] = recent
+			return false
+		}
+		economyCommandLimiter.hits[key] = append(recent, now)
+		return true
 	}
-	if len(recent) >= limit {
-		economyCommandLimiter.hits[key] = recent
+
+	// Bucket realmente global por personagem/conexão: combinar várias ações
+	// diferentes não pode contornar os limites específicos de cada comando.
+	if !allowKey(charID+":*", 60, time.Second) {
 		return false
 	}
-	economyCommandLimiter.hits[key] = append(recent, now)
+	if !allowKey(charID+":"+action, limit, window) {
+		return false
+	}
+
 	economyCommandLimiter.calls++
 	if economyCommandLimiter.calls%256 == 0 {
 		stale := now.Add(-10 * time.Minute)
@@ -119,21 +132,45 @@ var commandHandlers = map[string]CommandHandler{
 	"CONSUME_FOOD":                handleConsumeFood,
 }
 
+func validateClientAction(action ClientAction) error {
+	if len(action.Action) == 0 || len(action.Action) > 40 || len(action.RequestID) > 100 ||
+		len(action.ItemID) > 80 || len(action.Slot) > 32 || len(action.RegionID) > 80 || len(action.Region) > 80 ||
+		len(action.Stance) > 24 || len(action.Skill) > 80 || len(action.Stat) > 24 || len(action.Pack) > 80 ||
+		len(action.ExpeditionKey) > 80 || len(action.RecipeKey) > 160 || len(action.CatalystKey) > 80 ||
+		len(action.ActivityID) > 64 || len(action.DesireID) > 64 || len(action.ArmoryID) > 64 ||
+		len(action.TargetRarity) > 30 || len(action.Direction) > 16 || len(action.SlotKey) > 40 ||
+		len(action.BuildingKey) > 80 || len(action.ResourceKey) > 80 || len(action.ItemIDs) > 200 {
+		return fmt.Errorf("payload excede os limites permitidos")
+	}
+	for _, itemID := range action.ItemIDs {
+		if len(itemID) == 0 || len(itemID) > 80 {
+			return fmt.Errorf("lista de itens contém identificador inválido")
+		}
+	}
+	if action.Quantity < 0 || action.Quantity > 1_000_000_000 {
+		return fmt.Errorf("quantidade fora dos limites permitidos")
+	}
+	return nil
+}
+
 // DispatchCommand executa o handler apropriado para a ação recebida.
 func DispatchCommand(ctx *CommandContext) error {
 	if ctx == nil || ctx.Session == nil {
 		return fmt.Errorf("contexto ou sessão inválida")
 	}
-	handler, exists := commandHandlers[ctx.Action.Action]
-	if !exists {
-		log.Printf("⚠️ Ação WebSocket desconhecida ou não registrada: %s (char: %s)", ctx.Action.Action, ctx.CharID)
-		return nil
-	}
-	if len(ctx.Action.RequestID) > 100 || len(ctx.Action.ExpeditionKey) > 80 || len(ctx.Action.RecipeKey) > 160 || len(ctx.Action.CatalystKey) > 80 || len(ctx.Action.ActivityID) > 64 || len(ctx.Action.DesireID) > 64 || len(ctx.Action.ArmoryID) > 64 || len(ctx.Action.TargetRarity) > 30 || len(ctx.Action.Direction) > 16 || len(ctx.Action.SlotKey) > 40 || len(ctx.Action.BuildingKey) > 80 || len(ctx.Action.ResourceKey) > 80 || len(ctx.Action.ItemIDs) > 1000 {
-		return sendEconomyError(ctx, fmt.Errorf("payload econômico excede os limites permitidos"))
+	// Validação e bucket global vêm antes do lookup. Assim ações desconhecidas
+	// não viram um caminho gratuito para flood de logs ou payloads excessivos.
+	if err := validateClientAction(ctx.Action); err != nil {
+		return sendEconomyError(ctx, err)
 	}
 	if !allowEconomyCommand(ctx.CharID, ctx.Action.Action, time.Now().UTC()) {
 		return sendEconomyError(ctx, fmt.Errorf("muitas operações em sequência; aguarde um instante"))
+	}
+	handler, exists := commandHandlers[ctx.Action.Action]
+	if !exists {
+		log.Printf("⚠️ Ação WebSocket desconhecida ou não registrada: %q (char: %s)", ctx.Action.Action, ctx.CharID)
+		ctx.Session.SendMessage(game.CombatMessage{Type: "COMMAND_REJECTED", RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"), LogText: "❌ Ação desconhecida."})
+		return nil
 	}
 	return handler(ctx)
 }
@@ -219,49 +256,44 @@ func handleMoveCampBuilding(ctx *CommandContext) error {
 }
 
 func handleStartBuildingUpgrade(ctx *CommandContext) error {
-	ctx.Session.Mu.Lock()
-	defer ctx.Session.Mu.Unlock()
 	slotKey := ctx.Action.SlotKey
 	buildingKey := ctx.Action.BuildingKey
 	if slotKey == "" && buildingKey != "" {
 		slotKey = game.CampBuildingInstanceKey(buildingKey)
 	}
 	if buildingKey == "" && slotKey != "" {
+		ctx.Session.Mu.Lock()
 		if ctx.Session.Camp != nil {
 			if slot, ok := ctx.Session.Camp.Buildings[slotKey]; ok {
 				buildingKey = slot.BuildingKey
 			}
 		}
+		ctx.Session.Mu.Unlock()
 		if buildingKey == "" {
-			buildingKey = game.SlotToBuildingMap[slotKey] // compatibilidade com clientes antigos
+			buildingKey = game.SlotToBuildingMap[slotKey]
 		}
 	}
+
+	// A mutação e as leituras seguintes são I/O de PostgreSQL e acontecem sem
+	// Session.Mu. O lock protege somente a troca do snapshot em memória.
 	updatedCamp, err := db.StartBuildingUpgrade(ctx.AccountID, ctx.CharID, slotKey, buildingKey)
 	if err != nil {
-		ctx.Session.SendMessageLocked(game.CombatMessage{
-			Type:      "CAMP_ERROR",
-			Timestamp: time.Now().Format("15:04:05"),
-			LogText:   fmt.Sprintf("❌ Erro na construção: %v", err),
-		})
+		ctx.Session.SendMessage(game.CombatMessage{Type: "CAMP_ERROR", Timestamp: time.Now().Format("15:04:05"), LogText: fmt.Sprintf("❌ Erro na construção: %v", err)})
 		return err
 	}
-	ctx.Session.Camp = updatedCamp
 	updatedRes, resourcesErr := db.GetCharacterResources(ctx.CharID)
+	updatedChar, characterErr := db.GetCharacterByID(ctx.CharID)
+	updatedResSnap, snapshotErr := db.GetCharacterResourceSnapshot(ctx.CharID)
 	if resourcesErr != nil {
 		log.Printf("erro ao recarregar recursos após obra do personagem %s: %v", ctx.CharID, resourcesErr)
-	} else {
-		ctx.Session.Resources = updatedRes
 	}
-	if updatedChar, err := db.GetCharacterByID(ctx.CharID); err == nil {
-		ctx.Session.Character.GoldBank = updatedChar.GoldBank
-		ctx.Session.Character.StateRevision = updatedChar.StateRevision
-	} else {
-		log.Printf("erro ao recarregar personagem após obra %s: %v", ctx.CharID, err)
+	if characterErr != nil {
+		log.Printf("erro ao recarregar personagem após obra %s: %v", ctx.CharID, characterErr)
 	}
-	updatedResSnap, snapshotErr := db.GetCharacterResourceSnapshot(ctx.CharID)
 	if snapshotErr != nil {
 		log.Printf("erro ao recarregar depósito após obra do personagem %s: %v", ctx.CharID, snapshotErr)
 	}
+
 	buildingName := buildingKey
 	if definition, exists := game.GetBuildingDefinition(buildingKey); exists && definition.Name != "" {
 		buildingName = definition.Name
@@ -277,18 +309,36 @@ func handleStartBuildingUpgrade(ctx *CommandContext) error {
 			}
 		}
 	}
+	goldSpent := int64(0)
+	if definition, exists := game.GetBuildingDefinition(buildingKey); exists && targetLevel > 0 && targetLevel <= len(definition.Levels) {
+		goldSpent = definition.Levels[targetLevel-1].GoldCost
+	}
+
+	ctx.Session.Mu.Lock()
+	ctx.Session.Camp = updatedCamp
+	if resourcesErr == nil {
+		ctx.Session.Resources = updatedRes
+	}
+	if updatedResSnap != nil && ctx.Session.Camp != nil {
+		ctx.Session.Camp.StorageUsed = updatedResSnap.StorageUsed
+		ctx.Session.Camp.StorageCapacity = updatedResSnap.StorageCapacity
+		ctx.Session.Camp.StateRevision = updatedResSnap.Revision
+	}
+	if updatedChar != nil && ctx.Session.Character != nil && updatedChar.StateRevision >= ctx.Session.Character.StateRevision {
+		// O DB debitou somente o custo desta obra. Aplicar o delta preserva ouro
+		// de combate que ainda esteja aguardando o checkpoint periódico.
+		ctx.Session.Character.GoldBank -= goldSpent
+		ctx.Session.Character.StateRevision = updatedChar.StateRevision
+	}
+	characterSnapshot := game.CloneCharacterSnapshot(ctx.Session.Character)
+	campSnapshot := game.CloneCampSnapshot(ctx.Session.Camp)
+	ctx.Session.Mu.Unlock()
+
 	logText := fmt.Sprintf("🔨 Melhoria de %s para o nível %d iniciada com sucesso!", buildingName, targetLevel)
 	if completedImmediately {
 		logText = fmt.Sprintf("🔨 Melhoria de %s para o nível %d concluída imediatamente!", buildingName, targetLevel)
 	}
-	ctx.Session.SendMessageLocked(game.CombatMessage{
-		Type:              "BUILDING_UPGRADE_STARTED",
-		Timestamp:         time.Now().Format("15:04:05"),
-		Character:         game.CloneCharacterSnapshot(ctx.Session.Character),
-		Camp:              game.CloneCampSnapshot(ctx.Session.Camp),
-		ResourceInventory: updatedResSnap,
-		LogText:           logText,
-	})
+	ctx.Session.SendMessage(game.CombatMessage{Type: "BUILDING_UPGRADE_STARTED", Timestamp: time.Now().Format("15:04:05"), Character: characterSnapshot, Camp: campSnapshot, ResourceInventory: updatedResSnap, LogText: logText})
 	return nil
 }
 
@@ -530,8 +580,10 @@ func handleStartGathering(ctx *CommandContext) error {
 	}
 	if updatedCharacter, loadErr := db.GetCharacterByID(ctx.CharID); loadErr == nil {
 		ctx.Session.Mu.Lock()
-		ctx.Session.Character.GoldBank = updatedCharacter.GoldBank
-		ctx.Session.Character.StateRevision = updatedCharacter.StateRevision
+		if ctx.Session.Character != nil && updatedCharacter.StateRevision >= ctx.Session.Character.StateRevision {
+			ctx.Session.Character.GoldBank += activity.HeroGoldDelta
+			ctx.Session.Character.StateRevision = updatedCharacter.StateRevision
+		}
 		ctx.Session.Mu.Unlock()
 	}
 	ctx.Session.Mu.Lock()
@@ -604,15 +656,18 @@ func handleClaimGathering(ctx *CommandContext) error {
 }
 
 func handleTransferTreasuryGold(ctx *CommandContext) error {
-	settlement, heroGold, err := db.TransferSettlementGold(ctx.CharID, ctx.Action.Direction, ctx.Action.Quantity, ctx.Action.RequestID)
+	settlement, _, err := db.TransferSettlementGold(ctx.CharID, ctx.Action.Direction, ctx.Action.Quantity, ctx.Action.RequestID)
 	if err != nil {
 		return sendEconomyError(ctx, err)
 	}
 	updatedCharacter, loadErr := db.GetCharacterByID(ctx.CharID)
+	goldDelta := -ctx.Action.Quantity
+	if ctx.Action.Direction == "withdraw" {
+		goldDelta = ctx.Action.Quantity
+	}
 	ctx.Session.Mu.Lock()
-	ctx.Session.Character.GoldBank = heroGold
-	if loadErr == nil {
-		ctx.Session.Character.GoldBank = updatedCharacter.GoldBank
+	if loadErr == nil && ctx.Session.Character != nil && updatedCharacter.StateRevision >= ctx.Session.Character.StateRevision {
+		ctx.Session.Character.GoldBank += goldDelta
 		ctx.Session.Character.StateRevision = updatedCharacter.StateRevision
 	}
 	character := game.CloneCharacterSnapshot(ctx.Session.Character)
@@ -662,79 +717,77 @@ func handleCraftPreview(ctx *CommandContext) error {
 }
 
 func handleCraftItem(ctx *CommandContext) error {
-	ctx.Session.Mu.Lock()
-	defer ctx.Session.Mu.Unlock()
 	if ctx.Action.RequestID == "" {
-		return sendEconomyErrorLocked(ctx, fmt.Errorf("request_id obrigatório para produção em lote"))
+		return sendEconomyError(ctx, fmt.Errorf("request_id obrigatório para produção em lote"))
 	}
 	requested := int(ctx.Action.Quantity)
 	if requested < 1 {
 		requested = 1
 	}
-	if requested > 50 {
-		requested = 50
+	if requested > 20 {
+		requested = 20
 	}
-	batch := &game.CraftBatchResult{
-		RequestID:      ctx.Action.RequestID,
-		RecipeKey:      ctx.Action.RecipeKey,
-		Requested:      requested,
-		RarityCounts:   map[string]int{},
-		RandomFailures: 0,
+	result, batch, err := db.CraftBatch(ctx.CharID, ctx.Action.RecipeKey, ctx.Action.CatalystKey, ctx.Action.RequestID, requested, ctx.Action.PreviewRevision)
+	if err != nil {
+		return sendEconomyError(ctx, err)
 	}
-	requestPrefix := ctx.Action.RequestID
-	if len(requestPrefix) > 88 {
-		requestPrefix = requestPrefix[:88]
-	}
-	var result *game.CraftResult
-	for index := 0; index < requested; index++ {
-		previewRevision := int64(0)
-		if index == 0 {
-			previewRevision = ctx.Action.PreviewRevision
-		}
-		individualRequestID := fmt.Sprintf("%s:%02d", requestPrefix, index+1)
-		crafted, craftErr := db.CraftItem(ctx.CharID, ctx.Action.RecipeKey, ctx.Action.CatalystKey, individualRequestID, previewRevision)
-		if craftErr != nil {
-			batch.StopReason = craftErr.Error()
-			break
-		}
-		result = crafted
-		batch.Completed++
-		if crafted.Rarity != "" {
-			batch.RarityCounts[crafted.Rarity]++
-		}
-		if crafted.SentToPending || crafted.SentToOverflow {
-			batch.PendingCount++
-		}
-	}
-	batch.NotCompleted = batch.Requested - batch.Completed
+
+	// Releituras acontecem fora de Session.Mu. O lote já foi confirmado em um único COMMIT.
+	var refreshedInventory *game.InventoryData
 	if updatedInventory, loadErr := db.GetCharacterInventory(ctx.CharID); loadErr == nil {
-		ctx.Session.Inventory = db.ConvertDBInvToGameInv(updatedInventory)
+		refreshedInventory = db.ConvertDBInvToGameInv(updatedInventory)
 	} else {
-		log.Printf("erro ao recarregar inventário após craft do personagem %s: %v", ctx.CharID, loadErr)
+		log.Printf("erro ao recarregar inventário após CraftBatch do personagem %s: %v", ctx.CharID, loadErr)
 	}
-	if updatedCharacter, loadErr := db.GetCharacterByID(ctx.CharID); loadErr == nil {
-		ctx.Session.Character.GoldBank = updatedCharacter.GoldBank
-		ctx.Session.Character.StateRevision = updatedCharacter.StateRevision
-	} else {
-		log.Printf("erro ao recarregar personagem após craft %s: %v", ctx.CharID, loadErr)
+	updatedCharacter, characterErr := db.GetCharacterByID(ctx.CharID)
+	if characterErr != nil {
+		log.Printf("erro ao recarregar personagem após CraftBatch %s: %v", ctx.CharID, characterErr)
 	}
 	economy, economyErr := db.GetCharacterEconomyState(ctx.CharID)
 	if economyErr != nil {
-		log.Printf("erro ao sincronizar economia após craft do personagem %s: %v", ctx.CharID, economyErr)
+		log.Printf("erro ao sincronizar economia após CraftBatch do personagem %s: %v", ctx.CharID, economyErr)
+	}
+
+	goldSpent := int64(0)
+	if recipe, exists := game.GetRecipeDefinition(ctx.Action.RecipeKey); exists && batch != nil {
+		goldSpent = int64(batch.Completed) * recipe.GoldCost
+	}
+	ctx.Session.Mu.Lock()
+	if refreshedInventory != nil {
+		ctx.Session.Inventory = refreshedInventory
+	}
+	if updatedCharacter != nil && ctx.Session.Character != nil && updatedCharacter.StateRevision >= ctx.Session.Character.StateRevision {
+		// Preserve ouro de combate ainda em RAM aplicando apenas o delta confirmado pelo batch.
+		ctx.Session.Character.GoldBank -= goldSpent
+		ctx.Session.Character.StateRevision = updatedCharacter.StateRevision
 	}
 	var resourceInventory *game.ResourceInventorySnapshot
 	if result != nil {
 		resourceInventory = &result.ResourceInventory
+		ctx.Session.Resources = map[string]int64{}
+		for _, resource := range result.ResourceInventory.Items {
+			ctx.Session.Resources[resource.Key] = resource.Quantity
+		}
+		if ctx.Session.Camp != nil {
+			ctx.Session.Camp.StorageUsed = result.ResourceInventory.StorageUsed
+			ctx.Session.Camp.StorageCapacity = result.ResourceInventory.StorageCapacity
+			ctx.Session.Camp.StateRevision = result.ResourceInventory.Revision
+		}
 	}
+	characterSnapshot := game.CloneCharacterSnapshot(ctx.Session.Character)
+	inventorySnapshot := game.CloneInventorySnapshot(ctx.Session.Inventory)
+	campSnapshot := game.CloneCampSnapshot(ctx.Session.Camp)
+	ctx.Session.Mu.Unlock()
+
 	eventType := "CRAFT_BATCH_COMPLETED"
-	if requested == 1 && batch.Completed == 1 {
+	if batch != nil && batch.Requested == 1 && batch.Completed == 1 {
 		eventType = "CRAFT_COMPLETED"
 	}
-	logText := fmt.Sprintf("⚒️ Lote processado: %d/%d produção(ões) concluída(s). Não existe falha aleatória total; cada unidade concluída gerou seu resultado.", batch.Completed, batch.Requested)
+	logText := fmt.Sprintf("⚒️ Lote transacional: %d/%d produção(ões) concluída(s).", batch.Completed, batch.Requested)
 	if batch.StopReason != "" {
-		logText += " O restante não foi produzido: " + batch.StopReason + "."
+		logText += " " + batch.StopReason + "."
 	}
-	ctx.Session.SendMessageLocked(game.CombatMessage{Type: eventType, RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"), Character: game.CloneCharacterSnapshot(ctx.Session.Character), Inventory: game.CloneInventorySnapshot(ctx.Session.Inventory), Economy: economy, CraftResult: result, CraftBatchResult: batch, ResourceInventory: resourceInventory, LogText: logText})
+	ctx.Session.SendMessage(game.CombatMessage{Type: eventType, RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"), Character: characterSnapshot, Inventory: inventorySnapshot, Camp: campSnapshot, Economy: economy, CraftResult: result, CraftBatchResult: batch, ResourceInventory: resourceInventory, LogText: logText})
 	return nil
 }
 
@@ -760,6 +813,10 @@ func handleConsumeFood(ctx *CommandContext) error {
 		ctx.Session.Camp.StateRevision = result.ResourceInventory.Revision
 	}
 	stats := ctx.Session.CalculateDerivedStats()
+	characterSnapshot := game.CloneCharacterSnapshot(ctx.Session.Character)
+	campSnapshot := game.CloneCampSnapshot(ctx.Session.Camp)
+	ctx.Session.Mu.Unlock()
+
 	consumableIcon := "🍽️"
 	if result.ActiveBuff.Category == game.BuffCategoryPotion {
 		consumableIcon = "🧪"
@@ -768,13 +825,12 @@ func handleConsumeFood(ctx *CommandContext) error {
 	if result.ReplacedBuff != nil {
 		logText = fmt.Sprintf("%s %s substituiu %s. Novo efeito ativo até %s.", consumableIcon, result.ActiveBuff.SourceName, result.ReplacedBuff.SourceName, result.ActiveBuff.ExpiresAt.Local().Format("02/01 15:04"))
 	}
-	ctx.Session.SendMessageLocked(game.CombatMessage{
+	ctx.Session.SendMessage(game.CombatMessage{
 		Type: "CONSUMABLE_USED", RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"),
-		Character: game.CloneCharacterSnapshot(ctx.Session.Character), Economy: economy, ConsumeResult: result,
-		ResourceInventory: &result.ResourceInventory, Camp: game.CloneCampSnapshot(ctx.Session.Camp),
+		Character: characterSnapshot, Economy: economy, ConsumeResult: result,
+		ResourceInventory: &result.ResourceInventory, Camp: campSnapshot,
 		TotalAttack: stats.TotalAttack, TotalDefense: stats.TotalDefense, DerivedStats: stats, LogText: logText,
 	})
-	ctx.Session.Mu.Unlock()
 	return nil
 }
 
@@ -882,14 +938,28 @@ func handleCreateHeroDesire(ctx *CommandContext) error {
 }
 
 func handleCancelHeroDesire(ctx *CommandContext) error {
-	if _, err := db.CancelHeroDesire(ctx.CharID, ctx.Action.DesireID); err != nil {
+	result, err := db.CancelHeroDesire(ctx.CharID, ctx.Action.DesireID, ctx.Action.RequestID)
+	if err != nil {
 		return sendEconomyError(ctx, err)
 	}
+	applySettlementAutomationUpdate(ctx.Session, result)
 	economy, err := db.GetCharacterEconomyState(ctx.CharID)
 	if err != nil {
 		return sendEconomyError(ctx, err)
 	}
-	ctx.Session.SendMessage(game.CombatMessage{Type: "HERO_DESIRE_CANCELLED", RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"), Economy: economy, LogText: "🧹 Ambição removida da fila. Resultados já produzidos continuam protegidos no Arsenal."})
+	ctx.Session.Mu.Lock()
+	characterSnapshot := game.CloneCharacterSnapshot(ctx.Session.Character)
+	campSnapshot := game.CloneCampSnapshot(ctx.Session.Camp)
+	ctx.Session.Mu.Unlock()
+	logText := "🧹 Ambição cancelada."
+	if result != nil && result.LogText != "" {
+		logText = "🧹 " + result.LogText
+	}
+	ctx.Session.SendMessage(game.CombatMessage{
+		Type: "HERO_DESIRE_CANCELLED", RequestID: ctx.Action.RequestID, Timestamp: time.Now().Format("15:04:05"),
+		Character: characterSnapshot, Economy: economy, Camp: campSnapshot,
+		ResourceInventory: result.ResourceInventory, LogText: logText,
+	})
 	return nil
 }
 
@@ -917,7 +987,12 @@ func applySettlementAutomationUpdate(session *game.GameSession, update *game.Set
 	session.Mu.Lock()
 	defer session.Mu.Unlock()
 	if session.Character != nil && update.CharacterRevision >= session.Character.StateRevision {
-		session.Character.GoldBank = update.GoldBank
+		// Automação altera ouro apenas quando GoldDelta é explícito. Resultados
+		// que apenas finalizam/recatalogam uma ordem não podem substituir ouro
+		// de combate ainda aguardando checkpoint pelo valor absoluto do DB.
+		if update.GoldDelta != 0 {
+			session.Character.GoldBank += update.GoldDelta
+		}
 		session.Character.StateRevision = update.CharacterRevision
 	}
 	if update.ResourceInventory != nil {

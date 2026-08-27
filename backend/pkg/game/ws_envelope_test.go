@@ -48,8 +48,8 @@ func TestNewWsEnvelope(t *testing.T) {
 		t.Fatalf("Erro inesperado ao criar envelope: %v", err)
 	}
 
-	if env.ProtocolVersion != 2 {
-		t.Errorf("Esperado ProtocolVersion 2, obteve %d", env.ProtocolVersion)
+	if env.ProtocolVersion != 3 {
+		t.Errorf("Esperado ProtocolVersion 3, obteve %d", env.ProtocolVersion)
 	}
 	if env.Sequence != 42 {
 		t.Errorf("Esperado Sequence 42, obteve %d", env.Sequence)

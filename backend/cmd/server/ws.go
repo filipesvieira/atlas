@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/atlas/backend/internal/db"
 	"github.com/atlas/backend/pkg/game"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 )
 
@@ -222,30 +222,16 @@ func resyncInventorySnapshot(target *game.InventoryData, characterID string) {
 }
 
 func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
-	tokenStr := r.URL.Query().Get("token")
-	charID := r.URL.Query().Get("character_id")
-
-	if tokenStr == "" || charID == "" {
-		http.Error(w, "Token ou character_id ausente", http.StatusUnauthorized)
+	ticket := r.URL.Query().Get("ticket")
+	record, ok := consumeWSTicket(ticket, time.Now().UTC())
+	if !ok {
+		http.Error(w, "Ticket WebSocket inválido ou expirado", http.StatusUnauthorized)
 		return
 	}
-
-	claims := &Claims{}
-	tkn, err := jwt.ParseWithClaims(
-		tokenStr,
-		claims,
-		func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("algoritmo de assinatura inesperado: %v", token.Header["alg"])
-			}
-			return appConfig.JWTSecret, nil
-		},
-		jwt.WithValidMethods([]string{"HS256"}),
-		jwt.WithIssuer("atlas-server"),
-		jwt.WithAudience("atlas-client"),
-	)
-	if err != nil || !tkn.Valid {
-		http.Error(w, "Token inválido", http.StatusUnauthorized)
+	charID := record.CharacterID
+	accountID := record.AccountID
+	if charID == "" || accountID == "" {
+		http.Error(w, "Ticket WebSocket inválido", http.StatusUnauthorized)
 		return
 	}
 
@@ -284,7 +270,7 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	char, err := db.GetCharacterByID(charID)
-	if err != nil || char.AccountID != claims.AccountID {
+	if err != nil || char.AccountID != accountID {
 		lifecycleLock.Unlock()
 		http.Error(w, "Personagem não encontrado ou não pertence a esta conta", http.StatusForbidden)
 		return
@@ -322,6 +308,16 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Erro ao fazer upgrade para WebSocket: %v", err)
 		return
 	}
+	const (
+		wsWriteWait = 5 * time.Second
+		wsPongWait  = 60 * time.Second
+		wsPingEvery = 25 * time.Second
+	)
+	conn.SetReadLimit(64 << 10)
+	_ = conn.SetReadDeadline(time.Now().Add(wsPongWait))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(wsPongWait))
+	})
 
 	gameChar := convertDBCharToGameChar(char)
 	game.RefreshProgressionView(gameChar)
@@ -363,11 +359,21 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	campState, err := db.GetCharacterCamp(charID)
 	if err != nil {
-		log.Printf("Aviso ao carregar acampamento: %v", err)
+		log.Printf("erro crítico ao carregar acampamento de %s: %v", charID, err)
+		lifecycleLock.Unlock()
+		_ = conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+		_ = conn.WriteJSON(map[string]string{"error": "Não foi possível carregar o assentamento com segurança. Tente entrar novamente."})
+		_ = conn.Close()
+		return
 	}
 	resourcesMap, err := db.GetCharacterResources(charID)
 	if err != nil {
-		log.Printf("Aviso ao carregar recursos: %v", err)
+		log.Printf("erro crítico ao carregar recursos de %s: %v", charID, err)
+		lifecycleLock.Unlock()
+		_ = conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+		_ = conn.WriteJSON(map[string]string{"error": "Não foi possível carregar o depósito com segurança. Tente entrar novamente."})
+		_ = conn.Close()
+		return
 	}
 
 	// Compêndio de Exploração: backfill de retrocompatibilidade e carregamento inicial
@@ -477,7 +483,6 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	lifecycleLock.Unlock()
 	readerDone := make(chan struct{})
 	leaseHeartbeatDone := make(chan struct{})
-	settlementAutomationDone := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
@@ -494,88 +499,9 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				gathered, gatheringErr := db.ReconcileCompletedGatherings(charID, time.Now().UTC(), 24)
-				if gatheringErr != nil {
-					log.Printf("erro na entrega automática de coletas de %s: %v", charID, gatheringErr)
-				}
-				automation, err := db.AdvanceHeroDesires(charID, time.Now().UTC())
-				if err != nil {
-					log.Printf("erro na automação do assentamento de %s: %v", charID, err)
-				}
-				gatheringChanged := gatheringErr == nil && len(gathered) > 0
-				automationChanged := automation != nil && automation.Changed
-				if !gatheringChanged && !automationChanged {
-					continue
-				}
-				if automationChanged {
-					applySettlementAutomationUpdate(session, automation)
-				}
-				economy, economyErr := db.GetCharacterEconomyState(charID)
-				if economyErr != nil {
-					log.Printf("erro ao sincronizar assentamento de %s: %v", charID, economyErr)
-					continue
-				}
-				var resourceInventory *game.ResourceInventorySnapshot
-				if gatheringChanged {
-					resourceInventory, economyErr = db.GetCharacterResourceSnapshot(charID)
-					if economyErr != nil {
-						log.Printf("erro ao sincronizar depósito após retorno dos trabalhadores de %s: %v", charID, economyErr)
-						continue
-					}
-				} else if automation != nil {
-					resourceInventory = automation.ResourceInventory
-				}
-				session.Mu.Lock()
-				if resourceInventory != nil {
-					session.Resources = map[string]int64{}
-					for _, resource := range resourceInventory.Items {
-						session.Resources[resource.Key] = resource.Quantity
-					}
-					if session.Camp != nil {
-						session.Camp.StorageUsed = resourceInventory.StorageUsed
-						session.Camp.StorageCapacity = resourceInventory.StorageCapacity
-						session.Camp.StateRevision = resourceInventory.Revision
-					}
-				}
-				eventType := "SETTLEMENT_UPDATED"
-				logText := ""
-				var craftResult *game.CraftResult
-				if gatheringChanged {
-					eventType = "GATHERING_AUTO_CLAIMED"
-					logText = fmt.Sprintf("🏡 %d trabalhador(es) retornaram sozinho(s) e entregaram a produção.", len(gathered))
-				}
-				if automationChanged {
-					eventType = automation.EventType
-					craftResult = automation.CraftResult
-					if logText != "" && automation.LogText != "" {
-						logText += " "
-					}
-					logText += automation.LogText
-				}
-				message := game.CombatMessage{
-					Type: eventType, Timestamp: time.Now().Format("15:04:05"),
-					Character: game.CloneCharacterSnapshot(session.Character), Economy: economy,
-					Inventory:         game.CloneInventorySnapshot(session.Inventory),
-					ResourceInventory: resourceInventory, CraftResult: craftResult,
-					Camp: game.CloneCampSnapshot(session.Camp), LogText: logText,
-				}
-				session.SendMessageLocked(message)
-				session.Mu.Unlock()
-			case <-settlementAutomationDone:
-				return
-			}
-		}
-	}()
 
 	defer func() {
 		close(leaseHeartbeatDone)
-		close(settlementAutomationDone)
 		// Interrompe e aguarda o leitor para que nenhuma ação de inventário,
 		// postura ou expedição possa atravessar a captura do snapshot final.
 		_ = conn.Close()
@@ -597,6 +523,9 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 
 		session.StopTicker()
+		if !session.DrainPersistence(5 * time.Second) {
+			log.Printf("aviso: fila de persistência de %s não drenou integralmente antes do logout", charID)
+		}
 		session.Mu.Lock()
 		snapshot := convertGameCharToDBChar(session.Character)
 		snapshot.IsExpeditionActive = session.IsExpeditionActive
@@ -646,7 +575,7 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			cmdCtx := &CommandContext{
-				AccountID: claims.AccountID,
+				AccountID: accountID,
 				CharID:    charID,
 				Session:   session,
 				Action:    act,
@@ -655,21 +584,20 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Envio do Estado Inicial / Boas Vindas. Mantém o lock até a serialização
-	// terminar para que ticker e ações não alterem ponteiros durante o primeiro frame.
-	session.Mu.Lock()
-	initialDerivedStats := session.CalculateDerivedStats()
-	welcomeMsg := "Bem-vindo de volta ao acampamento. Pronto para a próxima expedição."
-	if session.IsExpeditionActive {
-		welcomeMsg = "Sua expedição continua em andamento!"
-	}
-	if autoGatheredOnLogin > 0 {
-		welcomeMsg += fmt.Sprintf(" 🏡 %d trabalhador(es) retornaram e entregaram a produção automaticamente.", autoGatheredOnLogin)
-	}
+	// Envio do Estado Inicial / Boas Vindas. Leituras de PostgreSQL acontecem
+	// antes do mutex: o lock da sessão protege apenas a aplicação/clonagem do
+	// snapshot em memória, nunca I/O de banco ou escrita de rede.
 	initialResourceSnap, initialResourceErr := db.GetCharacterResourceSnapshot(charID)
 	if initialResourceErr != nil {
 		log.Printf("aviso ao carregar snapshot inicial do depósito de %s: %v", charID, initialResourceErr)
-	} else if initialResourceSnap != nil {
+	}
+	initialEconomy, economyErr := db.GetCharacterEconomyState(charID)
+	if economyErr != nil {
+		log.Printf("Aviso ao carregar economia do personagem: %v", economyErr)
+	}
+
+	session.Mu.Lock()
+	if initialResourceErr == nil && initialResourceSnap != nil {
 		// A conciliação de coletas acontece depois da criação da sessão. Atualiza
 		// também o cache em memória para que os ticks seguintes não anunciem um
 		// snapshot anterior ao retorno automático dos trabalhadores.
@@ -683,16 +611,24 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			session.Camp.StateRevision = initialResourceSnap.Revision
 		}
 	}
-	initialEconomy, economyErr := db.GetCharacterEconomyState(charID)
-	if economyErr != nil {
-		log.Printf("Aviso ao carregar economia do personagem: %v", economyErr)
+	initialDerivedStats := session.CalculateDerivedStats()
+	welcomeMsg := "Bem-vindo de volta ao acampamento. Pronto para a próxima expedição."
+	if session.IsExpeditionActive {
+		welcomeMsg = "Sua expedição continua em andamento!"
 	}
+	if autoGatheredOnLogin > 0 {
+		welcomeMsg += fmt.Sprintf(" 🏡 %d trabalhador(es) retornaram e entregaram a produção automaticamente.", autoGatheredOnLogin)
+	}
+	autoSellSettingsSnapshot := session.AutoSellSettings
+	autoPotionSettingsSnapshot := session.AutoPotionSettings
+	autoPotionStateSnapshot := session.AutoPotionState
 	initialMsg := game.CombatMessage{
+		ProtocolVersion:    3,
 		Type:               "WELCOME_EVENT",
 		Timestamp:          time.Now().Format("15:04:05"),
-		Character:          session.Character,
-		Inventory:          session.Inventory,
-		Camp:               session.Camp,
+		Character:          game.CloneCharacterSnapshot(session.Character),
+		Inventory:          game.CloneInventorySnapshot(session.Inventory),
+		Camp:               game.CloneCampSnapshot(session.Camp),
 		ResourceInventory:  initialResourceSnap,
 		TotalAttack:        initialDerivedStats.TotalAttack,
 		TotalDefense:       initialDerivedStats.TotalDefense,
@@ -705,32 +641,50 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		LogText:            welcomeMsg,
 		IsActive:           session.IsExpeditionActive,
 		DiscoveredLoot:     discoveredList,
-		AutoSellSettings:   &session.AutoSellSettings,
-		AutoPotionSettings: &session.AutoPotionSettings,
-		AutoPotionState:    &session.AutoPotionState,
-		OverflowChest:      session.OverflowChest,
+		AutoSellSettings:   &autoSellSettingsSnapshot,
+		AutoPotionSettings: &autoPotionSettingsSnapshot,
+		AutoPotionState:    &autoPotionStateSnapshot,
+		OverflowChest:      append([]game.Item(nil), session.OverflowChest...),
 		Economy:            initialEconomy,
 		ActiveBuffs:        append([]game.ActiveBuff(nil), session.ActiveBuffs...),
 	}
-	writeErr := conn.WriteJSON(initialMsg)
 	session.Mu.Unlock()
-	if writeErr != nil {
+
+	_ = conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+	if writeErr := conn.WriteJSON(initialMsg); writeErr != nil {
 		log.Printf("Erro enviando estado inicial do WebSocket: %v", writeErr)
 		return
 	}
 
-	// Loop Principal de Envio de Eventos do Jogo via WebSocket
+	// Loop Principal de Envio de Eventos do Jogo via WebSocket. Ping e frames
+	// compartilham a mesma goroutine para nunca haver escrita concorrente.
+	pingTicker := time.NewTicker(wsPingEvery)
+	defer pingTicker.Stop()
 	for {
 		select {
 		case <-readerDone:
 			// O navegador já encerrou a leitura (rebuild, troca de personagem ou
 			// fechamento da aba). Não tente escrever um frame depois do close.
 			return
+		case <-pingTicker.C:
+			_ = conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+			if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(wsWriteWait)); err != nil {
+				return
+			}
 		case msg, ok := <-session.SendChannel:
 			if !ok {
 				return
 			}
-			if err := conn.WriteJSON(msg); err != nil {
+			payload, marshalErr := json.Marshal(msg)
+			if marshalErr != nil {
+				game.IncrementTelemetry("ws_marshal_error_total")
+				continue
+			}
+			game.IncrementTelemetry("ws_frames_out_total")
+			game.AddTelemetry("ws_bytes_out_total", int64(len(payload)))
+			_ = conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+			writeStarted := time.Now()
+			if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
 				// A leitura pode ter detectado o fechamento entre o select e a
 				// escrita. É um desligamento normal, não uma falha do jogo.
 				select {
@@ -740,6 +694,9 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 				}
 				log.Printf("Erro enviando WebSocket frame: %v", err)
 				return
+			}
+			if time.Since(writeStarted) > 50*time.Millisecond {
+				game.IncrementTelemetry("ws_slow_write_over_50ms_total")
 			}
 		}
 	}

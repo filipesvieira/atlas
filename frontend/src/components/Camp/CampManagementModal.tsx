@@ -71,9 +71,10 @@ export const CampManagementModal: React.FC<CampManagementModalProps> = ({
   const findBuildingSlot = (buildingKey: string, legacySlot?: string) =>
     Object.values(slotsMap).find((slot) => slot.building_key === buildingKey) || (legacySlot ? slotsMap[legacySlot] : undefined);
 
-  // Filtra construções descobertas
+  // Construções básicas da alpha usam default_unlocked; blueprints continuam
+  // habilitando apenas conteúdo especial futuro.
   const discoveredBuildings = buildingDefinitions.filter((bDef) => {
-    if (bDef.key === 'campfire') return true;
+    if (bDef.default_unlocked || bDef.key === 'campfire') return true;
     if (camp?.blueprints && camp.blueprints[bDef.key]) return true;
     const slot = findBuildingSlot(bDef.key, bDef.slot_type);
     if (slot && slot.level > 0) return true;

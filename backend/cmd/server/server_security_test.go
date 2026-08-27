@@ -113,3 +113,60 @@ func TestSecurity_JWTAlgorithmForgedTokenRejected(t *testing.T) {
 		t.Errorf("Esperava 401 Unauthorized para token forjado com signing method none, obtido %d", resp.StatusCode)
 	}
 }
+func TestSecurity_AuthMiddlewareRejectsJWTInQueryString(t *testing.T) {
+	appConfig, _ = config.LoadConfig()
+	tokenStr, err := generateJWT("player-query", "player@atlas.com", "player")
+	if err != nil {
+		t.Fatalf("Erro gerando JWT: %v", err)
+	}
+	protected := AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/characters?token="+tokenStr, nil)
+	w := httptest.NewRecorder()
+	protected.ServeHTTP(w, req)
+	if w.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("JWT em query string deve ser rejeitado; status=%d", w.Result().StatusCode)
+	}
+}
+
+func TestSecurity_WSTicketIsSingleUseAndExpires(t *testing.T) {
+	now := time.Date(2026, 8, 26, 20, 0, 0, 0, time.UTC)
+	ticket, expiresAt, err := issueWSTicket("account-1", "character-1", now)
+	if err != nil {
+		t.Fatalf("emitir ticket: %v", err)
+	}
+	if !expiresAt.Equal(now.Add(wsTicketTTL)) {
+		t.Fatalf("expiração inesperada: %v", expiresAt)
+	}
+	record, ok := consumeWSTicket(ticket, now.Add(time.Second))
+	if !ok || record.AccountID != "account-1" || record.CharacterID != "character-1" {
+		t.Fatalf("ticket válido não foi consumido corretamente: %+v ok=%v", record, ok)
+	}
+	if _, ok := consumeWSTicket(ticket, now.Add(2*time.Second)); ok {
+		t.Fatal("ticket WebSocket não pode ser reutilizado")
+	}
+
+	expired, _, err := issueWSTicket("account-2", "character-2", now)
+	if err != nil {
+		t.Fatalf("emitir ticket expirável: %v", err)
+	}
+	if _, ok := consumeWSTicket(expired, now.Add(wsTicketTTL+time.Second)); ok {
+		t.Fatal("ticket expirado não pode ser aceito")
+	}
+}
+
+func TestSecurity_WSTicketIssueIsRateLimited(t *testing.T) {
+	authLimiter = newSlidingWindowLimiter()
+	now := time.Date(2026, 8, 26, 20, 0, 0, 0, time.UTC)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/ws-ticket", nil)
+	req.RemoteAddr = "203.0.113.10:40000"
+	for attempt := 0; attempt < 20; attempt++ {
+		if !allowWSTicketIssue(req, "account-rate-test", now.Add(time.Duration(attempt)*time.Millisecond)) {
+			t.Fatalf("tentativa normal %d foi bloqueada antes do limite", attempt+1)
+		}
+	}
+	if allowWSTicketIssue(req, "account-rate-test", now.Add(21*time.Millisecond)) {
+		t.Fatal("emissão de ticket deveria ser bloqueada após o limite por conta")
+	}
+}

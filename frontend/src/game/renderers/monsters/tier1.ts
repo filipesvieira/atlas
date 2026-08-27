@@ -22,6 +22,8 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
       const walkStep = opts.walkStep ?? Math.sin(time / 120) * 3;
       const breathe = Math.sin(time / 400) * 0.7;
       const cx = size / 2;
+      const isAttacking = Boolean(opts.isAttacking || /attack|cast|skill/i.test(opts.state || ''));
+      const attackPulse = isAttacking ? 0.5 + Math.sin(time / 115) * 0.5 : 0;
 
       drawMonsterShadow(ctx, size);
 
@@ -126,13 +128,21 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
       ctx.fillRect(cx - 7, 9 + breathe, 5, 1.8);
       ctx.fillRect(cx + 2, 9 + breathe, 5, 1.8);
 
-      // Olhos vermelhos cansados/irritados
-      ctx.fillStyle = '#dc2626';
-      ctx.fillRect(cx - 6, 11 + breathe, 3.5, 2.2);
-      ctx.fillRect(cx + 2.5, 11 + breathe, 3.5, 2.2);
-      ctx.fillStyle = '#1c1917'; // Pálpebra pesada
-      ctx.fillRect(cx - 6, 10.5 + breathe, 3.5, 1);
-      ctx.fillRect(cx + 2.5, 10.5 + breathe, 3.5, 1);
+      // Olhos vermelhos com piscada irregular, como no Camponês.
+      const blinkPhase = (time + 500) % 4200;
+      const blinking = blinkPhase < 125 || (blinkPhase > 175 && blinkPhase < 220);
+      if (blinking) {
+        ctx.fillStyle = '#365314';
+        ctx.fillRect(cx - 6, 11.5 + breathe, 3.5, 1.5);
+        ctx.fillRect(cx + 2.5, 11.5 + breathe, 3.5, 1.5);
+      } else {
+        ctx.fillStyle = '#dc2626';
+        ctx.fillRect(cx - 6, 11 + breathe, 3.5, 2.2);
+        ctx.fillRect(cx + 2.5, 11 + breathe, 3.5, 2.2);
+        ctx.fillStyle = '#1c1917';
+        ctx.fillRect(cx - 6, 10.5 + breathe, 3.5, 1);
+        ctx.fillRect(cx + 2.5, 10.5 + breathe, 3.5, 1);
+      }
 
       // Nariz bulboso e grande bem arredondado
       ctx.fillStyle = '#84cc16';
@@ -142,22 +152,28 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
       ctx.fillStyle = '#4d7c0f';
       ctx.fillRect(cx - 1.5, 16 + breathe, 3, 1);
 
-      // Boca caída com presas inferiores marfim para cima
+      // Boca abre durante a investida e fala/rosna em repouso.
+      const mouthOpen = isAttacking || Math.sin(time / 310) > 0.35;
       ctx.fillStyle = '#1c1917';
-      ctx.fillRect(cx - 4, 17.5 + breathe, 8, 1.5);
-      ctx.fillStyle = '#fef3c7'; // Presas inferiores
+      ctx.fillRect(cx - 4, 17.5 + breathe, 8, mouthOpen ? 4 : 1.5);
+      ctx.fillStyle = '#fef3c7';
       ctx.fillRect(cx - 3, 16 + breathe, 1.5, 2);
       ctx.fillRect(cx + 1.5, 16 + breathe, 1.5, 2);
+      if (mouthOpen) {
+        ctx.fillStyle = '#dc2626';
+        ctx.fillRect(cx - 2, 20 + breathe, 4, 1);
+      }
 
       // 5. Braço Direito Empunhando Lança Rústica de Madeira com Ponta de Osso
-      const spearSway = Math.sin(time / 180) * 1.5;
-      const spearX = cx - 14;
+      const spearSway = Math.sin(time / 180) * 1.5 + attackPulse * 3.5;
+      const spearX = cx - 14 + attackPulse * 5;
+      const spearTipY = 2 - attackPulse * 4;
 
       // Haste de madeira retorcida
       ctx.strokeStyle = '#78350f';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.moveTo(spearX + spearSway, 3);
+      ctx.moveTo(spearX + spearSway, spearTipY + 1);
       ctx.lineTo(spearX - spearSway * 0.5, 42);
       ctx.stroke();
 
@@ -168,9 +184,9 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
       // Ponta afiada de osso/pedra lascada
       ctx.fillStyle = '#fef3c7';
       ctx.beginPath();
-      ctx.moveTo(spearX + spearSway, 2);
-      ctx.lineTo(spearX + 3 + spearSway, 9);
-      ctx.lineTo(spearX - 3 + spearSway, 9);
+      ctx.moveTo(spearX + spearSway, spearTipY);
+      ctx.lineTo(spearX + 3 + spearSway, 9 - attackPulse * 2);
+      ctx.lineTo(spearX - 3 + spearSway, 9 - attackPulse * 2);
       ctx.closePath();
       ctx.fill();
       ctx.fillStyle = '#cbd5e1'; // Sombra na lâmina
@@ -205,6 +221,7 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
       const breathe = Math.sin(time / 450) * 0.8;
       const tailSway = Math.sin(time / 200) * 2.5;
       const cx = size / 2;
+      const isAttacking = Boolean(opts.isAttacking || /attack|cast|skill/i.test(opts.state || ''));
 
       drawMonsterShadow(ctx, size);
 
@@ -338,14 +355,33 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
       ctx.fill();
 
       // Olhos amendoados dourados/âmbar com pupila
-      ctx.fillStyle = '#f59e0b'; // Âmbar penetrante
-      ctx.beginPath();
-      ctx.ellipse(cx - 13, 11 + breathe, 2.2, 1.6, -0.2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#000000'; // Pupila
-      ctx.fillRect(cx - 13.5, 10.5 + breathe, 1.2, 1.2);
-      ctx.fillStyle = '#ffffff'; // Brilho
-      ctx.fillRect(cx - 14, 10 + breathe, 0.8, 0.8);
+      const blinkPhase = (time + 1250) % 4700;
+      const blinking = blinkPhase < 120 || (blinkPhase > 165 && blinkPhase < 210);
+      if (blinking) {
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(cx - 15, 11.5 + breathe, 4, 1.5);
+      } else {
+        ctx.fillStyle = '#f59e0b'; // Âmbar penetrante
+        ctx.beginPath();
+        ctx.ellipse(cx - 13, 11 + breathe, 2.2, 1.6, -0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#000000'; // Pupila
+        ctx.fillRect(cx - 13.5, 10.5 + breathe, 1.2, 1.2);
+        ctx.fillStyle = '#ffffff'; // Brilho
+        ctx.fillRect(cx - 14, 10 + breathe, 0.8, 0.8);
+      }
+
+      // Focinho abre e fecha em rosnado; durante o ataque a mandíbula fica
+      // aberta por mais tempo para reforçar a leitura de ação.
+      const mouthOpen = isAttacking || Math.sin(time / 280) > 0.45;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(cx - 20, 18 + breathe, 6, mouthOpen ? 4 : 1.5);
+      if (mouthOpen) {
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(cx - 19, 18 + breathe, 2, 1.5);
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(cx - 18, 21 + breathe, 3, 1);
+      }
     },
   },
 
@@ -363,6 +399,7 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
       const time = opts.time || performance.now();
       const breathe = Math.sin(time / 380) * 0.7;
       const cx = size / 2;
+      const isAttacking = Boolean(opts.isAttacking || /attack|cast|skill/i.test(opts.state || ''));
 
       drawMonsterShadow(ctx, size);
 
@@ -462,14 +499,32 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
       ctx.lineTo(cx - 13, 30 + breathe);
       ctx.stroke();
 
-      // Olhos múltiplos vermelhos brilhantes
-      ctx.fillStyle = '#ef4444';
-      ctx.fillRect(cx - 12, 20 + breathe, 2, 2);
-      ctx.fillRect(cx - 10, 19 + breathe, 2.2, 2.2);
-      ctx.fillRect(cx - 13, 23 + breathe, 1.8, 1.8);
-      ctx.fillRect(cx - 8, 20 + breathe, 1.8, 1.8);
-      ctx.fillStyle = '#ffffff'; // Micro brilho nos olhos
-      ctx.fillRect(cx - 10, 19 + breathe, 1, 1);
+      // Olhos múltiplos vermelhos piscam em conjunto, preservando a silhueta
+      // ameaçadora sem exigir uma folha de sprites nova.
+      const blinkPhase = (time + 2300) % 3900;
+      const blinking = blinkPhase < 105 || (blinkPhase > 155 && blinkPhase < 200);
+      if (blinking) {
+        ctx.fillStyle = '#3f0b12';
+        ctx.fillRect(cx - 13, 20.5 + breathe, 7, 1.5);
+      } else {
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(cx - 12, 20 + breathe, 2, 2);
+        ctx.fillRect(cx - 10, 19 + breathe, 2.2, 2.2);
+        ctx.fillRect(cx - 13, 23 + breathe, 1.8, 1.8);
+        ctx.fillRect(cx - 8, 20 + breathe, 1.8, 1.8);
+        ctx.fillStyle = '#ffffff'; // Micro brilho nos olhos
+        ctx.fillRect(cx - 10, 19 + breathe, 1, 1);
+      }
+
+      // Quelíceras e boca abrem durante o disparo venenoso ou em um ciclo
+      // curto de ameaça quando a aranha está parada.
+      const mouthOpen = isAttacking || Math.sin(time / 260) > 0.5;
+      ctx.fillStyle = '#09090b';
+      ctx.fillRect(cx - 14, 26 + breathe, 6, mouthOpen ? 4 : 1.5);
+      if (mouthOpen) {
+        ctx.fillStyle = '#dc2626';
+        ctx.fillRect(cx - 13, 28 + breathe, 4, 1);
+      }
     },
   },
 
@@ -490,6 +545,16 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
       const walkStep = opts.walkStep ?? Math.sin(time / 110) * 3.5;
       const breathe = Math.sin(time / 450) * 1.2;
       const cx = size / 2;
+      const isAttacking = Boolean(opts.isAttacking || /attack|cast|skill/i.test(opts.state || ''));
+      const armLift = isAttacking ? Math.sin(time / 140) * 5 : Math.sin(time / 520) * 1.2;
+      const roarPhase = (time + 900) % 5200;
+      const attackPulse = opts.isAttacking
+        ? Math.sin(Math.max(0, Math.min(1, opts.attackProgress ?? 0)) * Math.PI)
+        : 0;
+      const roarPulse = attackPulse > 0.05
+        ? attackPulse
+        : roarPhase < 440 ? Math.sin((roarPhase / 440) * Math.PI) : 0;
+      const roaring = isAttacking || roarPhase < 440;
 
       drawMonsterShadow(ctx, size);
 
@@ -576,23 +641,23 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
       // Braço Esquerdo
       ctx.fillStyle = '#38bdf8';
       ctx.beginPath();
-      ctx.roundRect(cx - 28, 28 + breathe, 12, 11, 5);
+      ctx.roundRect(cx - 28, 28 + breathe - armLift, 12, 11, 5);
       ctx.fill();
       // Coração na palma esquerda
       ctx.fillStyle = '#1e3a8a';
       ctx.beginPath();
-      ctx.arc(cx - 24, 32 + breathe, 2, 0, Math.PI * 2);
+      ctx.arc(cx - 24, 32 + breathe - armLift, 2, 0, Math.PI * 2);
       ctx.fill();
 
       // Braço Direito
       ctx.fillStyle = '#38bdf8';
       ctx.beginPath();
-      ctx.roundRect(cx + 16, 28 + breathe, 12, 11, 5);
+      ctx.roundRect(cx + 16, 28 + breathe + armLift, 12, 11, 5);
       ctx.fill();
       // Coração na palma direita
       ctx.fillStyle = '#1e3a8a';
       ctx.beginPath();
-      ctx.arc(cx + 24, 32 + breathe, 2, 0, Math.PI * 2);
+      ctx.arc(cx + 24, 32 + breathe + armLift, 2, 0, Math.PI * 2);
       ctx.fill();
 
       // 5. Cabeça Redonda, Topete, Orelhas com Interior Branco e Rosto Zangadinho
@@ -645,32 +710,40 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
       ctx.lineTo(cx + 3, 14 + breathe);
       ctx.stroke();
 
-      // Olhos anime grandes brilhantes
-      // Olho Esquerdo
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.ellipse(cx - 6, 17 + breathe, 4.2, 5.2, -0.1, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#0f172a'; // Pupila
-      ctx.beginPath();
-      ctx.ellipse(cx - 5.5, 17 + breathe, 3.2, 4.2, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff'; // Brilho duplo de anime
-      ctx.fillRect(cx - 7, 14.5 + breathe, 2, 2.2);
-      ctx.fillRect(cx - 5, 18 + breathe, 1.2, 1.2);
+      // Olhos anime grandes com piscada ocasional.
+      const blinkPhase = (time + 2100) % 4600;
+      const blinking = blinkPhase < 140 || (blinkPhase > 185 && blinkPhase < 235);
+      if (blinking) {
+        ctx.fillStyle = '#0284c7';
+        ctx.fillRect(cx - 10, 17 + breathe, 7, 2);
+        ctx.fillRect(cx + 3, 17 + breathe, 7, 2);
+      } else {
+        // Olho Esquerdo
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.ellipse(cx - 6, 17 + breathe, 4.2, 5.2, -0.1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#0f172a'; // Pupila
+        ctx.beginPath();
+        ctx.ellipse(cx - 5.5, 17 + breathe, 3.2, 4.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff'; // Brilho duplo de anime
+        ctx.fillRect(cx - 7, 14.5 + breathe, 2, 2.2);
+        ctx.fillRect(cx - 5, 18 + breathe, 1.2, 1.2);
 
-      // Olho Direito
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.ellipse(cx + 6, 17 + breathe, 4.2, 5.2, 0.1, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath();
-      ctx.ellipse(cx + 5.5, 17 + breathe, 3.2, 4.2, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(cx + 5, 14.5 + breathe, 2, 2.2);
-      ctx.fillRect(cx + 7, 18 + breathe, 1.2, 1.2);
+        // Olho Direito
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.ellipse(cx + 6, 17 + breathe, 4.2, 5.2, 0.1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath();
+        ctx.ellipse(cx + 5.5, 17 + breathe, 3.2, 4.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(cx + 5, 14.5 + breathe, 2, 2.2);
+        ctx.fillRect(cx + 7, 18 + breathe, 1.2, 1.2);
+      }
 
       // Marcas de raio azul nas bochechas
       ctx.strokeStyle = '#0284c7';
@@ -700,12 +773,21 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
       ctx.closePath();
       ctx.fill();
 
-      // Boquinha brava curvada para baixo
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.arc(cx + 1, 28.5 + breathe, 3.5, Math.PI * 1.15, Math.PI * 1.8);
-      ctx.stroke();
+      // Urro do boss: a mandíbula abre de forma visível, com dentes e língua;
+      // o ciclo também ocorre fora do combate para a criatura não parecer uma
+      // imagem parada. Durante o ataque, o urro é imediato.
+      const mouthOpen = roaring;
+      ctx.fillStyle = '#1e3a8a';
+      ctx.fillRect(cx - 6 - roarPulse, 27 + breathe, 12 + roarPulse * 2, mouthOpen ? 5 + roarPulse * 3 : 2);
+      if (mouthOpen) {
+        ctx.fillStyle = '#fef3c7';
+        ctx.fillRect(cx - 4 - roarPulse * 0.5, 27 + breathe, 8 + roarPulse, 2);
+        ctx.fillStyle = '#f43f5e';
+        ctx.fillRect(cx - 3, 31 + breathe + roarPulse * 2, 6, 1 + roarPulse);
+        ctx.fillStyle = '#bae6fd';
+        ctx.fillRect(cx - 25, 18 - roarPulse * 5, 3, 2);
+        ctx.fillRect(cx + 22, 16 - roarPulse * 4, 3, 2);
+      }
     },
   },
 
@@ -725,47 +807,233 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
 
       drawMonsterShadow(ctx, size);
 
-      // Pernas do Ogro com Passos
+      // Pernas grossas do Ogro com passos pesados.
       ctx.fillStyle = '#78350f'; // Calças
-      ctx.fillRect(cx - 14 - walkStep, 36, 9, 8);
-      ctx.fillRect(cx + 5 + walkStep, 36, 9, 8);
+      ctx.fillRect(cx - 16 - walkStep, 36, 11, 8);
+      ctx.fillRect(cx + 5 + walkStep, 36, 11, 8);
       ctx.fillStyle = '#451a03'; // Botas
-      ctx.fillRect(cx - 15 - walkStep, 41, 10, 4);
-      ctx.fillRect(cx + 4 + walkStep, 41, 10, 4);
+      ctx.fillRect(cx - 18 - walkStep, 41, 13, 4);
+      ctx.fillRect(cx + 5 + walkStep, 41, 13, 4);
 
-      // Túnica Bege e Colete de Couro Marrom sobre Corpo Verde
-      ctx.fillStyle = '#15803d'; // Pele verde de ogro
-      ctx.fillRect(cx - 16, 16 + breathe, 32, 22);
-      ctx.fillStyle = '#fef3c7'; // Camisa bege/branca
-      ctx.fillRect(cx - 12, 18 + breathe, 24, 18);
-      ctx.fillStyle = '#78350f'; // Colete de couro marrom
-      ctx.fillRect(cx - 14, 18 + breathe, 8, 18);
-      ctx.fillRect(cx + 6, 18 + breathe, 8, 18);
+      // Ombros e braços largos: a silhueta precisa comunicar um ogro pesado,
+      // e não apenas um humano verde com colete.
+      ctx.fillStyle = '#14532d';
+      ctx.fillRect(cx - 23, 18 + breathe, 10, 18);
+      ctx.fillRect(cx + 13, 18 + breathe, 10, 18);
+      ctx.fillStyle = '#15803d';
+      ctx.fillRect(cx - 24, 23 + breathe, 10, 11);
+      ctx.fillRect(cx + 14, 23 + breathe, 10, 11);
+      ctx.fillRect(cx - 24, 31 + breathe, 8, 6);
+      ctx.fillRect(cx + 18, 31 + breathe, 8, 6);
 
-      // Cinto com fivela
+      // Tronco barrigudo com camisa clara e colete curto.
+      ctx.fillStyle = '#14532d';
+      ctx.fillRect(cx - 18, 17 + breathe, 36, 21);
+      ctx.fillRect(cx - 15, 15 + breathe, 30, 25);
+      ctx.fillStyle = '#fef3c7';
+      ctx.fillRect(cx - 11, 19 + breathe, 22, 17);
+      ctx.fillRect(cx - 14, 23 + breathe, 28, 11);
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(cx - 17, 18 + breathe, 8, 19);
+      ctx.fillRect(cx + 9, 18 + breathe, 8, 19);
+      ctx.fillStyle = '#92400e';
+      ctx.fillRect(cx - 8, 20 + breathe, 16, 4);
+      ctx.fillRect(cx - 8, 34 + breathe, 16, 3);
+
+      // Cinto largo e barriga marcada.
       ctx.fillStyle = '#451a03';
-      ctx.fillRect(cx - 14, 34 + breathe, 28, 4);
+      ctx.fillRect(cx - 18, 35 + breathe, 36, 4);
       ctx.fillStyle = '#fbbf24';
-      ctx.fillRect(cx - 4, 33 + breathe, 8, 6);
+      ctx.fillRect(cx - 5, 34 + breathe, 10, 6);
+      ctx.fillStyle = '#fde68a';
+      ctx.fillRect(cx - 2, 36 + breathe, 4, 2);
 
-      // Cabeça de Ogro Carismático
+      // Cabeça larga, mandíbula marcada e orelhas de trompete.
       ctx.fillStyle = '#166534';
       ctx.beginPath();
-      ctx.arc(cx, 13 + breathe, 11, 0, Math.PI * 2);
+      ctx.arc(cx, 12 + breathe, 13, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(cx - 9, 6 + breathe, 18, 15);
+      ctx.fillRect(cx - 11, 10 + breathe, 22, 8);
 
       // Orelhas de Ogro em Formato de Funil/Trompete
       ctx.fillStyle = '#15803d';
-      ctx.fillRect(cx - 16, 8 + breathe, 6, 4);
-      ctx.fillRect(cx - 18, 6 + breathe, 4, 6);
-      ctx.fillRect(cx + 10, 8 + breathe, 6, 4);
-      ctx.fillRect(cx + 14, 6 + breathe, 4, 6);
+      ctx.fillRect(cx - 19, 7 + breathe, 8, 5);
+      ctx.fillRect(cx - 21, 5 + breathe, 4, 8);
+      ctx.fillRect(cx + 11, 7 + breathe, 8, 5);
+      ctx.fillRect(cx + 17, 5 + breathe, 4, 8);
 
-      // Sorriso Amigável com Dentes
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(cx - 5, 17 + breathe, 10, 3);
-      ctx.fillStyle = '#15803d';
-      ctx.fillRect(cx - 2, 17 + breathe, 4, 1);
+      // Olhos e boca animados: a expressão deixa de ser uma imagem congelada
+      // sem perder a leitura simples da arte pixelada.
+      const blinkPhase = (time + 650) % 4200;
+      const blinking = blinkPhase < 130 || (blinkPhase > 170 && blinkPhase < 220);
+      if (blinking) {
+        ctx.fillStyle = '#14532d';
+        ctx.fillRect(cx - 9, 11 + breathe, 6, 2);
+        ctx.fillRect(cx + 3, 11 + breathe, 6, 2);
+      } else {
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(cx - 9, 9 + breathe, 6, 5);
+        ctx.fillRect(cx + 3, 9 + breathe, 6, 5);
+        ctx.fillStyle = '#052e16';
+        ctx.fillRect(cx - 6, 10 + breathe, 2, 3);
+        ctx.fillRect(cx + 4, 10 + breathe, 2, 3);
+      }
+
+      const mouthOpen = Math.sin(time / 280) > 0.35;
+      ctx.fillStyle = '#14532d';
+      ctx.fillRect(cx - 7, 17 + breathe, 14, mouthOpen ? 5 : 3);
+      if (mouthOpen) {
+        ctx.fillStyle = '#fefce8';
+        ctx.fillRect(cx - 6, 17 + breathe, 12, 2);
+        ctx.fillStyle = '#166534';
+        ctx.fillRect(cx - 1, 16 + breathe, 2, 2);
+      } else {
+        ctx.fillStyle = '#86efac';
+        ctx.fillRect(cx - 4, 16 + breathe, 8, 1);
+      }
+    },
+  },
+  {
+    key: 'shereque_cookie',
+    biomeKey: 'shereque',
+    projectile: { color: '#f472b6', type: 'lollipop' },
+    visualScale: 0.78,
+    nameplateOffsetY: 54,
+    render: (ctx, size, opts: MonsterRenderOptions = {}) => {
+      const time = opts.time || performance.now();
+      const walkStep = opts.walkStep ?? Math.sin(time / 120) * 2.5;
+      const breathe = Math.sin(time / 430) * 0.7;
+      const cx = size / 2;
+      const blinkPhase = (time + 1800) % 4300;
+      const blinking = blinkPhase < 130 || (blinkPhase > 180 && blinkPhase < 225);
+      const attackProgress = Math.max(0, Math.min(1, opts.attackProgress ?? 0));
+      const castPulse = opts.isAttacking ? Math.sin(attackProgress * Math.PI) : 0;
+
+      drawMonsterShadow(ctx, size);
+
+      // Pernas curtas e separadas, com glacê nos tornozelos.
+      ctx.fillStyle = '#7c2d12';
+      ctx.fillRect(cx - 10 - walkStep, 36, 8, 9);
+      ctx.fillRect(cx + 2 + walkStep, 36, 8, 9);
+      ctx.fillStyle = '#fef3c7';
+      ctx.fillRect(cx - 10 - walkStep, 40, 8, 2);
+      ctx.fillRect(cx + 2 + walkStep, 40, 8, 2);
+      ctx.fillStyle = '#451a03';
+      ctx.fillRect(cx - 12 - walkStep, 42, 10, 4);
+      ctx.fillRect(cx + 2 + walkStep, 42, 10, 4);
+
+      // Braços em posição levantada, como o boneco de biscoito da referência.
+      ctx.fillStyle = '#431407';
+      ctx.fillRect(cx - 21, 20 + breathe, 8, 8);
+      ctx.fillRect(cx - 24, 16 + breathe, 7, 8);
+      ctx.fillRect(cx + 13, 20 + breathe, 8, 8);
+      ctx.fillRect(cx + 17, 16 + breathe, 7, 8);
+      ctx.fillStyle = '#c66a24';
+      ctx.fillRect(cx - 20, 20 + breathe, 6, 6);
+      ctx.fillRect(cx - 22, 17 + breathe, 5, 6);
+      ctx.fillRect(cx + 14, 20 + breathe, 6, 6);
+      ctx.fillRect(cx + 17, 17 + breathe, 5, 6);
+      ctx.fillStyle = '#fef3c7';
+      ctx.fillRect(cx - 24, 16 + breathe, 4, 2);
+      ctx.fillRect(cx + 20, 16 + breathe, 4, 2);
+
+      // Corpo mais estreito que a cabeça, com cintura e borda de glacê.
+      ctx.fillStyle = '#431407';
+      ctx.fillRect(cx - 13, 21 + breathe, 26, 19);
+      ctx.fillStyle = '#c66a24';
+      ctx.fillRect(cx - 11, 22 + breathe, 22, 17);
+      ctx.fillStyle = '#e09a45';
+      ctx.fillRect(cx - 9, 23 + breathe, 7, 13);
+
+      // Botões de açúcar e costura branca na cintura.
+      ctx.fillStyle = '#9333ea';
+      ctx.fillRect(cx - 3, 24 + breathe, 5, 5);
+      ctx.fillStyle = '#fef3c7';
+      ctx.fillRect(cx - 10, 35 + breathe, 20, 2);
+      ctx.fillRect(cx - 8, 37 + breathe, 3, 2);
+      ctx.fillRect(cx + 5, 37 + breathe, 3, 2);
+
+      // Cabeça redonda e grande: o corpo fica propositalmente menor para a
+      // leitura clássica de boneco de gengibre em pixel art.
+      ctx.fillStyle = '#431407';
+      ctx.beginPath();
+      ctx.arc(cx, 13 + breathe, 13, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#d9772a';
+      ctx.beginPath();
+      ctx.arc(cx, 13 + breathe, 10.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#f1b35b';
+      ctx.fillRect(cx - 8, 4 + breathe, 7, 4);
+
+      if (blinking) {
+        ctx.fillStyle = '#7c2d12';
+        ctx.fillRect(cx - 8, 11 + breathe, 5, 2);
+        ctx.fillRect(cx + 3, 11 + breathe, 5, 2);
+      } else {
+        ctx.fillStyle = '#fefce8';
+        ctx.fillRect(cx - 8, 9 + breathe, 5, 5);
+        ctx.fillRect(cx + 3, 9 + breathe, 5, 5);
+        ctx.fillStyle = '#1c1917';
+        ctx.fillRect(cx - 5, 10 + breathe, 2, 3);
+        ctx.fillRect(cx + 3, 10 + breathe, 2, 3);
+      }
+
+      const smileOpen = Math.sin(time / 310) > 0.2;
+      ctx.fillStyle = '#9f1239';
+      ctx.fillRect(cx - 7, 16 + breathe, 14, smileOpen ? 4 : 2);
+      if (smileOpen) {
+        ctx.fillStyle = '#fef3c7';
+        ctx.fillRect(cx - 5, 16 + breathe, 10, 2);
+      } else {
+        ctx.fillStyle = '#fb7185';
+        ctx.fillRect(cx - 5, 16 + breathe, 10, 1);
+      }
+
+      // O cajado vem por último: fica à frente do corpo e usa a mão direita
+      // como pivô, portanto acompanha o braço e ganha o arco de conjuração.
+      const staffPivotX = cx + 21;
+      const staffPivotY = 21 + breathe;
+      ctx.save();
+      ctx.translate(staffPivotX, staffPivotY);
+      ctx.rotate(-0.44 + castPulse * 0.9);
+      ctx.translate(-staffPivotX, -staffPivotY - castPulse * 4);
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(staffPivotX, staffPivotY);
+      ctx.lineTo(cx + 30, -13);
+      ctx.stroke();
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(staffPivotX + 1, staffPivotY - 1);
+      ctx.lineTo(cx + 31, -12);
+      ctx.stroke();
+
+      // Pirulito grande para continuar legível apesar da escala menor do monstro.
+      ctx.fillStyle = '#4c1d95';
+      ctx.beginPath();
+      ctx.arc(cx + 30, -13, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ec4899';
+      ctx.fillRect(cx + 24, -17, 12, 4);
+      ctx.fillRect(cx + 27, -13, 8, 4);
+      ctx.fillStyle = '#22d3ee';
+      ctx.fillRect(cx + 28, -21, 5, 4);
+      ctx.fillRect(cx + 33, -10, 4, 3);
+      ctx.fillStyle = '#fef08a';
+      ctx.fillRect(cx + 28, -14, 3, 3);
+      ctx.restore();
+
+      if (castPulse > 0.1) {
+        ctx.fillStyle = '#fef08a';
+        ctx.fillRect(cx + 37, -19 - castPulse * 4, 2, 2);
+        ctx.fillStyle = '#f472b6';
+        ctx.fillRect(cx + 40, -13 - castPulse * 5, 2, 2);
+      }
     },
   },
   {
@@ -858,27 +1126,43 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
 
       drawMonsterShadow(ctx, size);
 
-      // Princesa Fiona Ogressa (64px Boss)
-      ctx.fillStyle = '#047857'; // Verde esmeralda
+      // Feiona é uma chefe ogra: ombros, braços e tronco largos antes da saia.
+      ctx.fillStyle = '#14532d';
+      ctx.fillRect(cx - 25, 23 + breathe, 11, 22);
+      ctx.fillRect(cx + 14, 23 + breathe, 11, 22);
+      ctx.fillStyle = '#15803d';
+      ctx.fillRect(cx - 28, 34 + breathe, 9, 9);
+      ctx.fillRect(cx + 19, 34 + breathe, 9, 9);
+      ctx.fillStyle = '#047857';
       ctx.beginPath();
-      ctx.moveTo(cx - 8, 16 + breathe);
-      ctx.lineTo(cx + 8, 16 + breathe);
-      ctx.lineTo(cx + 20 + skirtWave, size - 6);
-      ctx.lineTo(cx - 20 - skirtWave, size - 6);
+      ctx.moveTo(cx - 18, 19 + breathe);
+      ctx.lineTo(cx + 18, 19 + breathe);
+      ctx.lineTo(cx + 25 + skirtWave, size - 6);
+      ctx.lineTo(cx - 25 - skirtWave, size - 6);
       ctx.fill();
 
-      ctx.fillStyle = '#a7f3d0'; // Painel frontal claro
+      ctx.fillStyle = '#059669';
+      ctx.fillRect(cx - 18, 22 + breathe, 36, 16);
+      ctx.fillRect(cx - 21, 30 + breathe, 42, 12);
+
+      ctx.fillStyle = '#a7f3d0'; // Painel frontal claro da saia larga
       ctx.beginPath();
-      ctx.moveTo(cx - 4, 20 + breathe);
-      ctx.lineTo(cx + 4, 20 + breathe);
-      ctx.lineTo(cx + 8, size - 6);
-      ctx.lineTo(cx - 8, size - 6);
+      ctx.moveTo(cx - 7, 23 + breathe);
+      ctx.lineTo(cx + 7, 23 + breathe);
+      ctx.lineTo(cx + 12, size - 6);
+      ctx.lineTo(cx - 12, size - 6);
       ctx.fill();
 
       // Guarnições Douradas
       ctx.fillStyle = '#fbbf24';
-      ctx.fillRect(cx - 9, 20 + breathe, 18, 3);
-      ctx.fillRect(cx - 10, 32 + breathe, 20, 2);
+      ctx.fillRect(cx - 18, 22 + breathe, 36, 3);
+      ctx.fillRect(cx - 20, 38 + breathe, 40, 3);
+
+      // Cinto realça o volume do tronco e diferencia roupa de pele.
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(cx - 19, 34 + breathe, 38, 4);
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(cx - 4, 33 + breathe, 8, 6);
 
       // Colar Esmeralda
       ctx.fillStyle = '#fbbf24';
@@ -889,21 +1173,13 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
       // Cabeça de Ogressa Verde
       ctx.fillStyle = '#15803d';
       ctx.beginPath();
-      ctx.arc(cx, 11 + breathe, 10, 0, Math.PI * 2);
+      ctx.arc(cx, 11 + breathe, 12, 0, Math.PI * 2);
       ctx.fill();
 
       // Orelhas de Ogressa
       ctx.fillStyle = '#166534';
       ctx.fillRect(cx - 14, 8 + breathe, 5, 3);
       ctx.fillRect(cx + 9, 8 + breathe, 5, 3);
-
-      // Olhos Verdes
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(cx - 6, 10 + breathe, 3, 3);
-      ctx.fillRect(cx + 3, 10 + breathe, 3, 3);
-      ctx.fillStyle = '#047857';
-      ctx.fillRect(cx - 5, 11 + breathe, 2, 2);
-      ctx.fillRect(cx + 4, 11 + breathe, 2, 2);
 
       // Cabelo Ruivo Trançado
       ctx.fillStyle = '#ea580c';
@@ -915,6 +1191,37 @@ export const tier1MonsterVisuals: MonsterVisualDefinition[] = [
       ctx.fillStyle = '#c2410c';
       ctx.fillRect(cx - 14, 10 + breathe, 5, 16);
       ctx.fillRect(cx + 9, 10 + breathe, 5, 16);
+
+      // Olhos e boca animados da Feiona. A piscada é curta e irregular, e a
+      // boca alterna entre sorriso e fala para dar vida ao boss sem depender
+      // de sprites extras.
+      const blinkPhase = (time + 2100) % 4600;
+      const blinking = blinkPhase < 140 || (blinkPhase > 185 && blinkPhase < 235);
+      if (blinking) {
+        ctx.fillStyle = '#166534';
+        ctx.fillRect(cx - 7, 11 + breathe, 5, 2);
+        ctx.fillRect(cx + 2, 11 + breathe, 5, 2);
+      } else {
+        ctx.fillStyle = '#fefce8';
+        ctx.fillRect(cx - 7, 9 + breathe, 5, 5);
+        ctx.fillRect(cx + 2, 9 + breathe, 5, 5);
+        ctx.fillStyle = '#14532d';
+        ctx.fillRect(cx - 5, 10 + breathe, 2, 3);
+        ctx.fillRect(cx + 3, 10 + breathe, 2, 3);
+      }
+
+      const mouthOpen = Math.sin(time / 300) > 0.3;
+      ctx.fillStyle = '#14532d';
+      ctx.fillRect(cx - 6, 17 + breathe, 12, mouthOpen ? 5 : 3);
+      if (mouthOpen) {
+        ctx.fillStyle = '#fef3c7';
+        ctx.fillRect(cx - 5, 17 + breathe, 10, 2);
+        ctx.fillStyle = '#059669';
+        ctx.fillRect(cx - 1, 17 + breathe, 2, 2);
+      } else {
+        ctx.fillStyle = '#86efac';
+        ctx.fillRect(cx - 4, 17 + breathe, 8, 1);
+      }
     },
   },
 

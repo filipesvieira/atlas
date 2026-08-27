@@ -148,6 +148,17 @@ type CombatEffectEvent struct {
 	StatusKey string   `json:"status_key,omitempty"`
 }
 
+type CharacterDelta struct {
+	Health        int   `json:"health"`
+	MaxHealth     int   `json:"max_health"`
+	Mana          int   `json:"mana"`
+	MaxMana       int   `json:"max_mana"`
+	Level         int   `json:"level"`
+	Experience    int64 `json:"experience"`
+	GoldBank      int64 `json:"gold_bank"`
+	UnspentPoints int   `json:"unspent_points"`
+}
+
 type CombatMessage struct {
 	ProtocolVersion         int                        `json:"protocol_version,omitempty"`
 	RequestID               string                     `json:"request_id,omitempty"`
@@ -155,7 +166,8 @@ type CombatMessage struct {
 	StateRevision           int64                      `json:"state_revision,omitempty"`
 	Type                    string                     `json:"type"` // TICK_UPDATE, COMBAT_EVENT, LOOT_DROP, LEVEL_UP, EQUIPMENT_UPDATE, STANCE_UPDATE, SKILL_CAST, STATE_SNAPSHOT
 	Timestamp               string                     `json:"timestamp"`
-	Character               *CharacterData             `json:"character"`
+	Character               *CharacterData             `json:"character,omitempty"`
+	CharacterDelta          *CharacterDelta            `json:"character_delta,omitempty"`
 	Inventory               *InventoryData             `json:"inventory,omitempty"`
 	Monsters                []Monster                  `json:"monsters,omitempty"`
 	DamageDealt             int                        `json:"damage_dealt,omitempty"`
@@ -186,7 +198,7 @@ type CombatMessage struct {
 	AutoSellSettings        *AutoSellSettings          `json:"auto_sell_settings,omitempty"`
 	AutoPotionSettings      *AutoPotionSettings        `json:"auto_potion_settings,omitempty"`
 	AutoPotionState         *AutoPotionState           `json:"auto_potion_state,omitempty"`
-	OverflowChest           []Item                     `json:"overflow_chest"`
+	OverflowChest           []Item                     `json:"overflow_chest,omitempty"`
 	AutoSellPreview         *AutoSellEvaluationResult  `json:"auto_sell_preview,omitempty"`
 	Economy                 *EconomyState              `json:"economy,omitempty"`
 	ActiveBuffs             []ActiveBuff               `json:"active_buffs,omitempty"`
@@ -252,7 +264,11 @@ type GameSession struct {
 	SavePendingItemFunc        func(charID string, item Item, sourceKind, referenceKey string) error
 	SaveResourcesFunc          func(charID string, drops []ResourceAmount, maxCap int64, reason, referenceKey string) (ResourceMutationResult, error)
 	ReconcileCampFunc          func(charID string, now time.Time) (*CampState, bool, error)
+	PersistenceQueue           chan func()
+	persistenceOnce            sync.Once
+	persistenceDone            chan struct{}
 	LastCampReconcileAt        time.Time
+	LastCharacterCheckpointAt  time.Time
 }
 
 func GetRequiredXPForLevel(level int) int64 {
@@ -396,6 +412,8 @@ func NewGameSession(char *CharacterData, inv *InventoryData, saveInv func(string
 		SendChannel:          make(chan CombatMessage, 100),
 		StopChan:             make(chan struct{}),
 		TickerDone:           make(chan struct{}),
+		PersistenceQueue:     make(chan func(), 256),
+		persistenceDone:      make(chan struct{}),
 		SaveInvFunc:          saveInv,
 		SaveCharFunc:         saveChar,
 		GetLootFunc:          getLoot,
@@ -411,6 +429,166 @@ func NewGameSession(char *CharacterData, inv *InventoryData, saveInv func(string
 		_ = saveChar(char)
 	}
 	return session
+}
+
+func (s *GameSession) startPersistenceWorker() {
+	if s == nil || s.PersistenceQueue == nil {
+		return
+	}
+	s.persistenceOnce.Do(func() {
+		go func() {
+			defer close(s.persistenceDone)
+			for job := range s.PersistenceQueue {
+				if job != nil {
+					job()
+				}
+			}
+		}()
+	})
+}
+
+func (s *GameSession) enqueuePersistence(job func()) {
+	if s == nil || job == nil {
+		return
+	}
+	s.startPersistenceWorker()
+	select {
+	case s.PersistenceQueue <- job:
+	default:
+		// Nunca execute I/O dentro do tick/lock quando a fila estiver cheia.
+		// O fallback apenas aguarda espaço fora do tick e mantém o worker único,
+		// preservando a ordem das revisões otimistas de inventário/personagem.
+		IncrementTelemetry("persistence_queue_overflow_total")
+		go func() { s.PersistenceQueue <- job }()
+	}
+}
+
+func (s *GameSession) enqueueInventoryPersistence() {
+	if s.SaveInvFunc == nil || s.Character == nil {
+		return
+	}
+	charID := s.Character.ID
+	s.enqueuePersistence(func() {
+		s.Mu.Lock()
+		snapshot := cloneInventoryData(s.Inventory)
+		baseRevision := int64(0)
+		if snapshot != nil {
+			baseRevision = snapshot.Revision
+		}
+		s.Mu.Unlock()
+		if snapshot == nil {
+			return
+		}
+		if err := s.SaveInvFunc(charID, snapshot); err == nil {
+			s.Mu.Lock()
+			if s.Inventory != nil && s.Inventory.Revision == baseRevision {
+				s.Inventory.Revision = snapshot.Revision
+			}
+			s.Mu.Unlock()
+		} else {
+			IncrementTelemetry("persistence_inventory_error_total")
+		}
+	})
+}
+
+func (s *GameSession) enqueueCharacterPersistence() {
+	if s.SaveCharFunc == nil {
+		return
+	}
+	s.enqueuePersistence(func() {
+		s.Mu.Lock()
+		snapshot := cloneCharacterData(s.Character)
+		baseRevision := int64(0)
+		if snapshot != nil {
+			baseRevision = snapshot.StateRevision
+		}
+		s.Mu.Unlock()
+		if snapshot == nil {
+			return
+		}
+		if err := s.SaveCharFunc(snapshot); err == nil {
+			s.Mu.Lock()
+			if s.Character != nil && s.Character.StateRevision == baseRevision {
+				s.Character.StateRevision = snapshot.StateRevision
+			}
+			s.Mu.Unlock()
+		} else {
+			IncrementTelemetry("persistence_character_error_total")
+		}
+	})
+}
+
+func (s *GameSession) enqueueCharacterInventoryPersistence() {
+	if s.SaveCharAndInvFunc == nil {
+		s.enqueueInventoryPersistence()
+		s.enqueueCharacterPersistence()
+		return
+	}
+	s.enqueuePersistence(func() {
+		s.Mu.Lock()
+		charSnapshot := cloneCharacterData(s.Character)
+		invSnapshot := cloneInventoryData(s.Inventory)
+		charRev, invRev := int64(0), int64(0)
+		if charSnapshot != nil {
+			charRev = charSnapshot.StateRevision
+		}
+		if invSnapshot != nil {
+			invRev = invSnapshot.Revision
+		}
+		s.Mu.Unlock()
+		if charSnapshot == nil || invSnapshot == nil {
+			return
+		}
+		if err := s.SaveCharAndInvFunc(charSnapshot, invSnapshot); err == nil {
+			s.Mu.Lock()
+			if s.Character != nil && s.Character.StateRevision == charRev {
+				s.Character.StateRevision = charSnapshot.StateRevision
+			}
+			if s.Inventory != nil && s.Inventory.Revision == invRev {
+				s.Inventory.Revision = invSnapshot.Revision
+			}
+			s.Mu.Unlock()
+		} else {
+			IncrementTelemetry("persistence_character_inventory_error_total")
+		}
+	})
+}
+
+func (s *GameSession) enqueueOverflowPersistence() {
+	if s.SaveOverflowChestFunc == nil || s.Character == nil {
+		return
+	}
+	charID := s.Character.ID
+	s.enqueuePersistence(func() {
+		s.Mu.Lock()
+		snapshot := append([]Item(nil), s.OverflowChest...)
+		s.Mu.Unlock()
+		if err := s.SaveOverflowChestFunc(charID, snapshot); err != nil {
+			IncrementTelemetry("persistence_overflow_error_total")
+		}
+	})
+}
+
+// DrainPersistence aguarda tudo que foi enfileirado antes da barreira. Deve ser
+// chamado no logout antes do snapshot offline final.
+func (s *GameSession) DrainPersistence(timeout time.Duration) bool {
+	if s == nil || s.PersistenceQueue == nil {
+		return true
+	}
+	s.startPersistenceWorker()
+	barrier := make(chan struct{})
+	job := func() { close(barrier) }
+	select {
+	case s.PersistenceQueue <- job:
+	case <-time.After(timeout):
+		return false
+	}
+	select {
+	case <-barrier:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
 
 func (s *GameSession) syncPersistentExpeditionState() {
@@ -471,7 +649,14 @@ func (s *GameSession) spendAutoPotion(kind string, now time.Time) (AutoPotionSpe
 		}
 		s.AutoPotionState = result.State
 		if result.Applied {
-			s.Character.GoldBank = result.GoldBank
+			if result.GoldDelta != 0 {
+				s.Character.GoldBank += result.GoldDelta
+			} else {
+				s.Character.GoldBank = result.GoldBank
+			}
+			if result.CharacterRevision >= s.Character.StateRevision {
+				s.Character.StateRevision = result.CharacterRevision
+			}
 		}
 		return result, result.Reason == "budget_exhausted" && !wasBudgetExhausted
 	}
@@ -603,14 +788,6 @@ func (s *GameSession) StartTicker() {
 					}
 				}
 
-				// Reconciliar upgrades de construções em tempo real
-				now := time.Now().UTC()
-				if s.ReconcileCampFunc != nil && s.Character != nil && (s.LastCampReconcileAt.IsZero() || now.Sub(s.LastCampReconcileAt) >= 5*time.Second) {
-					s.LastCampReconcileAt = now
-					if updatedCamp, changed, _ := s.ReconcileCampFunc(s.Character.ID, now); changed && updatedCamp != nil {
-						s.Camp = updatedCamp
-					}
-				}
 				totalAtk, totalDef := s.CalculateStats()
 
 				recoveryReady := s.Character.ExpeditionRecoveryUntil.IsZero() || !s.Character.ExpeditionRecoveryUntil.After(time.Now().UTC())
@@ -653,7 +830,6 @@ func (s *GameSession) StartTicker() {
 						Type:         "TICK_UPDATE",
 						Timestamp:    time.Now().Format("15:04:05"),
 						Character:    s.Character,
-						Inventory:    s.Inventory,
 						TotalAttack:  totalAtk,
 						TotalDefense: totalDef,
 						ActiveRegion: s.ActiveRegion,
@@ -663,7 +839,31 @@ func (s *GameSession) StartTicker() {
 					})
 				}
 			}
+
+			// Snapshot periódico, nunca I/O com Session.Mu adquirido. Eventos
+			// econômicos críticos continuam persistindo nas próprias transações.
+			var checkpoint *CharacterData
+			checkpointBaseRevision := int64(0)
+			now := time.Now().UTC()
+			if s.Character != nil && s.SaveCharFunc != nil && (s.LastCharacterCheckpointAt.IsZero() || now.Sub(s.LastCharacterCheckpointAt) >= 15*time.Second) {
+				s.syncPersistentExpeditionState()
+				checkpoint = CloneCharacterSnapshot(s.Character)
+				checkpointBaseRevision = s.Character.StateRevision
+				s.LastCharacterCheckpointAt = now
+			}
 			s.Mu.Unlock()
+
+			if checkpoint != nil {
+				if err := s.SaveCharFunc(checkpoint); err == nil {
+					s.Mu.Lock()
+					// Só absorve a nova revisão se nenhuma outra mutação persistente
+					// venceu enquanto o checkpoint estava no banco.
+					if s.Character != nil && s.Character.StateRevision == checkpointBaseRevision {
+						s.Character.StateRevision = checkpoint.StateRevision
+					}
+					s.Mu.Unlock()
+				}
+			}
 		}
 	}
 }
@@ -716,6 +916,7 @@ func (s *GameSession) processTick() {
 		s.Character.HighestStageReached = s.CurrentStage
 	}
 	s.MaxStages = regInfo.MaxStages
+	s.normalizeArenaPositions()
 
 	if len(s.CurrentMonsters) == 0 {
 		if s.CurrentStage >= s.MaxStages {
@@ -739,7 +940,7 @@ func (s *GameSession) processTick() {
 				}
 				m.AttackCooldownSec = 0.50
 				m.ID = fmt.Sprintf("mob_%d_%d", time.Now().UnixNano(), i)
-				m.GridX, m.GridY = arenaSpawnPoint(i)
+				s.placeMonsterAtSpawn(&m, i)
 				m.State = "CHASE"
 				s.CurrentMonsters = append(s.CurrentMonsters, m)
 			}
@@ -754,7 +955,7 @@ func (s *GameSession) processTick() {
 			}
 			bossMob.AttackCooldownSec = 0.50
 			bossMob.ID = fmt.Sprintf("boss_%d", time.Now().UnixNano())
-			bossMob.GridX, bossMob.GridY = arenaSpawnPoint(2)
+			s.placeMonsterAtSpawn(&bossMob, 2)
 			bossMob.State = "CHASE"
 			s.CurrentMonsters = append(s.CurrentMonsters, bossMob)
 
@@ -800,7 +1001,7 @@ func (s *GameSession) processTick() {
 				}
 				m.AttackCooldownSec = 0.50
 				m.ID = fmt.Sprintf("mob_%d_%d", time.Now().UnixNano(), i)
-				m.GridX, m.GridY = arenaSpawnPoint(i)
+				s.placeMonsterAtSpawn(&m, i)
 				m.State = "CHASE"
 				s.CurrentMonsters = append(s.CurrentMonsters, m)
 			}
@@ -1216,9 +1417,8 @@ func (s *GameSession) processTick() {
 						s.DiscoveredLoot[regDiscoveryKey] = true
 						s.DiscoveredLoot[item.Name] = true
 						if s.RecordLootDiscoveryFunc != nil {
-							go func(cID, name, rarity, reg, mKey string) {
-								_, _ = s.RecordLootDiscoveryFunc(cID, name, rarity, reg, mKey)
-							}(s.Character.ID, item.Name, item.Rarity, s.ActiveRegion, mob.Key)
+							cID, name, rarity, reg, mKey := s.Character.ID, item.Name, item.Rarity, s.ActiveRegion, mob.Key
+							s.enqueuePersistence(func() { _, _ = s.RecordLootDiscoveryFunc(cID, name, rarity, reg, mKey) })
 						}
 						logMsg += fmt.Sprintf(" ✨ COMPÊNDIO: Você descobriu [%s] em %s!", item.Name, regInfo.Name)
 						notificationMsg += fmt.Sprintf(" ✨ Novo registro no Compêndio: [%s] em %s.", item.Name, regInfo.Name)
@@ -1242,9 +1442,7 @@ func (s *GameSession) processTick() {
 							s.Inventory.Backpack = eval.ItemsKept
 							s.Character.GoldBank += eval.TotalGoldEstimated
 							s.syncPersistentExpeditionState()
-							if s.SaveCharAndInvFunc != nil {
-								_ = s.SaveCharAndInvFunc(s.Character, s.Inventory)
-							}
+							s.enqueueCharacterInventoryPersistence()
 							logMsg += fmt.Sprintf(" 🧹 AUTO-VENDA: %d itens vendidos por %d de ouro (80%% valor)! Espaço liberado.", len(eval.ItemsToSell), eval.TotalGoldEstimated)
 							notificationMsg += fmt.Sprintf(" 🧹 Auto-venda: %d itens vendidos por %d Ouro.", len(eval.ItemsToSell), eval.TotalGoldEstimated)
 							currentWeight = s.GetTotalWeight()
@@ -1256,17 +1454,13 @@ func (s *GameSession) processTick() {
 						s.Inventory.Backpack = append([]Item{*item}, s.Inventory.Backpack...)
 						logMsg += fmt.Sprintf(" 🎁 LOOT: [%s] adicionado à mochila!", item.Name)
 						notificationMsg += fmt.Sprintf(" 🎁 Drop: [%s] adicionado à mochila.", item.Name)
-						if s.SaveInvFunc != nil {
-							_ = s.SaveInvFunc(s.Character.ID, s.Inventory)
-						}
+						s.enqueueInventoryPersistence()
 					} else {
 						// Mochila continua cheia: verifica se o item é protegido para encaminhar ao Baú de Achados
 						isProtected := IsOverflowProtectedItem(*item, s.AutoSellSettings)
 						if isProtected && len(s.OverflowChest) < 20 {
 							s.OverflowChest = append(s.OverflowChest, *item)
-							if s.SaveOverflowChestFunc != nil {
-								_ = s.SaveOverflowChestFunc(s.Character.ID, s.OverflowChest)
-							}
+							s.enqueueOverflowPersistence()
 							logMsg += fmt.Sprintf(" 📦 BAÚ DE ACHADOS: Mochila cheia! O item protegido [%s] foi guardado no Baú de Achados!", item.Name)
 							notificationMsg += fmt.Sprintf(" 📦 Drop protegido: [%s] foi enviado ao Baú de Achados.", item.Name)
 						} else if isProtected {
@@ -1283,9 +1477,7 @@ func (s *GameSession) processTick() {
 								// Reserva de emergência em memória, inclusive acima dos 20 slots
 								// visuais. O fechamento da sessão tenta persistir novamente.
 								s.OverflowChest = append(s.OverflowChest, *item)
-								if s.SaveOverflowChestFunc != nil {
-									_ = s.SaveOverflowChestFunc(s.Character.ID, s.OverflowChest)
-								}
+								s.enqueueOverflowPersistence()
 								logMsg += fmt.Sprintf(" 📦 RESERVA DE EMERGÊNCIA: [%s] permaneceu protegido para nova tentativa de persistência.", item.Name)
 								notificationMsg += fmt.Sprintf(" 📦 Drop protegido: [%s] aguarda persistência segura.", item.Name)
 							}
@@ -1298,9 +1490,7 @@ func (s *GameSession) processTick() {
 							s.Character.GoldBank += goldValue
 							logMsg += fmt.Sprintf(" 💰 SUPLENTO: Sem espaço no inventário/baú! [%s] foi convertido em %d de ouro (50%% taxa emergencial)!", item.Name, goldValue)
 							notificationMsg += fmt.Sprintf(" 💰 Drop convertido em %d Ouro por falta de espaço: [%s].", goldValue, item.Name)
-							if s.SaveCharFunc != nil {
-								_ = s.SaveCharFunc(s.Character)
-							}
+							s.enqueueCharacterPersistence()
 						}
 					}
 				}
@@ -1458,10 +1648,10 @@ func (s *GameSession) processTick() {
 		}
 	}
 
+	// O combate continua autoritativo em memória. Persistir a cada 750 ms
+	// multiplicava I/O do PostgreSQL pelo número de jogadores; o ticker cria
+	// checkpoints periódicos fora do mutex da sessão.
 	s.syncPersistentExpeditionState()
-	if s.SaveCharFunc != nil {
-		_ = s.SaveCharFunc(s.Character)
-	}
 
 	discoveredList := make([]string, 0, len(s.DiscoveredLoot))
 	for k := range s.DiscoveredLoot {
@@ -1479,7 +1669,6 @@ func (s *GameSession) processTick() {
 		Type:               "COMBAT_EVENT",
 		Timestamp:          time.Now().Format("15:04:05"),
 		Character:          s.Character,
-		Inventory:          s.Inventory,
 		Monsters:           s.CurrentMonsters,
 		DamageDealt:        totalDamageDealt,
 		DamageTaken:        totalDamageTaken,
@@ -2389,6 +2578,7 @@ func CloneCampSnapshot(camp *CampState) *CampState {
 
 func (s *GameSession) broadcastMessage(msg CombatMessage) {
 	s.syncPersistentExpeditionState()
+	category := GetEventCategory(msg.Type)
 	// Mensagens econômicas e do acampamento frequentemente carregam somente o
 	// delta de domínio. Como o protocolo V2 ainda serializa campos de combate
 	// não opcionais, complete-os com o snapshot da sessão para nunca emitir
@@ -2396,7 +2586,7 @@ func (s *GameSession) broadcastMessage(msg CombatMessage) {
 	if msg.Character == nil {
 		msg.Character = s.Character
 	}
-	if msg.Inventory == nil {
+	if category == EventCategoryCritical && msg.Inventory == nil {
 		msg.Inventory = s.Inventory
 	}
 	if msg.ActiveBiome == "" {
@@ -2405,28 +2595,36 @@ func (s *GameSession) broadcastMessage(msg CombatMessage) {
 		}
 	}
 	msg.Character = cloneCharacterData(msg.Character)
-	msg.Inventory = cloneInventoryData(msg.Inventory)
+	if msg.Inventory != nil {
+		msg.Inventory = cloneInventoryData(msg.Inventory)
+	}
 	msg.Monsters = append([]Monster(nil), msg.Monsters...)
 	msg.Arena = s.buildArenaSnapshot()
-	// O combate já usa os buffs no cálculo da sessão. Reaplicá-los aqui mantém
-	// ataque/DPS exibidos no cliente iguais aos valores efetivos do combate.
+	statsInventory := msg.Inventory
+	if statsInventory == nil {
+		statsInventory = s.Inventory
+	}
+	// O combate já usa os buffs no cálculo da sessão. O inventário pode ser
+	// usado no cálculo sem ser serializado em cada frame rápido.
 	msg.DerivedStats = ApplyActiveBuffsToDerivedStats(
-		CalculateDerivedStats(msg.Character, msg.Inventory, s.ActiveStance),
+		CalculateDerivedStats(msg.Character, statsInventory, s.ActiveStance),
 		s.ActiveBuffs,
 		time.Now().UTC(),
 	)
 	msg.TotalAttack = msg.DerivedStats.TotalAttack
 	msg.TotalDefense = msg.DerivedStats.TotalDefense
-	msg.ActiveBuffs = append([]ActiveBuff(nil), s.ActiveBuffs...)
+	if category == EventCategoryCritical {
+		msg.ActiveBuffs = append([]ActiveBuff(nil), s.ActiveBuffs...)
+		msg.OverflowChest = append([]Item(nil), s.OverflowChest...)
+	}
 	msg.IsActive = s.IsExpeditionActive
-	msg.OverflowChest = append([]Item(nil), s.OverflowChest...)
 	msg.AttackCooldownRemaining = math.Max(0, math.Round(s.BasicAttackCooldownSec*100)/100)
 
-	if s.Camp != nil && msg.Camp == nil {
+	if category == EventCategoryCritical && s.Camp != nil && msg.Camp == nil {
 		msg.Camp = s.Camp
 	}
 	msg.Camp = CloneCampSnapshot(msg.Camp)
-	if s.Resources != nil && msg.Resources == nil {
+	if category == EventCategoryCritical && s.Resources != nil && msg.Resources == nil {
 		resList := make([]ResourceAmount, 0, len(s.Resources))
 		for k, v := range s.Resources {
 			if v > 0 {
@@ -2438,7 +2636,7 @@ func (s *GameSession) broadcastMessage(msg CombatMessage) {
 		})
 		msg.Resources = resList
 	}
-	if msg.ResourceInventory == nil && s.Resources != nil {
+	if category == EventCategoryCritical && msg.ResourceInventory == nil && s.Resources != nil {
 		items := make([]ResourceAmount, 0, len(s.Resources))
 		for k, v := range s.Resources {
 			if v > 0 {
@@ -2481,18 +2679,38 @@ func (s *GameSession) broadcastMessage(msg CombatMessage) {
 		msg.IsBossStage = s.IsBossStage
 	}
 
-	// Atribuição de Metadados de Protocolo V2 e Sequenciamento Monotônico
-	seq := atomic.AddUint64(&s.SequenceCounter, 1)
-	msg.Sequence = seq
-	msg.ProtocolVersion = 2
-	if msg.Timestamp == "" {
-		msg.Timestamp = time.Now().Format("15:04:05")
-	}
 	if msg.Character != nil {
 		msg.StateRevision = msg.Character.StateRevision
 	}
 
-	category := GetEventCategory(msg.Type)
+	// Protocolo V3: o caminho quente transporta apenas o delta do personagem.
+	// Snapshots completos permanecem nos eventos críticos e em STATE_SNAPSHOT.
+	if category != EventCategoryCritical && msg.Character != nil {
+		msg.CharacterDelta = &CharacterDelta{
+			Health: msg.Character.Health, MaxHealth: msg.Character.MaxHealth,
+			Mana: msg.Character.Mana, MaxMana: msg.Character.MaxMana,
+			Level: msg.Character.Level, Experience: msg.Character.Experience,
+			GoldBank: msg.Character.GoldBank, UnspentPoints: msg.Character.UnspentPoints,
+		}
+		msg.Character = nil
+		msg.Inventory = nil
+		msg.Camp = nil
+		msg.Resources = nil
+		msg.ResourceInventory = nil
+		msg.OverflowChest = nil
+		msg.ActiveBuffs = nil
+	}
+
+	// Somente mutações confiáveis participam da sequência usada para detectar
+	// gaps. Frames de combate/estado podem ser descartados sem provocar uma
+	// tempestade de STATE_SYNC sob sobrecarga.
+	if category == EventCategoryCritical {
+		msg.Sequence = atomic.AddUint64(&s.SequenceCounter, 1)
+	}
+	msg.ProtocolVersion = 3
+	if msg.Timestamp == "" {
+		msg.Timestamp = time.Now().Format("15:04:05")
+	}
 	if category == EventCategoryCritical {
 		// Eventos Críticos (Loot, Ouro, Level Up, Obras) NUNCA são descartados silenciosamente
 		select {

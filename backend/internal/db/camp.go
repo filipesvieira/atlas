@@ -1083,17 +1083,14 @@ func StartBuildingUpgrade(accountID, charID, slotKey, buildingKey string) (*game
 		return nil, err
 	}
 
-	// 1. Verificar se a construção foi descoberta via blueprints
-	if buildingKey != "campfire" {
+	// 1. Construções básicas da alpha ficam disponíveis desde o início. O
+	// sistema de manuais permanece autoritativo para conteúdo especial futuro
+	// (DefaultUnlocked=false).
+	if !bDef.DefaultUnlocked {
 		var bpCount int
 		err = tx.QueryRow(`SELECT COUNT(*) FROM character_building_blueprints WHERE character_id = $1 AND building_key = $2`, charID, buildingKey).Scan(&bpCount)
 		if err != nil || bpCount == 0 {
-			bDef, _ := game.GetBuildingDefinition(buildingKey)
-			name := buildingKey
-			if bDef.Name != "" {
-				name = bDef.Name
-			}
-			return nil, fmt.Errorf("o projeto de %s ainda não foi descoberto. Encontre o Manual de Construção correspondente", name)
+			return nil, fmt.Errorf("o projeto de %s ainda não foi descoberto. Encontre o Manual de Construção correspondente", bDef.Name)
 		}
 	}
 

@@ -58,9 +58,9 @@ func updateMonsterFleeState(mob *Monster) {
 	}
 }
 
-// A arena de combate usa a mesma malha lógica 24x18 do acampamento. As
-// coordenadas continuam discretas e autoritativas; o cliente é responsável
-// apenas por interpolar a transição entre dois tiles na tela.
+// 24x18 permanece como dimensão padrão e compatibilidade para regiões ainda
+// não convertidas. Regiões registradas podem declarar dimensões próprias na
+// definição de terreno compilada em arena_terrain.go.
 const (
 	GridWidth  = 24
 	GridHeight = 18
@@ -85,23 +85,11 @@ type ArenaSnapshot struct {
 }
 
 func clampGridX(x int) int {
-	if x < 0 {
-		return 0
-	}
-	if x >= GridWidth {
-		return GridWidth - 1
-	}
-	return x
+	return clampArenaCoordinate(x, GridWidth)
 }
 
 func clampGridY(y int) int {
-	if y < 0 {
-		return 0
-	}
-	if y >= GridHeight {
-		return GridHeight - 1
-	}
-	return y
+	return clampArenaCoordinate(y, GridHeight)
 }
 
 func gridDistance(ax, ay, bx, by int) float64 {
@@ -109,6 +97,10 @@ func gridDistance(ax, ay, bx, by int) float64 {
 }
 
 func stepGridToward(x, y, targetX, targetY int) (int, int) {
+	return stepGridTowardWithin(x, y, targetX, targetY, GridWidth, GridHeight)
+}
+
+func stepGridTowardWithin(x, y, targetX, targetY, width, height int) (int, int) {
 	if x < targetX {
 		x++
 	} else if x > targetX {
@@ -119,10 +111,14 @@ func stepGridToward(x, y, targetX, targetY int) (int, int) {
 	} else if y > targetY {
 		y--
 	}
-	return clampGridX(x), clampGridY(y)
+	return clampArenaCoordinate(x, width), clampArenaCoordinate(y, height)
 }
 
 func stepGridAway(x, y, threatX, threatY int) (int, int) {
+	return stepGridAwayWithin(x, y, threatX, threatY, GridWidth, GridHeight)
+}
+
+func stepGridAwayWithin(x, y, threatX, threatY, width, height int) (int, int) {
 	currentX, currentY := x, y
 	if x < threatX {
 		x--
@@ -134,7 +130,7 @@ func stepGridAway(x, y, threatX, threatY int) (int, int) {
 	} else if y > threatY {
 		y++
 	}
-	directX, directY := clampGridX(x), clampGridY(y)
+	directX, directY := clampArenaCoordinate(x, width), clampArenaCoordinate(y, height)
 	if directX != currentX || directY != currentY {
 		return directX, directY
 	}
@@ -154,8 +150,8 @@ func stepGridAway(x, y, threatX, threatY int) (int, int) {
 	bestX, bestY := currentX, currentY
 	bestImproves := false
 	for _, candidate := range candidates {
-		candidateX := clampGridX(candidate[0])
-		candidateY := clampGridY(candidate[1])
+		candidateX := clampArenaCoordinate(candidate[0], width)
+		candidateY := clampArenaCoordinate(candidate[1], height)
 		if candidateX == currentX && candidateY == currentY {
 			continue
 		}
@@ -175,18 +171,22 @@ func stepGridAway(x, y, threatX, threatY int) (int, int) {
 // faixas centrais. Isso dá espaço para portais e evita uma fila visual no
 // mesmo lado do cenário quando a fase possui vários monstros.
 func arenaSpawnPoint(index int) (int, int) {
+	return arenaSpawnPointWithin(GridWidth, GridHeight, index)
+}
+
+func arenaSpawnPointWithin(width, height, index int) (int, int) {
 	points := [][2]int{
-		{GridWidth - 2, 1}, {2, 1},
-		{GridWidth - 2, GridHeight - 2}, {2, GridHeight - 2},
-		{GridWidth / 2, 1}, {GridWidth / 2, GridHeight - 2},
+		{width - 2, 1}, {2, 1},
+		{width - 2, height - 2}, {2, height - 2},
+		{width / 2, 1}, {width / 2, height - 2},
 	}
 	point := points[index%len(points)]
 	return point[0], point[1]
 }
 
 func (s *GameSession) resetArenaPosition() {
-	s.HeroGridX = HeroGridX
-	s.HeroGridY = HeroGridY
+	s.HeroGridX = s.clampArenaX(HeroGridX)
+	s.HeroGridY = s.clampArenaY(HeroGridY)
 	s.HeroState = "IDLE"
 	s.HeroTargetID = ""
 	s.HeroMovementAccumulator = 0
@@ -337,9 +337,9 @@ func (s *GameSession) moveHeroManualStep(direction string) bool {
 	if !valid {
 		return false
 	}
-	nextX := clampGridX(s.HeroGridX + dx)
-	nextY := clampGridY(s.HeroGridY + dy)
-	if nextX == s.HeroGridX && nextY == s.HeroGridY {
+	nextX := s.clampArenaX(s.HeroGridX + dx)
+	nextY := s.clampArenaY(s.HeroGridY + dy)
+	if (nextX == s.HeroGridX && nextY == s.HeroGridY) || !s.canOccupyArenaTile(nextX, nextY, arenaHeroMover, "") {
 		s.HeroState = "MANUAL_BLOCKED"
 		return false
 	}
@@ -386,10 +386,11 @@ func (s *GameSession) buildArenaSnapshot() *ArenaSnapshot {
 	if s.manualMovementActive(now) {
 		movementSpeed = s.manualHeroMovementSpeed(movementSpeed, now)
 	}
+	width, height := s.arenaDimensions()
 	return &ArenaSnapshot{
 		Key:        s.ActiveRegion,
-		Width:      GridWidth,
-		Height:     GridHeight,
+		Width:      width,
+		Height:     height,
 		Hero:       ArenaActor{GridX: s.HeroGridX, GridY: s.HeroGridY, State: s.HeroState, TargetID: s.HeroTargetID, MovementSpeedMultiplier: movementSpeed},
 		Projectile: true,
 	}
@@ -514,7 +515,7 @@ func (s *GameSession) moveHeroOneStep(archetype string) {
 	attackRange := basicAttackRangeForArchetype(archetype)
 	if archetype == "melee" {
 		if distance > movementStopRangeForArchetype(archetype) {
-			s.HeroGridX, s.HeroGridY = stepGridToward(s.HeroGridX, s.HeroGridY, target.GridX, target.GridY)
+			s.HeroGridX, s.HeroGridY = s.stepArenaToward(s.HeroGridX, s.HeroGridY, target.GridX, target.GridY, "")
 			s.HeroState = "CHASE"
 		} else {
 			s.HeroState = "ATTACK"
@@ -527,7 +528,7 @@ func (s *GameSession) moveHeroOneStep(archetype string) {
 	// alcance e permanecer viva no limite da arena indefinidamente.
 	if target.State == "FLEE" || target.Health <= int(float64(target.MaxHealth)*0.20) {
 		if distance > attackRange {
-			s.HeroGridX, s.HeroGridY = stepGridToward(s.HeroGridX, s.HeroGridY, target.GridX, target.GridY)
+			s.HeroGridX, s.HeroGridY = s.stepArenaToward(s.HeroGridX, s.HeroGridY, target.GridX, target.GridY, "")
 			s.HeroState = "CHASE"
 		} else {
 			s.HeroState = "ATTACK"
@@ -553,13 +554,13 @@ func (s *GameSession) moveHeroOneStep(archetype string) {
 	}
 
 	if nearestMeleeThreatDistance < 4.0 {
-		s.HeroGridX, s.HeroGridY = stepGridAway(s.HeroGridX, s.HeroGridY, nearestMeleeThreat.GridX, nearestMeleeThreat.GridY)
+		s.HeroGridX, s.HeroGridY = s.stepArenaAway(s.HeroGridX, s.HeroGridY, nearestMeleeThreat.GridX, nearestMeleeThreat.GridY, "")
 		s.HeroState = "KITE"
 	} else if distance > attackRange {
 		// Sem ameaça melee próxima, aproximar-se é obrigatório. Antes, o código
 		// marcava ATTACK mesmo fora do alcance e podia deixar o herói morrer
 		// contra monstros ranged que atacavam de até 8 tiles.
-		s.HeroGridX, s.HeroGridY = stepGridToward(s.HeroGridX, s.HeroGridY, target.GridX, target.GridY)
+		s.HeroGridX, s.HeroGridY = s.stepArenaToward(s.HeroGridX, s.HeroGridY, target.GridX, target.GridY, "")
 		s.HeroState = "CHASE"
 	} else {
 		s.HeroState = "ATTACK"
@@ -606,7 +607,7 @@ func (s *GameSession) moveMonsterOneStep(mob *Monster) {
 		// conseguir abrir espaço mesmo quando o golpe crítico aconteceu
 		// corpo a corpo. A fuga só termina quando a malha não oferece uma
 		// célula que aumente a distância do herói.
-		nextX, nextY := stepGridAway(mob.GridX, mob.GridY, s.HeroGridX, s.HeroGridY)
+		nextX, nextY := s.stepArenaAway(mob.GridX, mob.GridY, s.HeroGridX, s.HeroGridY, mob.ID)
 		nextDistance := gridDistance(nextX, nextY, s.HeroGridX, s.HeroGridY)
 		// Se o limite da arena bloqueou o recuo, a fuga terminou. O monstro
 		// volta a perseguir/kitar em vez de ficar congelado em FLEE.
@@ -623,23 +624,23 @@ func (s *GameSession) moveMonsterOneStep(mob *Monster) {
 	case "CHASE":
 		if mob.AttackType == AttackTypeRanged {
 			if distance < 4.0 {
-				mob.GridX, mob.GridY = stepGridAway(mob.GridX, mob.GridY, s.HeroGridX, s.HeroGridY)
+				mob.GridX, mob.GridY = s.stepArenaAway(mob.GridX, mob.GridY, s.HeroGridX, s.HeroGridY, mob.ID)
 				mob.State = "KITE"
 			} else if distance > 7.0 {
-				mob.GridX, mob.GridY = stepGridToward(mob.GridX, mob.GridY, s.HeroGridX, s.HeroGridY)
+				mob.GridX, mob.GridY = s.stepArenaToward(mob.GridX, mob.GridY, s.HeroGridX, s.HeroGridY, mob.ID)
 			} else {
 				mob.State = "KITE"
 			}
 		} else if distance > combatRangeForArchetype("melee") {
-			mob.GridX, mob.GridY = stepGridToward(mob.GridX, mob.GridY, s.HeroGridX, s.HeroGridY)
+			mob.GridX, mob.GridY = s.stepArenaToward(mob.GridX, mob.GridY, s.HeroGridX, s.HeroGridY, mob.ID)
 		} else {
 			mob.State = "ATTACK"
 		}
 	case "KITE":
 		if mob.AttackType == AttackTypeRanged && distance < 4.0 {
-			mob.GridX, mob.GridY = stepGridAway(mob.GridX, mob.GridY, s.HeroGridX, s.HeroGridY)
+			mob.GridX, mob.GridY = s.stepArenaAway(mob.GridX, mob.GridY, s.HeroGridX, s.HeroGridY, mob.ID)
 		} else if distance > 8.0 {
-			mob.GridX, mob.GridY = stepGridToward(mob.GridX, mob.GridY, s.HeroGridX, s.HeroGridY)
+			mob.GridX, mob.GridY = s.stepArenaToward(mob.GridX, mob.GridY, s.HeroGridX, s.HeroGridY, mob.ID)
 		} else if mob.AttackType == AttackTypeMelee {
 			if distance > combatRangeForArchetype("melee") {
 				mob.State = "CHASE"
@@ -679,9 +680,12 @@ func (s *GameSession) separateMonsters() {
 		}
 		placed := false
 		for _, candidate := range candidates {
-			candidate[0] = clampGridX(candidate[0])
-			candidate[1] = clampGridY(candidate[1])
+			candidate[0] = s.clampArenaX(candidate[0])
+			candidate[1] = s.clampArenaY(candidate[1])
 			if _, exists := occupied[candidate]; exists {
+				continue
+			}
+			if !s.canOccupyArenaTile(candidate[0], candidate[1], arenaMonsterMover, mob.ID) {
 				continue
 			}
 			mob.GridX, mob.GridY = candidate[0], candidate[1]

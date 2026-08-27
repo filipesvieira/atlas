@@ -461,7 +461,7 @@ func StartGatheringActivity(charID, expeditionKey string, durationSeconds int64,
 	if level < definition.RequiredProfessionLevel {
 		return nil, fmt.Errorf("%s requer nível %d de profissão", definition.DisplayName, definition.RequiredProfessionLevel)
 	}
-	settlementID, wageReserved, err := reserveGatheringWageTx(tx, charID, residentID, residentName, definition.ProfessionKey, requestID, durationSeconds, level, definition.Tier)
+	settlementID, wageReserved, heroGoldDelta, err := reserveGatheringWageTx(tx, charID, residentID, residentName, definition.ProfessionKey, requestID, durationSeconds, level, definition.Tier)
 	if err != nil {
 		return nil, err
 	}
@@ -478,7 +478,7 @@ func StartGatheringActivity(charID, expeditionKey string, durationSeconds int64,
 	if err != nil {
 		return nil, err
 	}
-	activity := &game.GatheringActivity{CharacterID: charID, ResidentID: residentID, ResidentName: residentName, ExpeditionKey: expeditionKey, ProfessionKey: definition.ProfessionKey, State: game.GatheringStateRunning, DurationSeconds: durationSeconds, StartedAt: startedAt, EndsAt: startedAt.Add(time.Duration(durationSeconds) * time.Second), Snapshot: snapshot, WageReserved: wageReserved, WageRuleVersion: game.SettlementEconomyVersion}
+	activity := &game.GatheringActivity{CharacterID: charID, ResidentID: residentID, ResidentName: residentName, ExpeditionKey: expeditionKey, ProfessionKey: definition.ProfessionKey, State: game.GatheringStateRunning, DurationSeconds: durationSeconds, StartedAt: startedAt, EndsAt: startedAt.Add(time.Duration(durationSeconds) * time.Second), Snapshot: snapshot, WageReserved: wageReserved, WageRuleVersion: game.SettlementEconomyVersion, HeroGoldDelta: heroGoldDelta}
 	err = tx.QueryRow(`INSERT INTO character_activities(character_id,activity_kind,expedition_key,profession_key,state,duration_seconds,started_at,ends_at,snapshot,request_id,resident_id,resident_name_snapshot,wage_reserved,wage_rule_version) VALUES($1,'gathering',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id,revision`, charID, expeditionKey, definition.ProfessionKey, activity.State, durationSeconds, activity.StartedAt, activity.EndsAt, string(snapshotJSON), requestID, residentID, residentName, wageReserved, game.SettlementEconomyVersion).Scan(&activity.ID, &activity.Revision)
 	if err != nil {
 		return nil, err
@@ -893,6 +893,9 @@ func craftPreviewTx(tx *sql.Tx, charID, recipeKey, catalystKey string, lock bool
 	if !exists {
 		return nil, game.ProfessionProgress{}, fmt.Errorf("receita desconhecida: %s", recipeKey)
 	}
+	if !game.IsRecipeReleased(recipe) {
+		return nil, game.ProfessionProgress{}, fmt.Errorf("esta receita pertence a uma fase futura e ainda não está disponível")
+	}
 	unlocked, err := hasRecipeUnlockedTx(tx, charID, recipeKey)
 	if err != nil {
 		return nil, game.ProfessionProgress{}, err
@@ -1173,6 +1176,220 @@ func CraftItem(charID, recipeKey, catalystKey, requestID string, expectedPreview
 		game.IncrementTelemetry("inventory_overflow_total{source=craft}")
 	}
 	return result, nil
+}
+
+type craftBatchReplay struct {
+	Result *game.CraftResult      `json:"result,omitempty"`
+	Batch  *game.CraftBatchResult `json:"batch"`
+}
+
+// CraftBatch processa até 20 unidades em uma única transação PostgreSQL.
+// Recursos, ouro, inventário, profissão, prosperidade e resultado idempotente
+// são confirmados no mesmo COMMIT; nenhum craft parcial escapa em caso de erro.
+func CraftBatch(charID, recipeKey, catalystKey, requestID string, requested int, expectedPreviewRevision int64) (*game.CraftResult, *game.CraftBatchResult, error) {
+	if !game.CurrentEconomyPolicy().CraftingEnabled {
+		return nil, nil, fmt.Errorf("crafting está temporariamente desabilitado")
+	}
+	if requestID == "" {
+		return nil, nil, fmt.Errorf("request_id obrigatório")
+	}
+	if requested < 1 {
+		requested = 1
+	}
+	if requested > 20 {
+		requested = 20
+	}
+	if err := ensureEconomyRows(charID); err != nil {
+		return nil, nil, err
+	}
+	if err := ensureSettlementRows(charID); err != nil {
+		return nil, nil, err
+	}
+
+	tx, err := DB.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tx.Rollback()
+
+	// A linha do personagem serializa retries concorrentes do mesmo jogador.
+	lockedCharacter, err := scanLockedCharacter(tx.QueryRow(`SELECT `+characterSnapshotColumns+` FROM characters WHERE id=$1 FOR UPDATE`, charID))
+	if err != nil {
+		return nil, nil, err
+	}
+	var previousJSON string
+	if err := tx.QueryRow(`SELECT result::text FROM crafting_batch_transactions WHERE character_id=$1 AND request_id=$2`, charID, requestID).Scan(&previousJSON); err == nil {
+		var previous craftBatchReplay
+		if err := json.Unmarshal([]byte(previousJSON), &previous); err != nil {
+			return nil, nil, err
+		}
+		game.IncrementTelemetry("craft_batch_idempotency_replay_total")
+		return previous.Result, previous.Batch, tx.Commit()
+	} else if err != sql.ErrNoRows {
+		return nil, nil, err
+	}
+
+	lockedInventory, err := GetCharacterInventoryTx(tx, charID, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	preview, profession, err := craftPreviewTx(tx, charID, recipeKey, catalystKey, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	if expectedPreviewRevision > 0 && preview.PreviewRevision != expectedPreviewRevision {
+		return nil, nil, fmt.Errorf("prévia de produção desatualizada; atualize os custos antes de confirmar")
+	}
+	if !preview.CanCraft {
+		return nil, nil, fmt.Errorf("requisitos insuficientes: %v", preview.MissingRequirements)
+	}
+	recipe, exists := game.GetRecipeDefinition(recipeKey)
+	if !exists {
+		return nil, nil, fmt.Errorf("receita desconhecida: %s", recipeKey)
+	}
+	costs := append([]game.ResourceAmount{}, recipe.Ingredients...)
+	if preview.CatalystCost > 0 {
+		costs = append(costs, game.ResourceAmount{Key: catalystKey, Quantity: preview.CatalystCost})
+	}
+
+	// Descobre quantas unidades cabem nos saldos atuais sem abrir transações por item.
+	completed := requested
+	for _, cost := range costs {
+		var balance int64
+		if err := tx.QueryRow(`SELECT quantity FROM character_resources WHERE character_id=$1 AND resource_key=$2 FOR UPDATE`, charID, cost.Key).Scan(&balance); err != nil {
+			if err == sql.ErrNoRows {
+				completed = 0
+				break
+			}
+			return nil, nil, err
+		}
+		if cost.Quantity > 0 {
+			possible := int(balance / cost.Quantity)
+			if possible < completed {
+				completed = possible
+			}
+		}
+	}
+	if recipe.GoldCost > 0 {
+		possible := int(lockedCharacter.GoldBank / recipe.GoldCost)
+		if possible < completed {
+			completed = possible
+		}
+	}
+	if completed <= 0 {
+		return nil, nil, fmt.Errorf("recursos ou ouro insuficientes para produzir uma unidade")
+	}
+
+	batch := &game.CraftBatchResult{RequestID: requestID, RecipeKey: recipeKey, Requested: requested, Completed: completed, NotCompleted: requested - completed, RarityCounts: map[string]int{}}
+	if completed < requested {
+		batch.StopReason = "recursos ou ouro suficientes apenas para parte do lote"
+	}
+
+	for _, cost := range costs {
+		total := cost.Quantity * int64(completed)
+		var newBalance int64
+		if err := tx.QueryRow(`UPDATE character_resources SET quantity=quantity-$3,updated_at=NOW() WHERE character_id=$1 AND resource_key=$2 AND quantity >= $3 RETURNING quantity`, charID, cost.Key, total).Scan(&newBalance); err != nil {
+			return nil, nil, fmt.Errorf("saldo de %s mudou durante o lote: %w", cost.Key, err)
+		}
+		if _, err := tx.Exec(`INSERT INTO character_resource_ledger(character_id,request_id,reason,reference_key,resource_key,delta,balance_after) VALUES($1,$2,'craft_batch',$3,$4,$5,$6)`, charID, requestID, recipeKey, cost.Key, -total, newBalance); err != nil {
+			return nil, nil, err
+		}
+	}
+	totalGold := recipe.GoldCost * int64(completed)
+	if totalGold > 0 {
+		res, err := tx.Exec(`UPDATE characters SET gold_bank=gold_bank-$2,state_revision=state_revision+1 WHERE id=$1 AND gold_bank >= $2`, charID, totalGold)
+		if err != nil {
+			return nil, nil, err
+		}
+		if affected, _ := res.RowsAffected(); affected != 1 {
+			return nil, nil, fmt.Errorf("saldo de ouro mudou durante o lote")
+		}
+	}
+
+	xpGain := int64(12 * recipe.Tier * completed)
+	profession = game.ApplyProfessionExperience(profession, xpGain)
+	if _, err := tx.Exec(`UPDATE character_professions SET level=$3,experience=$4,lifetime_experience=lifetime_experience+$5,revision=revision+1,updated_at=NOW() WHERE character_id=$1 AND profession_key=$2`, charID, profession.ProfessionKey, profession.Level, profession.Experience, xpGain); err != nil {
+		return nil, nil, err
+	}
+
+	result := &game.CraftResult{RequestID: requestID, RecipeKey: recipeKey, ProfessionProgress: profession}
+	seed, err := secureServerSeed()
+	if err != nil {
+		return nil, nil, err
+	}
+	if recipe.Kind == game.RecipeKindEquipment {
+		inventory := lockedInventory
+		gameCharacter := characterToGame(lockedCharacter)
+		gameInventory := inventoryToGame(inventory)
+		for i := 0; i < completed; i++ {
+			crafted, rarity, err := game.GenerateCraftedItem(recipe, catalystKey, seed+int64(i+1), preview.ProfessionLevel, preview.StationLevel)
+			if err != nil {
+				return nil, nil, err
+			}
+			crafted.Source = game.ItemSourceCrafted
+			batch.RarityCounts[rarity]++
+			result.Item = crafted
+			result.Rarity = rarity
+			capacitySession := &game.GameSession{Character: gameCharacter, Inventory: gameInventory, ActiveStance: lockedCharacter.ActiveStance}
+			if len(gameInventory.Backpack) < capacitySession.GetMaxSlotCapacity() && capacitySession.GetTotalWeight()+crafted.Weight <= capacitySession.GetMaxWeightCapacity() {
+				gameInventory.Backpack = append(gameInventory.Backpack, *crafted)
+				result.SentToBackpack = true
+			} else {
+				if err := queuePendingItemTx(tx, charID, *crafted, "craft_batch", requestID); err != nil {
+					return nil, nil, err
+				}
+				batch.PendingCount++
+				result.SentToPending = true
+			}
+		}
+		inventory = ConvertGameInvToDBInv(gameInventory)
+		if err := SaveCharacterInventoryTx(tx, charID, inventory); err != nil {
+			return nil, nil, err
+		}
+	} else {
+		totalOutput := recipe.OutputQuantity * int64(completed)
+		result.Resources = []game.ResourceAmount{{Key: recipe.OutputResourceKey, Quantity: totalOutput}}
+		capacity, err := campStorageCapacityTx(tx, charID)
+		if err != nil {
+			return nil, nil, err
+		}
+		mutation, err := AddCharacterResourcesTx(tx, charID, result.Resources, capacity)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(mutation.Overflow) > 0 {
+			return nil, nil, fmt.Errorf("não há espaço no depósito para o lote produzido")
+		}
+		if err := recordResourceLedgerTx(tx, charID, requestID+":output", "craft_batch_output", recipeKey, mutation.Accepted); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	if _, err := tx.Exec(`UPDATE settlements SET prosperity=prosperity+$2,revision=revision+1,updated_at=NOW() WHERE character_id=$1`, charID, int64(recipe.Tier*completed)); err != nil {
+		return nil, nil, err
+	}
+	capacity, err := campStorageCapacityTx(tx, charID)
+	if err != nil {
+		return nil, nil, err
+	}
+	snapshot, err := getSnapshotWithinTx(tx, charID, capacity)
+	if err != nil {
+		return nil, nil, err
+	}
+	result.ResourceInventory = *snapshot
+	replay := craftBatchReplay{Result: result, Batch: batch}
+	encoded, err := json.Marshal(replay)
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, err := tx.Exec(`INSERT INTO crafting_batch_transactions(character_id,request_id,recipe_key,result) VALUES($1,$2,$3,$4)`, charID, requestID, recipeKey, string(encoded)); err != nil {
+		return nil, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, nil, err
+	}
+	game.IncrementTelemetry("craft_batch_completed_total")
+	return result, batch, nil
 }
 
 // ListPendingGatheringKeys é útil para auditorias e mantém uma ordem estável.

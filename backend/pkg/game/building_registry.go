@@ -55,12 +55,13 @@ var (
 
 		// 2. ARMAZÉM DE RECURSOS (east)
 		"warehouse": {
-			Key:         "warehouse",
-			Name:        "Armazém de Recursos",
-			Icon:        "📦",
-			Description: "Depósito reforçado para estocar madeira, minérios, tecidos e materiais nobres sem desperdício.",
-			SlotType:    "east",
-			MaxLevel:    3,
+			Key:             "warehouse",
+			Name:            "Armazém de Recursos",
+			Icon:            "📦",
+			Description:     "Depósito reforçado para estocar madeira, minérios, tecidos e materiais nobres sem desperdício.",
+			SlotType:        "east",
+			DefaultUnlocked: true,
+			MaxLevel:        3,
 			Levels: []BuildingLevelDefinition{
 				{
 					Level:                1,
@@ -96,12 +97,13 @@ var (
 
 		// 3. CABANA DO AVENTUREIRO (west)
 		"adventurer_hut": {
-			Key:         "adventurer_hut",
-			Name:        "Cabana do Aventureiro",
-			Icon:        "⛺",
-			Description: "Abrigo confortável para planejar estratégias e recuperar corpo e mente harmoniosamente.",
-			SlotType:    "west",
-			MaxLevel:    3,
+			Key:             "adventurer_hut",
+			Name:            "Cabana do Aventureiro",
+			Icon:            "⛺",
+			Description:     "Abrigo confortável para planejar estratégias e recuperar corpo e mente harmoniosamente.",
+			SlotType:        "west",
+			DefaultUnlocked: true,
+			MaxLevel:        3,
 			Levels: []BuildingLevelDefinition{
 				{
 					Level:                1,
@@ -137,12 +139,13 @@ var (
 
 		// 4. FONTE ARCANA (north)
 		"arcane_spring": {
-			Key:         "arcane_spring",
-			Name:        "Fonte Arcana",
-			Icon:        "⛲",
-			Description: "Águas místicas infundidas com energia etérea que restauram a mana rapidamente.",
-			SlotType:    "north",
-			MaxLevel:    3,
+			Key:             "arcane_spring",
+			Name:            "Fonte Arcana",
+			Icon:            "⛲",
+			Description:     "Águas místicas infundidas com energia etérea que restauram a mana rapidamente.",
+			SlotType:        "north",
+			DefaultUnlocked: true,
+			MaxLevel:        3,
 			Levels: []BuildingLevelDefinition{
 				{
 					Level:                1,
@@ -166,7 +169,7 @@ var (
 				{
 					Level:                3,
 					GoldCost:             160000,
-					Costs:                []ResourceAmount{{Key: "stone", Quantity: 1500}, {Key: "arcane_essence", Quantity: 800}, {Key: "glacial_crystal", Quantity: 200}},
+					Costs:                []ResourceAmount{{Key: "stone", Quantity: 1500}, {Key: "arcane_essence", Quantity: 800}, {Key: "glacial_crystal", Quantity: 200}, {Key: "copper_ingot", Quantity: 240}},
 					RequiredTrophies:     []ResourceAmount{{Key: "trophy_frozen_master", Quantity: 15}},
 					RequiredBuildings:    []BuildingRequirement{{BuildingKey: "warehouse", MinLevel: 3}, {BuildingKey: "campfire", MinLevel: 3}, {BuildingKey: "adventurer_hut", MinLevel: 3}},
 					BuildDuration:        4 * time.Hour,
@@ -236,14 +239,14 @@ var (
 				},
 				{
 					Level: 2, GoldCost: 25000,
-					Costs:             []ResourceAmount{{Key: "wood", Quantity: 450}, {Key: "stone", Quantity: 250}, {Key: "iron", Quantity: 120}},
+					Costs:             []ResourceAmount{{Key: "wood", Quantity: 450}, {Key: "stone", Quantity: 250}, {Key: "iron", Quantity: 120}, {Key: "copper_ingot", Quantity: 60}},
 					RequiredBuildings: []BuildingRequirement{{BuildingKey: "campfire", MinLevel: 2}, {BuildingKey: "warehouse", MinLevel: 1}},
 					BuildDuration:     30 * time.Minute, BuildDurationSeconds: 1800,
 					Effects: []BuildingEffect{{Key: "alchemy_unlock", Value: 1}, {Key: "alchemy_speed_percent", Value: 10}},
 				},
 				{
 					Level: 3, GoldCost: 125000,
-					Costs:             []ResourceAmount{{Key: "wood", Quantity: 1400}, {Key: "stone", Quantity: 900}, {Key: "iron", Quantity: 600}, {Key: "arcane_essence", Quantity: 120}},
+					Costs:             []ResourceAmount{{Key: "wood", Quantity: 1400}, {Key: "stone", Quantity: 900}, {Key: "iron", Quantity: 600}, {Key: "arcane_essence", Quantity: 120}, {Key: "copper_ingot", Quantity: 180}},
 					RequiredBuildings: []BuildingRequirement{{BuildingKey: "campfire", MinLevel: 3}, {BuildingKey: "warehouse", MinLevel: 2}},
 					BuildDuration:     4 * time.Hour, BuildDurationSeconds: 14400,
 					Effects: []BuildingEffect{{Key: "alchemy_unlock", Value: 1}, {Key: "alchemy_speed_percent", Value: 20}},
@@ -253,12 +256,13 @@ var (
 
 		// 5. BANCADA DE FERREIRO (south)
 		"workbench": {
-			Key:         "workbench",
-			Name:        "Bancada de Desmontagem",
-			Icon:        "⚒️",
-			Description: "Permite desmontar armas e armaduras sobressalentes para recuperar matérias-primas valiosas.",
-			SlotType:    "south",
-			MaxLevel:    3,
+			Key:             "workbench",
+			Name:            "Bancada de Desmontagem",
+			Icon:            "⚒️",
+			Description:     "Permite desmontar armas e armaduras sobressalentes para recuperar matérias-primas valiosas.",
+			SlotType:        "south",
+			DefaultUnlocked: true,
+			MaxLevel:        3,
 			Levels: []BuildingLevelDefinition{
 				{
 					Level:                1,
@@ -275,7 +279,7 @@ var (
 				{
 					Level:                2,
 					GoldCost:             45000,
-					Costs:                []ResourceAmount{{Key: "wood", Quantity: 600}, {Key: "stone", Quantity: 400}, {Key: "iron", Quantity: 350}, {Key: "fiber", Quantity: 100}},
+					Costs:                []ResourceAmount{{Key: "wood", Quantity: 600}, {Key: "stone", Quantity: 400}, {Key: "iron", Quantity: 350}, {Key: "fiber", Quantity: 100}, {Key: "copper_ingot", Quantity: 80}},
 					RequiredTrophies:     []ResourceAmount{{Key: "trophy_chapolin_alma", Quantity: 8}},
 					RequiredBuildings:    []BuildingRequirement{{BuildingKey: "warehouse", MinLevel: 2}, {BuildingKey: "adventurer_hut", MinLevel: 1}},
 					BuildDuration:        30 * time.Minute,

@@ -342,7 +342,7 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
                           onChange={() => {}}
                           className="rounded border-slate-700 text-amber-500 focus:ring-amber-400 h-3.5 w-3.5"
                         />
-                        <ItemIcon name={it.name} slotType={it.slot_type} weaponType={it.weapon_type} size="sm" />
+                        <ItemIcon name={it.name} slotType={it.slot_type} weaponType={it.weapon_type} templateKey={(it as any).template_key} visualKey={(it as any).visual_key} setKey={(it as any).set_key} rarity={it.rarity} size="sm" />
                         <div className="truncate">
                           <p className={`text-xs font-semibold truncate ${style.text}`}>{it.name}</p>
                           <p className="text-[10px] text-slate-400">
@@ -395,7 +395,7 @@ export const SalvageModal: React.FC<SalvageModalProps> = ({
                 <div className="space-y-3">
                   {selectedIds.length === 1 && inspectedItem && (
                     <div className="flex items-center gap-3 p-2 pixel-slot rounded bg-slate-900/90 border-slate-800">
-                      <ItemIcon name={inspectedItem.name} slotType={inspectedItem.slot_type} weaponType={inspectedItem.weapon_type} size="md" />
+                      <ItemIcon name={inspectedItem.name} slotType={inspectedItem.slot_type} weaponType={inspectedItem.weapon_type} templateKey={(inspectedItem as any).template_key} visualKey={(inspectedItem as any).visual_key} setKey={(inspectedItem as any).set_key} rarity={inspectedItem.rarity} size="md" />
                       <div>
                         <p className={`text-xs font-pixel-heading ${getRarityStyle(inspectedItem.rarity).text}`}>
                           {inspectedItem.name}

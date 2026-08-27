@@ -243,7 +243,12 @@ func CreateCharacter(accountID, name, vocation, origin string) (*Character, erro
 	starterBow := game.GenerateItemFromTemplate("Arco Curvo", "Comum", rng)
 	starterArrows := game.GenerateItemFromTemplate("Flechas de Madeira", "Comum", rng)
 	starterWand := game.GenerateItemFromTemplate("Varinha do Aprendiz", "Comum", rng)
-	for _, starter := range []*game.Item{starterSword, starterShield, starterBow, starterArrows, starterWand} {
+	starterHead := game.GenerateItemFromTemplate("Capacete de Couro", "Comum", rng)
+	starterChest := game.GenerateItemFromTemplate("Túnica de Couro", "Comum", rng)
+	starterLegs := game.GenerateItemFromTemplate("Calça de Couro do Pioneiro", "Comum", rng)
+	starterBoots := game.GenerateItemFromTemplate("Botas de Couro do Pioneiro", "Comum", rng)
+	starterBag := game.GenerateItemFromTemplate("Pequena Bolsa", "Comum", rng)
+	for _, starter := range []*game.Item{starterSword, starterShield, starterBow, starterArrows, starterWand, starterHead, starterChest, starterLegs, starterBoots, starterBag} {
 		if starter != nil {
 			starter.Source = game.ItemSourceStarter
 		}
@@ -256,6 +261,26 @@ func CreateCharacter(accountID, name, vocation, origin string) (*Character, erro
 	if starterShield != nil {
 		starterShield.SpecialEffect = "Escudo Inicial"
 		defaultEquip.OffHand = starterShield
+	}
+	if starterHead != nil {
+		starterHead.SpecialEffect = "Kit de Couro do Pioneiro"
+		defaultEquip.Head = starterHead
+	}
+	if starterChest != nil {
+		starterChest.SpecialEffect = "Kit de Couro do Pioneiro"
+		defaultEquip.Chest = starterChest
+	}
+	if starterLegs != nil {
+		starterLegs.SpecialEffect = "Kit de Couro do Pioneiro"
+		defaultEquip.Legs = starterLegs
+	}
+	if starterBoots != nil {
+		starterBoots.SpecialEffect = "Kit de Couro do Pioneiro"
+		defaultEquip.Boots = starterBoots
+	}
+	if starterBag != nil {
+		starterBag.SpecialEffect = "Bolsa Inicial"
+		defaultEquip.Bag = starterBag
 	}
 	if starterBow != nil {
 		starterBow.SpecialEffect = "Arma Inicial"
@@ -1367,8 +1392,8 @@ func SpendCharacterAutoPotion(charID string, settings game.AutoPotionSettings, k
 	if err != nil {
 		return result, err
 	}
-	var goldBank int64
-	if err := tx.QueryRow(`SELECT gold_bank FROM characters WHERE id=$1 FOR UPDATE`, charID).Scan(&goldBank); err != nil {
+	var goldBank, characterRevision int64
+	if err := tx.QueryRow(`SELECT gold_bank,state_revision FROM characters WHERE id=$1 FOR UPDATE`, charID).Scan(&goldBank, &characterRevision); err != nil {
 		return result, err
 	}
 
@@ -1382,6 +1407,7 @@ func SpendCharacterAutoPotion(charID string, settings game.AutoPotionSettings, k
 			}
 		}
 		result.GoldBank = goldBank
+		result.CharacterRevision = characterRevision
 		result.State = state
 		if err := tx.Commit(); err != nil {
 			return result, err
@@ -1390,7 +1416,7 @@ func SpendCharacterAutoPotion(charID string, settings game.AutoPotionSettings, k
 	}
 
 	cost := game.AutoPotionCost(kind)
-	if _, err := tx.Exec(`UPDATE characters SET gold_bank=gold_bank-$2 WHERE id=$1`, charID, cost); err != nil {
+	if err := tx.QueryRow(`UPDATE characters SET gold_bank=gold_bank-$2,state_revision=state_revision+1 WHERE id=$1 RETURNING state_revision`, charID, cost).Scan(&characterRevision); err != nil {
 		return result, err
 	}
 	state = game.ApplyAutoPotionSpend(state, kind, now.UTC())
@@ -1403,6 +1429,8 @@ func SpendCharacterAutoPotion(charID string, settings game.AutoPotionSettings, k
 	}
 	result.Applied = true
 	result.GoldBank = goldBank - cost
+	result.GoldDelta = -cost
+	result.CharacterRevision = characterRevision
 	result.State = state
 	return result, nil
 }

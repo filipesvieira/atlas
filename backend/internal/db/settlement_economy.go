@@ -11,11 +11,11 @@ import (
 )
 
 type settlementTreasuryRow struct {
-	SettlementID       string
-	Prosperity         int64
-	Balance            int64
-	ReservedPayroll    int64
-	AutoFundEnabled    bool
+	SettlementID        string
+	Prosperity          int64
+	Balance             int64
+	ReservedPayroll     int64
+	AutoFundEnabled     bool
 	PersonalGoldReserve int64
 }
 
@@ -45,36 +45,38 @@ func insertSettlementGoldLedgerTx(tx *sql.Tx, settlementID, charID, requestID, r
 // reserveGatheringWageTx move o custo para custódia antes do morador sair.
 // Se o caixa estiver curto e o autofinanciamento estiver habilitado, somente o
 // déficit é transferido do herói e a reserva pessoal configurada é preservada.
-func reserveGatheringWageTx(tx *sql.Tx, charID, residentID, residentName, professionKey, requestID string, durationSeconds int64, professionLevel, expeditionTier int) (string, int64, error) {
+func reserveGatheringWageTx(tx *sql.Tx, charID, residentID, residentName, professionKey, requestID string, durationSeconds int64, professionLevel, expeditionTier int) (string, int64, int64, error) {
 	treasury, err := lockSettlementTreasuryTx(tx, charID)
 	if err != nil {
-		return "", 0, err
+		return "", 0, 0, err
 	}
 	wage := game.CalculateGatheringWage(durationSeconds, professionLevel, expeditionTier, treasury.Prosperity)
 	if wage == 0 {
-		return treasury.SettlementID, 0, nil
+		return treasury.SettlementID, 0, 0, nil
 	}
+	heroGoldDelta := int64(0)
 	if treasury.Balance < wage {
 		deficit := wage - treasury.Balance
 		if !treasury.AutoFundEnabled {
-			return "", 0, fmt.Errorf("a Tesouraria precisa de %d ouro para reservar este salário; deposite ouro ou habilite o financiamento automático", deficit)
+			return "", 0, 0, fmt.Errorf("a Tesouraria precisa de %d ouro para reservar este salário; deposite ouro ou habilite o financiamento automático", deficit)
 		}
 		var heroGold int64
 		if err := tx.QueryRow(`SELECT gold_bank FROM characters WHERE id=$1 FOR UPDATE`, charID).Scan(&heroGold); err != nil {
-			return "", 0, err
+			return "", 0, 0, err
 		}
 		if heroGold-deficit < treasury.PersonalGoldReserve {
-			return "", 0, fmt.Errorf("faltam %d ouro na Tesouraria; o financiamento automático preserva %d ouro pessoal do herói", deficit, treasury.PersonalGoldReserve)
+			return "", 0, 0, fmt.Errorf("faltam %d ouro na Tesouraria; o financiamento automático preserva %d ouro pessoal do herói", deficit, treasury.PersonalGoldReserve)
 		}
 		if _, err := tx.Exec(`UPDATE characters SET gold_bank=gold_bank-$2,state_revision=state_revision+1 WHERE id=$1`, charID, deficit); err != nil {
-			return "", 0, err
+			return "", 0, 0, err
 		}
+		heroGoldDelta = -deficit
 		treasury.Balance += deficit
 		if _, err := tx.Exec(`UPDATE settlements SET treasury_balance=treasury_balance+$2,treasury_lifetime_income=treasury_lifetime_income+$2,revision=revision+1,updated_at=NOW() WHERE id=$1`, treasury.SettlementID, deficit); err != nil {
-			return "", 0, err
+			return "", 0, 0, err
 		}
 		if err := insertSettlementGoldLedgerTx(tx, treasury.SettlementID, charID, requestID, "auto_fund", professionKey, deficit, treasury.Balance, map[string]any{"resident_id": residentID, "resident_name": residentName}); err != nil {
-			return "", 0, err
+			return "", 0, 0, err
 		}
 	}
 	treasury.Balance -= wage
@@ -84,12 +86,12 @@ func reserveGatheringWageTx(tx *sql.Tx, charID, residentID, residentName, profes
 		    treasury_reserved_payroll=treasury_reserved_payroll+$2,
 		    revision=revision+1,updated_at=NOW()
 		WHERE id=$1`, treasury.SettlementID, wage); err != nil {
-		return "", 0, err
+		return "", 0, 0, err
 	}
 	if err := insertSettlementGoldLedgerTx(tx, treasury.SettlementID, charID, requestID, "payroll_reserve", professionKey, -wage, treasury.Balance, map[string]any{"resident_id": residentID, "resident_name": residentName, "duration_seconds": durationSeconds, "economy_version": game.SettlementEconomyVersion}); err != nil {
-		return "", 0, err
+		return "", 0, 0, err
 	}
-	return treasury.SettlementID, wage, nil
+	return treasury.SettlementID, wage, heroGoldDelta, nil
 }
 
 func settleGatheringPayrollTx(tx *sql.Tx, charID string, activity *game.GatheringActivity, settledAt time.Time, cancelled bool, requestID string) (int64, int64, error) {

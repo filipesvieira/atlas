@@ -3,6 +3,9 @@ export interface PixelItemSpriteProps {
   slotType?: string;
   weaponType?: string;
   rarity?: string;
+  templateKey?: string;
+  visualKey?: string;
+  setKey?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }
@@ -12,6 +15,9 @@ export function PixelItemSprite({
   slotType = '',
   weaponType = '',
   rarity: _rarity = 'Comum',
+  templateKey = '',
+  visualKey = '',
+  setKey = '',
   size = 'md',
   className = '',
 }: PixelItemSpriteProps) {
@@ -27,6 +33,9 @@ export function PixelItemSprite({
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
+  const templateClean = (templateKey || '').toLowerCase();
+  const visualClean = (visualKey || '').toLowerCase();
+  const setClean = (setKey || '').toLowerCase();
   const rarityClean = (_rarity || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const isMythic = rarityClean.includes('mitic') || rarityClean.includes('divino');
   const isLegendary = rarityClean.includes('lend');
@@ -35,6 +44,23 @@ export function PixelItemSprite({
 
   const sizePx = size === 'sm' ? 16 : size === 'lg' ? 32 : size === 'xl' ? 48 : 24;
   const viewBox = '0 0 16 16';
+
+  const isGrumpyBear = setClean === 'urso_ranzinza' || nameClean.includes('urso ranzinza') || visualClean.includes('grumpy_bear');
+  const isFeionaSet = setClean === 'feiona' || nameClean.includes('feiona') || visualClean.includes('feiona_');
+  const isCandyStaff = visualClean === 'candy_lollipop_staff' || templateClean === 'cajado_de_pirulito' || nameClean.includes('pirulito');
+  const isPioneerLeather = [
+    'capacete_de_couro',
+    'tunica_de_couro',
+    'calca_de_couro_pioneiro',
+    'botas_de_couro_pioneiro',
+    'pequena_bolsa',
+  ].includes(templateClean) || [
+    'capacete de couro',
+    'tunica de couro',
+    'calca de couro do pioneiro',
+    'botas de couro do pioneiro',
+    'pequena bolsa',
+  ].includes(nameClean);
 
   // Identificação temática por Nome/Material do Item (Identidade Visual Autêntica)
   const isGoldOrCelestial =
@@ -92,7 +118,11 @@ export function PixelItemSprite({
   const isIron = nameClean.includes('ferro');
 
   // Paleta Autêntica de Lâmina e Metais (Fiel ao item, independente da raridade)
-  const bladeColor = isGoldOrCelestial
+  const bladeColor = isGrumpyBear
+    ? '#92400e'
+    : isFeionaSet
+    ? '#16a34a'
+    : isGoldOrCelestial
     ? '#facc15'
     : isIceOrCrystal
     ? '#38bdf8'
@@ -106,7 +136,11 @@ export function PixelItemSprite({
     ? '#10b981'
     : isWood ? '#a16207' : isLeather ? '#92400e' : isCloth ? '#6366f1' : isBone ? '#d6d3d1' : isStone ? '#78716c' : isCopper ? '#c2410c' : isBronze ? '#b45309' : isSilver ? '#cbd5e1' : isIron ? '#64748b' : '#cbd5e1'; // Material base
 
-  const bladeHighlight = isGoldOrCelestial
+  const bladeHighlight = isGrumpyBear
+    ? '#d97706'
+    : isFeionaSet
+    ? '#c084fc'
+    : isGoldOrCelestial
     ? '#fef08a'
     : isIceOrCrystal
     ? '#e0f2fe'
@@ -120,7 +154,11 @@ export function PixelItemSprite({
     ? '#6ee7b7'
     : isWood ? '#f59e0b' : isLeather ? '#d97706' : isCloth ? '#a5b4fc' : isBone ? '#fafaf9' : isStone ? '#a8a29e' : isCopper ? '#fb923c' : isBronze ? '#f59e0b' : '#f8fafc';
 
-  const bladeShadow = isGoldOrCelestial
+  const bladeShadow = isGrumpyBear
+    ? '#451a03'
+    : isFeionaSet
+    ? '#14532d'
+    : isGoldOrCelestial
     ? '#ca8a04'
     : isIceOrCrystal
     ? '#0284c7'
@@ -134,7 +172,11 @@ export function PixelItemSprite({
     ? '#047857'
     : isWood ? '#451a03' : isLeather ? '#451a03' : isCloth ? '#3730a3' : isBone ? '#a8a29e' : isStone ? '#44403c' : isCopper ? '#7c2d12' : isBronze ? '#78350f' : '#64748b';
 
-  const guardColor = isGoldOrCelestial
+  const guardColor = isGrumpyBear
+    ? '#7c2d12'
+    : isFeionaSet
+    ? '#7e22ce'
+    : isGoldOrCelestial
     ? '#ca8a04'
     : isIceOrCrystal
     ? '#0369a1'
@@ -146,7 +188,110 @@ export function PixelItemSprite({
     ? '#4c1d95'
     : isEmeraldOrPoison
     ? '#064e3b'
-    : '#b45309'; // Bronze/Madeira padrão
+    : isLeather
+    ? '#78350f'
+    : isWood
+    ? '#713f12'
+    : isCloth
+    ? '#4338ca'
+    : isBone
+    ? '#a8a29e'
+    : isStone
+    ? '#57534e'
+    : isCopper
+    ? '#9a3412'
+    : isBronze
+    ? '#92400e'
+    : isSilver || isIron
+    ? '#64748b'
+    : '#64748b';
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // KIT DE COURO DO PIONEIRO
+  // Couro tem paleta marrom e costuras visíveis. O amarelo forte fica reservado
+  // a ouro, relíquias e efeitos de raridade — nunca ao equipamento inicial.
+  // ──────────────────────────────────────────────────────────────────────────
+  if (isPioneerLeather && (slotClean === 'head' || templateClean === 'capacete_de_couro')) {
+    return (
+      <svg width={sizePx} height={sizePx} viewBox={viewBox} className={`pixel-art ${className}`} style={{ imageRendering: 'pixelated' }}>
+        <rect x="5" y="1" width="6" height="2" fill="#4a2a18" />
+        <rect x="3" y="3" width="10" height="3" fill="#7a4524" />
+        <rect x="2" y="6" width="12" height="5" fill="#5a301a" />
+        <rect x="3" y="6" width="8" height="2" fill="#a66a3d" />
+        <rect x="4" y="8" width="8" height="2" fill="#120d0b" />
+        <rect x="5" y="8" width="2" height="1" fill="#d7a46d" />
+        <rect x="9" y="8" width="2" height="1" fill="#d7a46d" />
+        <rect x="2" y="11" width="12" height="2" fill="#2a160e" />
+        <rect x="4" y="12" width="8" height="1" fill="#8d542d" />
+      </svg>
+    );
+  }
+
+  if (isPioneerLeather && (slotClean === 'chest' || templateClean === 'tunica_de_couro')) {
+    return (
+      <svg width={sizePx} height={sizePx} viewBox={viewBox} className={`pixel-art ${className}`} style={{ imageRendering: 'pixelated' }}>
+        <rect x="2" y="3" width="3" height="4" fill="#5a301a" />
+        <rect x="11" y="3" width="3" height="4" fill="#3a1f12" />
+        <rect x="4" y="2" width="8" height="11" fill="#754020" />
+        <rect x="4" y="3" width="3" height="8" fill="#a66a3d" />
+        <rect x="9" y="3" width="3" height="8" fill="#4a2817" />
+        <rect x="7" y="5" width="1" height="1" fill="#e0b07a" />
+        <rect x="8" y="6" width="1" height="1" fill="#e0b07a" />
+        <rect x="8" y="5" width="1" height="1" fill="#e0b07a" />
+        <rect x="7" y="6" width="1" height="1" fill="#e0b07a" />
+        <rect x="7" y="8" width="1" height="1" fill="#e0b07a" />
+        <rect x="8" y="9" width="1" height="1" fill="#e0b07a" />
+        <rect x="8" y="8" width="1" height="1" fill="#e0b07a" />
+        <rect x="7" y="9" width="1" height="1" fill="#e0b07a" />
+        <rect x="4" y="12" width="8" height="2" fill="#2a160e" />
+      </svg>
+    );
+  }
+
+  if (isPioneerLeather && (slotClean === 'legs' || templateClean === 'calca_de_couro_pioneiro')) {
+    return (
+      <svg width={sizePx} height={sizePx} viewBox={viewBox} className={`pixel-art ${className}`} style={{ imageRendering: 'pixelated' }}>
+        <rect x="3" y="2" width="10" height="2" fill="#3a1f12" />
+        <rect x="7" y="2" width="2" height="2" fill="#a66a3d" />
+        <rect x="3" y="4" width="4" height="10" fill="#754020" />
+        <rect x="4" y="4" width="2" height="9" fill="#a66a3d" />
+        <rect x="9" y="4" width="4" height="10" fill="#5a301a" />
+        <rect x="11" y="4" width="2" height="9" fill="#3a1f12" />
+        <rect x="3" y="9" width="4" height="1" fill="#c2834e" />
+        <rect x="9" y="9" width="4" height="1" fill="#8d542d" />
+      </svg>
+    );
+  }
+
+  if (isPioneerLeather && (slotClean === 'boots' || templateClean === 'botas_de_couro_pioneiro')) {
+    return (
+      <svg width={sizePx} height={sizePx} viewBox={viewBox} className={`pixel-art ${className}`} style={{ imageRendering: 'pixelated' }}>
+        <rect x="2" y="4" width="4" height="7" fill="#754020" />
+        <rect x="3" y="5" width="2" height="5" fill="#a66a3d" />
+        <rect x="1" y="10" width="6" height="3" fill="#4a2817" />
+        <rect x="1" y="13" width="6" height="1" fill="#1f120c" />
+        <rect x="10" y="4" width="4" height="7" fill="#5a301a" />
+        <rect x="11" y="5" width="2" height="5" fill="#8d542d" />
+        <rect x="9" y="10" width="6" height="3" fill="#3a1f12" />
+        <rect x="9" y="13" width="6" height="1" fill="#1f120c" />
+      </svg>
+    );
+  }
+
+  if (isPioneerLeather && (slotClean === 'bag' || templateClean === 'pequena_bolsa')) {
+    return (
+      <svg width={sizePx} height={sizePx} viewBox={viewBox} className={`pixel-art ${className}`} style={{ imageRendering: 'pixelated' }}>
+        <rect x="6" y="2" width="4" height="2" fill="#3a1f12" />
+        <rect x="5" y="3" width="6" height="2" fill="#8d542d" />
+        <rect x="3" y="5" width="10" height="9" fill="#754020" />
+        <rect x="4" y="5" width="5" height="8" fill="#a66a3d" />
+        <rect x="5" y="9" width="6" height="4" fill="#4a2817" />
+        <rect x="7" y="9" width="2" height="1" fill="#d7a46d" />
+        <rect x="3" y="13" width="10" height="1" fill="#2a160e" />
+      </svg>
+    );
+  }
+
 
   // ──────────────────────────────────────────────────────────────────────────
   // 1. ARMAS DISTANCE: ARCOS E BESTAS
@@ -158,6 +303,21 @@ export function PixelItemSprite({
     nameClean.includes('besta') ||
     nameClean.includes('balestra')
   ) {
+    const isLongBow = nameClean.includes('longo') || nameClean.includes('ventos') || nameClean.includes('apocal');
+    if (isLongBow) {
+      return (
+        <svg width={sizePx} height={sizePx} viewBox={viewBox} className={`pixel-art ${className}`} style={{ imageRendering: 'pixelated' }}>
+          <rect x="1" y="1" width="2" height="4" fill={guardColor} />
+          <rect x="2" y="5" width="2" height="6" fill={guardColor} />
+          <rect x="1" y="11" width="2" height="4" fill={guardColor} />
+          <rect x="13" y="1" width="1" height="14" fill="#e2e8f0" opacity="0.85" />
+          <rect x="3" y="1" width="10" height="1" fill="#e2e8f0" opacity="0.55" />
+          <rect x="3" y="14" width="10" height="1" fill="#e2e8f0" opacity="0.55" />
+          <rect x="4" y="8" width="10" height="1" fill={bladeColor} />
+          <rect x="13" y="7" width="2" height="3" fill={bladeHighlight} />
+        </svg>
+      );
+    }
     return (
       <svg width={sizePx} height={sizePx} viewBox={viewBox} className={`pixel-art ${className}`} style={{ imageRendering: 'pixelated' }}>
         {/* Arco Curvo */}
@@ -174,6 +334,23 @@ export function PixelItemSprite({
         <rect x="5" y="8" width="8" height="1" fill={bladeColor} />
         <rect x="13" y="7" width="2" height="3" fill={bladeHighlight} />
         <rect x="3" y="7" width="2" height="3" fill="#dc2626" />
+      </svg>
+    );
+  }
+
+  if (isCandyStaff) {
+    return (
+      <svg width={sizePx} height={sizePx} viewBox={viewBox} className={`pixel-art ${className}`} style={{ imageRendering: 'pixelated' }}>
+        {/* Cajado de Pirulito do Biscoito Encantado: espiral doce e haste listrada. */}
+        <rect x="3" y="12" width="2" height="3" fill="#f8fafc" />
+        <rect x="5" y="9" width="2" height="4" fill="#ef4444" />
+        <rect x="7" y="6" width="2" height="4" fill="#f8fafc" />
+        <rect x="9" y="4" width="2" height="3" fill="#ef4444" />
+        <rect x="9" y="0" width="5" height="5" fill="#f472b6" />
+        <rect x="10" y="0" width="3" height="1" fill="#fff7ed" />
+        <rect x="13" y="1" width="1" height="3" fill="#dc2626" />
+        <rect x="10" y="2" width="3" height="2" fill="#fff7ed" />
+        <rect x="11" y="2" width="1" height="1" fill="#ef4444" />
       </svg>
     );
   }

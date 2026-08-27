@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import type { ConsumableDefinition, GatheringExpeditionDefinition, GameCatalogData, RecipeDefinition } from '../../game/GameCatalog';
-import type { CraftBatchResult, CraftPreview, EconomyState, Item, ProfessionProgress, ResourceAmount, SettlementResident } from '../../hooks/useGameSocket';
+import type { ActiveBuff, CraftBatchResult, CraftPreview, EconomyState, Item, ProfessionProgress, ResourceAmount, SettlementResident } from '../../hooks/useGameSocket';
 import { PixelItemSprite } from '../../game/registries/PixelArtItemRegistry';
 import { PixelResourceSprite } from '../../game/registries/PixelResourceRegistry';
 import { PixelProfessionSprite } from '../../game/registries/PixelProfessionRegistry';
@@ -121,6 +121,8 @@ type EquipmentFilterEntry = {
   name?: string;
   slot_type?: string;
   weapon_type?: string;
+  visual_key?: string;
+  set_key?: string;
   rarity?: string;
 };
 
@@ -447,6 +449,45 @@ function ConsumableTooltip({ consumable, outputQuantity, children }: { consumabl
   );
 }
 
+function ConsumableStationStatus({ kind, activeBuff, now }: { kind: 'meal' | 'potion'; activeBuff?: ActiveBuff; now: number }) {
+  const isMeal = kind === 'meal';
+  const icon = isMeal ? '🍳' : '🧪';
+  const title = isMeal ? 'Cozinha de campanha' : 'Bancada de Alquimia';
+  const description = isMeal
+    ? 'Transforme pesca, caça, trigo e ervas em preparação para a próxima expedição.'
+    : 'Destile poções para fortalecer o herói. A poção usa um espaço separado e não substitui a refeição ativa.';
+  const activeLabel = isMeal ? 'REFEIÇÃO ATIVA' : 'POÇÃO ATIVA';
+  const emptyLabel = isMeal ? 'Nenhuma refeição ativa.' : 'Nenhuma poção ativa.';
+  const accentTitle = isMeal ? 'text-orange-300' : 'text-fuchsia-300';
+  const badgeClass = isMeal
+    ? 'border-orange-700/60 bg-orange-950/40 text-orange-200'
+    : 'border-fuchsia-700/60 bg-fuchsia-950/40 text-fuchsia-200';
+  const activeClass = isMeal
+    ? 'border-emerald-700/60 bg-emerald-950/30 text-emerald-200'
+    : 'border-fuchsia-700/60 bg-fuchsia-950/30 text-fuchsia-200';
+  const timeClass = isMeal ? 'text-emerald-300/80' : 'text-fuchsia-300/80';
+  const remaining = activeBuff ? durationLabel(Math.max(60, Math.ceil((new Date(activeBuff.expires_at).getTime() - now) / 1000))) : '';
+
+  return (
+    <>
+      <div className="settlement-panel-header">
+        <div>
+          <h3 className={`settlement-panel-title ${accentTitle}`}>{icon} {title}</h3>
+          <p className="settlement-panel-subtitle">{description}</p>
+        </div>
+        {activeBuff ? <span className={`rounded border px-2 py-1 text-[9px] font-pixel-heading ${badgeClass}`}>1 {activeLabel}</span> : null}
+      </div>
+      <div className={`settlement-choice flex min-h-11 items-center gap-2 px-3 py-2 text-xs ${activeBuff ? activeClass : 'text-slate-400'}`}>
+        {activeBuff ? <PixelResourceSprite resourceKey={activeBuff.source_resource_key} name={activeBuff.source_name} size="sm" /> : <span className="text-base opacity-60">{isMeal ? '🍽️' : '🧴'}</span>}
+        {activeBuff ? <div>
+          <strong>{activeBuff.source_name}</strong> · +{activeBuff.magnitude}% {activeBuff.effect_key === 'xp_gain_percent' ? 'XP de combate' : 'Ataque'}<br />
+          <span className={`text-[10px] ${timeClass}`}>restam {remaining}</span>
+        </div> : <span>{emptyLabel}</span>}
+      </div>
+    </>
+  );
+}
+
 export const formatBlockedReason = (reason?: string, resourceDefs?: Record<string, { name?: string }>) => {
   if (!reason) return '';
   let formatted = reason;
@@ -474,7 +515,7 @@ export function EquipmentStatsCard({ recipe }: { recipe: RecipeDefinition }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="font-pixel-heading text-slate-200 text-xs flex min-w-0 items-center gap-1.5">
             <span className="settlement-icon-frame h-8 w-8 rounded-md shrink-0">
-              <PixelItemSprite slotType={recipe.slot_type} weaponType={recipe.slot_type === 'mainhand' ? (recipe.key.includes('bow') ? 'bow' : recipe.key.includes('wand') ? 'wand' : 'sword') : undefined} size="sm" />
+              <PixelItemSprite name={recipe.name} slotType={recipe.slot_type} weaponType={recipe.weapon_type} templateKey={recipe.output_template_key} visualKey={recipe.visual_key} setKey={recipe.set_key} rarity={recipe.minimum_rarity} size="sm" />
             </span>
             <span className="truncate">{recipe.name || 'Equipamento'}</span>
             {recipe.hands === 2 && (
@@ -747,11 +788,11 @@ export function EconomyHubModal(props: Props) {
   const recipes = useMemo(() => {
     return props.catalog.recipes.filter((recipe) => {
       if (!unlocked.has(recipe.key)) return false;
+      // Oficina Manual não fabrica consumíveis nem receitas pertencentes a estações especializadas.
+      if (recipe.kind === 'consumable' || recipe.station_key === 'kitchen' || recipe.station_key === 'alchemy_bench') return false;
       if (search && !recipe.name.toLowerCase().includes(search.toLowerCase())) return false;
       if (craftCategory === 'all') return true;
       if (craftCategory === 'processing') return recipe.kind === 'processing';
-      if (craftCategory === 'foods') return recipe.kind === 'consumable' && recipe.station_key === 'kitchen';
-      if (craftCategory === 'alchemy') return recipe.kind === 'consumable' && recipe.station_key === 'alchemy_bench';
       if (craftCategory === 'weapons') return recipe.kind === 'equipment' && recipe.slot_type === 'mainhand' && weaponSubcategoryMatches(recipe, craftWeaponFilter);
       if (craftCategory === 'shields') return recipe.kind === 'equipment' && recipe.slot_type === 'offhand';
       if (craftCategory === 'helmets') return recipe.kind === 'equipment' && recipe.slot_type === 'head';
@@ -989,7 +1030,7 @@ export function EconomyHubModal(props: Props) {
                           <span className="flex min-w-0 items-center gap-2">
                             <span className="settlement-icon-frame h-8 w-8 shrink-0 rounded-md">
                               {recipe.kind === 'equipment' ? (
-                                <PixelItemSprite name={recipe.name} slotType={recipe.slot_type} weaponType={recipe.weapon_type} rarity={recipe.minimum_rarity} size="sm" />
+                                <PixelItemSprite name={recipe.name} slotType={recipe.slot_type} weaponType={recipe.weapon_type} templateKey={recipe.output_template_key} visualKey={recipe.visual_key} setKey={recipe.set_key} rarity={recipe.minimum_rarity} size="sm" />
                               ) : (
                                 <PixelResourceSprite resourceKey={recipe.output_resource_key || ''} name={recipe.name} size="sm" />
                               )}
@@ -1069,19 +1110,7 @@ export function EconomyHubModal(props: Props) {
 
         {tab === 'kitchen' && props.economy && <div className="space-y-4">
           <section className="settlement-panel settlement-panel-accent">
-            <div className="settlement-panel-header">
-              <div>
-                <h3 className="settlement-panel-title text-orange-300">🍳 Cozinha de campanha</h3>
-                <p className="settlement-panel-subtitle">Transforme pesca, caça, trigo e ervas em preparação para a próxima expedição.</p>
-              </div>
-              <span className="rounded border border-orange-700/60 bg-orange-950/40 px-2 py-1 text-[9px] font-pixel-heading text-orange-200">1 REFEIÇÃO ATIVA</span>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              {activeMeal ? <div className="settlement-choice border-emerald-700/60 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-200">
-                <strong>🍽️ {activeMeal.source_name}</strong> · +{activeMeal.magnitude}% {activeMeal.effect_key === 'xp_gain_percent' ? 'XP de combate' : 'Ataque'}<br/>
-                <span className="text-[10px] text-emerald-300/80">restam {durationLabel(Math.max(60, Math.ceil((new Date(activeMeal.expires_at).getTime() - now) / 1000)))}</span>
-              </div> : <div className="settlement-choice px-3 py-2 text-xs text-slate-400">Nenhuma refeição ativa.</div>}
-            </div>
+            <ConsumableStationStatus kind="meal" activeBuff={activeMeal} now={now} />
           </section>
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -1118,19 +1147,7 @@ export function EconomyHubModal(props: Props) {
 
         {tab === 'alchemy' && props.economy && <div className="space-y-4">
           <section className="settlement-panel settlement-panel-arcane">
-            <div className="settlement-panel-header">
-              <div>
-                <h3 className="settlement-panel-title text-fuchsia-300">🧪 Bancada de Alquimia</h3>
-                <p className="settlement-panel-subtitle">Destile poções para fortalecer o herói. A poção usa um espaço separado e não substitui a refeição ativa.</p>
-              </div>
-              <span className="rounded border border-fuchsia-700/60 bg-fuchsia-950/40 px-2 py-1 text-[9px] font-pixel-heading text-fuchsia-200">1 POÇÃO ATIVA</span>
-            </div>
-            {activePotion ? <div className="settlement-choice flex items-center gap-2 border-fuchsia-700/60 bg-fuchsia-950/30 px-3 py-2 text-xs text-fuchsia-200">
-              <PixelResourceSprite resourceKey={activePotion.source_resource_key} name={activePotion.source_name} size="sm" />
-              <div><strong>{activePotion.source_name}</strong> · +{activePotion.magnitude}% {activePotion.effect_key === 'xp_gain_percent' ? 'XP de combate' : 'Ataque'}<br/>
-              <span className="text-[10px] text-fuchsia-300/80">restam {durationLabel(Math.max(60, Math.ceil((new Date(activePotion.expires_at).getTime() - now) / 1000)))}</span>
-              </div>
-            </div> : <div className="settlement-choice px-3 py-2 text-xs text-slate-400">Nenhuma poção ativa.</div>}
+            <ConsumableStationStatus kind="potion" activeBuff={activePotion} now={now} />
           </section>
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -1268,15 +1285,10 @@ export function EconomyHubModal(props: Props) {
                         <PixelItemSprite
                           name={recipe.name}
                           slotType={recipe.slot_type}
-                          weaponType={
-                            recipe.slot_type === 'mainhand'
-                              ? recipe.key.includes('bow') || recipe.name.toLowerCase().includes('arco')
-                                ? 'bow'
-                                : recipe.key.includes('wand') || recipe.name.toLowerCase().includes('varinha')
-                                ? 'wand'
-                                : 'sword'
-                              : undefined
-                          }
+                          weaponType={recipe.weapon_type}
+                          templateKey={recipe.output_template_key}
+                          visualKey={recipe.visual_key}
+                          setKey={recipe.set_key}
                           rarity={recipe.minimum_rarity}
                           size="sm"
                         />
@@ -1819,6 +1831,25 @@ function DesireQueue({
                     className="pixel-btn pixel-btn-crimson px-2.5 py-1 text-[10px]"
                   >
                     Cancelar ambição
+                  </button>
+                </div>
+              )}
+
+              {desire.state === 'crafting' && (
+                <div className="mt-2 flex items-center justify-between gap-3 border-t border-rose-900/40 pt-2">
+                  <span className="text-[10px] leading-relaxed text-rose-200/80">
+                    A tentativa em andamento pode ser interrompida. Insumos e ouro reservados são devolvidos; excedentes ficam em Cargas Pendentes.
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const confirmed = window.confirm('Parar esta produção agora? Os materiais e o ouro reservados da tentativa atual serão devolvidos.');
+                      if (confirmed) onCancel(desire.id);
+                    }}
+                    className="pixel-btn pixel-btn-crimson shrink-0 px-2.5 py-1 text-[10px]"
+                    title="Interrompe somente a tentativa atual e libera o trabalhador."
+                  >
+                    ■ Parar produção
                   </button>
                 </div>
               )}

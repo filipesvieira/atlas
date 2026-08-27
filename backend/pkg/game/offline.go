@@ -238,6 +238,7 @@ func simulateOfflineWave(input OfflineSimulationInput, playerLevel int, wave []M
 	}
 
 	session := &GameSession{
+		ActiveRegion:    input.ActiveRegion,
 		CurrentMonsters: make([]Monster, len(wave)),
 		HeroGridX:       HeroGridX,
 		HeroGridY:       HeroGridY,
@@ -248,7 +249,7 @@ func simulateOfflineWave(input OfflineSimulationInput, playerLevel int, wave []M
 	for i := range session.CurrentMonsters {
 		mob := &session.CurrentMonsters[i]
 		mob.ID = "offline_mob_" + strconv.Itoa(i)
-		mob.GridX, mob.GridY = arenaSpawnPoint(i)
+		session.placeMonsterAtSpawn(mob, i)
 		mob.State = "CHASE"
 		mob.FleeResolved = false
 		if mob.MovementSpeedMultiplier <= 0 {

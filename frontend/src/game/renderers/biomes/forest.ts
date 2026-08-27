@@ -3,12 +3,11 @@ import {
   BuildingVisualProfiles,
   CAMP_GRID_HEIGHT,
   CAMP_GRID_WIDTH,
-  ISO_TILE_HEIGHT,
-  ISO_TILE_WIDTH,
   getGridFootprint,
   tileToScreen,
 } from '../../camp/CampLayoutRegistry';
 import { renderCampfire } from '../../camp/renderers/CampfireRenderer';
+import { ISO_ARENA_GEOMETRY, IsoWorldGeometry, tileToScreen as isoTileToScreen } from '../../IsoWorldGeometry';
 import { FOREST_NIGHT_PALETTE, stableVisualVariant, WORLD_VISUAL_CONTRACT } from '../../WorldVisualStyle';
 
 export function drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
@@ -206,25 +205,26 @@ function drawIsoTile(
   fill: string,
   stroke = 'rgba(148,163,184,0.055)',
   edgeDepth = 0,
+  geometry: IsoWorldGeometry = ISO_ARENA_GEOMETRY,
 ) {
-  const c = tileToScreen(tx, ty);
+  const c = isoTileToScreen(tx, ty, geometry);
   if (edgeDepth > 0) {
     ctx.fillStyle = FOREST_NIGHT_PALETTE.grassSide;
     ctx.beginPath();
-    ctx.moveTo(c.x - ISO_TILE_WIDTH / 2, c.y);
-    ctx.lineTo(c.x, c.y + ISO_TILE_HEIGHT / 2);
-    ctx.lineTo(c.x + ISO_TILE_WIDTH / 2, c.y);
-    ctx.lineTo(c.x + ISO_TILE_WIDTH / 2, c.y + edgeDepth);
-    ctx.lineTo(c.x, c.y + ISO_TILE_HEIGHT / 2 + edgeDepth);
-    ctx.lineTo(c.x - ISO_TILE_WIDTH / 2, c.y + edgeDepth);
+    ctx.moveTo(c.x - geometry.tileWidth / 2, c.y);
+    ctx.lineTo(c.x, c.y + geometry.tileHeight / 2);
+    ctx.lineTo(c.x + geometry.tileWidth / 2, c.y);
+    ctx.lineTo(c.x + geometry.tileWidth / 2, c.y + edgeDepth);
+    ctx.lineTo(c.x, c.y + geometry.tileHeight / 2 + edgeDepth);
+    ctx.lineTo(c.x - geometry.tileWidth / 2, c.y + edgeDepth);
     ctx.closePath();
     ctx.fill();
   }
   ctx.beginPath();
-  ctx.moveTo(c.x, c.y - ISO_TILE_HEIGHT / 2);
-  ctx.lineTo(c.x + ISO_TILE_WIDTH / 2, c.y);
-  ctx.lineTo(c.x, c.y + ISO_TILE_HEIGHT / 2);
-  ctx.lineTo(c.x - ISO_TILE_WIDTH / 2, c.y);
+  ctx.moveTo(c.x, c.y - geometry.tileHeight / 2);
+  ctx.lineTo(c.x + geometry.tileWidth / 2, c.y);
+  ctx.lineTo(c.x, c.y + geometry.tileHeight / 2);
+  ctx.lineTo(c.x - geometry.tileWidth / 2, c.y);
   ctx.closePath();
   ctx.fillStyle = fill;
   ctx.fill();
@@ -311,9 +311,16 @@ function drawForestSign(ctx: CanvasRenderingContext2D, x: number, y: number) {
   ctx.fillRect(x - 8, y - 16, 15, 5);
 }
 
+// Contrato visual da vegetação sólida da arena. O backend usa as mesmas
+// coordenadas para que o ator nunca pareça atravessar uma árvore.
+const FOREST_ARENA_TREE_TILES: ReadonlyArray<readonly [number, number, number]> = [
+  [1, 3, 0], [3, 15, 1], [6, 16, 2], [17, 1, 1], [21, 4, 0], [22, 11, 2], [20, 16, 1],
+  [7, 3, 2], [18, 2, 1], [22, 8, 0], [12, 16, 2], [5, 14, 1],
+];
+
 /** Floresta da primeira expedição em uma arena isométrica de 24x18 tiles. */
-export function getForestArenaBackground(w = 960, h = 420): HTMLCanvasElement {
-  return getOffscreenCanvas('bg_forest_iso_arena_v2', w, h, (ctx) => {
+export function getForestArenaBackground(w = 960, h = 420, geometry = ISO_ARENA_GEOMETRY): HTMLCanvasElement {
+  return getOffscreenCanvas(`bg_forest_iso_arena_v3_${geometry.originX}_${geometry.originY}`, w, h, (ctx) => {
     ctx.fillStyle = FOREST_NIGHT_PALETTE.void;
     ctx.fillRect(0, 0, w, h);
 
@@ -331,12 +338,12 @@ export function getForestArenaBackground(w = 960, h = 420): HTMLCanvasElement {
       ctx.fillRect(Math.round(w * rx), Math.round(h * ry), 2, 2);
     });
 
-    for (let tx = 0; tx < CAMP_GRID_WIDTH; tx++) {
-      for (let ty = 0; ty < CAMP_GRID_HEIGHT; ty++) {
+    for (let tx = 0; tx < geometry.gridWidth; tx++) {
+      for (let ty = 0; ty < geometry.gridHeight; ty++) {
         const key = `${tx},${ty}`;
         const isRiver = forestRiverTiles.some(([riverX, riverY]) => riverX === tx && riverY === ty);
         const isPath = forestPathTiles.has(key);
-        const isArenaEdge = tx === 0 || ty === 0 || tx === CAMP_GRID_WIDTH - 1 || ty === CAMP_GRID_HEIGHT - 1;
+        const isArenaEdge = tx === 0 || ty === 0 || tx === geometry.gridWidth - 1 || ty === geometry.gridHeight - 1;
         const grassVariant = stableVisualVariant(tx, ty, FOREST_NIGHT_PALETTE.grass.length);
         const fill = isRiver
           ? (stableVisualVariant(tx, ty, 2) === 0 ? FOREST_NIGHT_PALETTE.river : FOREST_NIGHT_PALETTE.riverDeep)
@@ -352,32 +359,42 @@ export function getForestArenaBackground(w = 960, h = 420): HTMLCanvasElement {
           fill,
           isRiver ? 'rgba(125,211,252,0.25)' : undefined,
           isArenaEdge ? WORLD_VISUAL_CONTRACT.isoTile.edgeDepth : 0,
+          geometry,
         );
         if (!isRiver && !isPath && !isArenaEdge && stableVisualVariant(tx, ty, 13) === 0) {
-          const p = tileToScreen(tx, ty);
+          const p = isoTileToScreen(tx, ty, geometry);
           drawForestTuft(ctx, p.x + 4, p.y + 1, grassVariant);
         }
       }
     }
 
-    // Silhuetas e objetos baixos ficam atrás dos atores e não alteram colisão.
-    const treeTiles: Array<[number, number, number]> = [
-      [1, 3, 0], [3, 15, 1], [6, 16, 2], [17, 1, 1], [21, 4, 0], [22, 11, 2], [20, 16, 1],
-      [7, 3, 2], [18, 2, 1], [22, 8, 0], [12, 16, 2], [5, 14, 1],
-    ];
-    treeTiles.forEach(([tx, ty, variant]) => {
-      const p = tileToScreen(tx, ty);
-      drawForestTree(ctx, p.x, p.y, variant);
-    });
-
+    // Pedras, tronco e placa são objetos baixos. As árvores entram na fila de
+    // profundidade abaixo para cobrirem atores que estejam atrás delas.
     [[4, 5], [5, 13], [18, 4], [21, 13], [15, 3], [2, 11], [11, 4], [7, 13]].forEach(([tx, ty]) => {
-      const p = tileToScreen(tx, ty);
+      const p = isoTileToScreen(tx, ty, geometry);
       drawForestRock(ctx, p.x, p.y, stableVisualVariant(tx, ty, 3));
     });
-    const log = tileToScreen(3, 9);
+    const log = isoTileToScreen(3, 9, geometry);
     drawFallenLog(ctx, log.x, log.y - 2);
-    const sign = tileToScreen(19, 9);
+    const sign = isoTileToScreen(19, 9, geometry);
     drawForestSign(ctx, sign.x, sign.y - 1);
+  });
+}
+
+/** Árvores sólidas renderizadas junto dos atores na ordem isométrica correta. */
+export function getForestDepthObjects(
+  ctx: CanvasRenderingContext2D,
+  _width: number,
+  _height: number,
+  _time: number,
+  geometry = ISO_ARENA_GEOMETRY,
+) {
+  return FOREST_ARENA_TREE_TILES.map(([tileX, tileY, variant]) => {
+    const point = isoTileToScreen(tileX, tileY, geometry);
+    return {
+      depth: point.y,
+      render: () => drawForestTree(ctx, point.x, point.y, variant),
+    };
   });
 }
 
@@ -397,13 +414,19 @@ function drawForestRiverWave(ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.restore();
 }
 
-export function renderForestArenaDynamic(ctx: CanvasRenderingContext2D, time: number) {
+export function renderForestArenaDynamic(
+  ctx: CanvasRenderingContext2D,
+  _width: number,
+  _height: number,
+  time: number,
+  geometry = ISO_ARENA_GEOMETRY,
+) {
   forestRiverTiles.forEach(([tx, ty], index) => {
-    const p = tileToScreen(tx, ty);
+    const p = isoTileToScreen(tx, ty, geometry);
     drawForestRiverWave(ctx, p.x, p.y, time, index);
   });
 
-  const fire = tileToScreen(12, 9);
+  const fire = isoTileToScreen(12, 9, geometry);
   const campfireVisual = BuildingVisualProfiles.campfire;
   const campfireFootprint = getGridFootprint('campfire');
   renderCampfire(ctx, {

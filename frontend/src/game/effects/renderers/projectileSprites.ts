@@ -293,6 +293,46 @@ export function drawFireballComet(
   ctx.restore();
 }
 
+// ─── 3.5. BISCUITO ENCANTADO: PROJÉTIL DE PIRULITO PIXEL ART ────────────────
+
+/** Pequeno pirulito lançado pelo Biscoito Encantado, voltado para a direita. */
+export function drawLollipopBolt(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  facingAngle: number = 0,
+  scale: number = 1.25,
+) {
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.rotate(facingAngle);
+  ctx.scale(scale, scale);
+
+  ctx.strokeStyle = '#1e293b';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-11, 5);
+  ctx.lineTo(1, 0);
+  ctx.stroke();
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-11, 4);
+  ctx.lineTo(1, 0);
+  ctx.stroke();
+
+  ctx.fillStyle = '#4c1d95';
+  ctx.fillRect(0, -5, 9, 10);
+  ctx.fillStyle = '#ec4899';
+  ctx.fillRect(2, -5, 5, 3);
+  ctx.fillRect(4, -2, 5, 3);
+  ctx.fillStyle = '#22d3ee';
+  ctx.fillRect(0, 1, 4, 3);
+  ctx.fillStyle = '#fef08a';
+  ctx.fillRect(3, -1, 2, 2);
+  ctx.restore();
+}
+
 // ─── 4. ESTILHAÇO DE GELO: ORBE/COMETA DE GELO PIXEL ART (IMG 4) ──────────────
 
 export function drawIceOrbComet(

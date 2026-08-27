@@ -667,3 +667,31 @@ Todos os itens iniciais vêm devidamente identificados com a propriedade `Specia
 - Em telas `xl`, o dashboard deve priorizar a cena central em 8/12 colunas e usar 2/12 para cada lateral.
 - Informações secundárias devem ser recolhíveis/compactas sem remover acesso funcional.
 - O canvas lógico padrão é **960x420**; conversão de pointer deve sempre levar em conta o tamanho CSS real para drag-and-drop continuar preciso.
+
+---
+
+## 🗺️ 17. Arenas Vivas — Grade de Terreno e Colisão Autoritativa
+
+### A. Grade compilada por região
+- Os objetos da arena continuam declarados como retângulos legíveis, mas são
+  compilados uma única vez no startup para uma grade plana compartilhada.
+- A consulta `cells[y*width+x]` é `O(1)`, sem varrer a lista de árvores, casas e
+  pedras a cada passo ou nó visitado pelo pathfinding.
+- A grade pertence à região, não ao jogador. Todas as sessões reutilizam a
+  mesma estrutura imutável.
+
+### B. Terrenos que constroem identidade
+- `Solid` já bloqueia árvores, casas, pedras, fogueiras e placas cadastradas.
+- O contrato também prevê água, lama, fogo, veneno, caminhos preferenciais e
+  portais. Essas flags só devem afetar o jogador quando engine, IA, feedback
+  visual e testes forem implementados em conjunto.
+- As fases podem declarar dimensões próprias. `24x18` permanece como fallback
+  compatível para regiões ainda não convertidas.
+
+### C. Regra visual
+- Footprint físico e tamanho do sprite são independentes.
+- Copas e telhados usam profundidade pelo ponto de contato com o chão; não se
+  tornam sólidos em toda a área visual.
+- O backend decide ocupação; o frontend apenas projeta, interpola e desenha.
+
+Documento completo: [`docs/ARENA_TERRAIN_SYSTEM.md`](ARENA_TERRAIN_SYSTEM.md).

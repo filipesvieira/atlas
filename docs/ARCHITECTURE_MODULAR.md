@@ -275,11 +275,13 @@ resolver o impacto e nunca redireciona um `target_id` explícito para outro
 monstro. Isso é especialmente importante para a investida melee do guerreiro,
 cujo ponto final deve continuar sendo o alvo que recebeu o dano autoritativo.
 
-As outras regiões continuam usando o renderer legado até receberem sua própria
-arena visual. O próximo corte deve adicionar ao catálogo a definição de mapa
-(tiles passáveis, obstáculos, pontes e linha de visão) antes de habilitar
-colisões ambientais; a primeira floresta deliberadamente usa movimento livre
-para validar o contrato visual e de combate sem inventar regras de terreno.
+As regiões ainda não convertidas continuam usando o renderer legado e uma
+grade livre `24x18`. Floresta e Shereque já possuem colisão ambiental
+autoritativa: os retângulos legíveis da fase são validados e compilados no
+startup em uma grade plana compartilhada, consultada em `O(1)` por movimento,
+spawn e pathfinding. As definições aceitam dimensões regionais e flags futuras
+para água, lama, fogo, veneno, caminhos preferenciais e portais. O contrato
+completo está em `docs/ARENA_TERRAIN_SYSTEM.md`.
 
 ## Módulos de UI: Inventário & Equipamentos
 

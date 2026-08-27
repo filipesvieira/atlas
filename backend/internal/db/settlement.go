@@ -504,6 +504,9 @@ func CreateHeroDesire(charID, recipeKey, targetRarity, catalystKey string, maxAt
 	if !exists {
 		return nil, fmt.Errorf("receita de ambição não encontrada")
 	}
+	if !game.IsRecipeReleased(recipe) {
+		return nil, fmt.Errorf("esta receita pertence a uma fase futura e ainda não está disponível")
+	}
 	if recipe.Kind == game.RecipeKindEquipment {
 		normalizedTarget, valid := game.NormalizeSettlementRarity(targetRarity)
 		if !valid {
@@ -881,7 +884,11 @@ func startNextHeroDesire(charID string, now time.Time) (*game.SettlementAutomati
 		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
-		return &game.SettlementAutomationResult{Changed: true, EventType: "HERO_DESIRE_STARTED", LogText: fmt.Sprintf("🔨 %s começou a trabalhar em %s. Materiais reservados com segurança.", residentName, recipe.Name), GoldBank: gold - recipe.GoldCost}, nil
+		return &game.SettlementAutomationResult{
+			Changed: true, EventType: "HERO_DESIRE_STARTED",
+			LogText:  fmt.Sprintf("🔨 %s começou a trabalhar em %s. Materiais reservados com segurança.", residentName, recipe.Name),
+			GoldBank: gold - recipe.GoldCost, GoldDelta: -recipe.GoldCost,
+		}, nil
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -1189,25 +1196,73 @@ func AdvanceHeroDesires(charID string, now time.Time) (*game.SettlementAutomatio
 	return result, nil
 }
 
-func CancelHeroDesire(charID, desireID string) (*game.SettlementState, error) {
+func hydrateSettlementAutomationResult(charID string, result *game.SettlementAutomationResult) (*game.SettlementAutomationResult, error) {
+	if result == nil {
+		result = &game.SettlementAutomationResult{}
+	}
+	settlement, err := GetSettlementState(charID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := GetCharacterResourceSnapshot(charID)
+	if err != nil {
+		return nil, err
+	}
+	var gold, characterRevision int64
+	if err := DB.QueryRow(`SELECT gold_bank,state_revision FROM characters WHERE id=$1`, charID).Scan(&gold, &characterRevision); err != nil {
+		return nil, err
+	}
+	result.Settlement = settlement
+	result.ResourceInventory = snapshot
+	result.GoldBank = gold
+	result.CharacterRevision = characterRevision
+	return result, nil
+}
+
+func CancelHeroDesire(charID, desireID, requestID string) (*game.SettlementAutomationResult, error) {
 	if desireID == "" {
 		return nil, fmt.Errorf("ambição obrigatória")
+	}
+	if requestID == "" {
+		return nil, fmt.Errorf("request_id obrigatório para cancelar a ambição")
 	}
 	tx, err := DB.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
+
 	var settlementID, state string
-	if err := tx.QueryRow(`SELECT desire.settlement_id,desire.state FROM hero_desires desire JOIN settlements settlement ON settlement.id=desire.settlement_id WHERE settlement.character_id=$1 AND desire.id=$2 FOR UPDATE OF desire`, charID, desireID).Scan(&settlementID, &state); err != nil {
+	var residentID sql.NullString
+	var reservedGold int64
+	if err := tx.QueryRow(`
+		SELECT desire.settlement_id::text,desire.state,desire.assigned_resident_id::text,desire.reserved_gold
+		FROM hero_desires desire
+		JOIN settlements settlement ON settlement.id=desire.settlement_id
+		WHERE settlement.character_id=$1 AND desire.id=$2
+		FOR UPDATE OF desire`, charID, desireID).Scan(&settlementID, &state, &residentID, &reservedGold); err != nil {
 		return nil, fmt.Errorf("ambição não encontrada")
 	}
-	if state == game.SettlementDesireCrafting {
-		return nil, fmt.Errorf("a tentativa atual já consumiu materiais e precisa ser concluída")
+
+	cancelResult := &game.SettlementAutomationResult{
+		EventType: "HERO_DESIRE_CANCELLED",
+		LogText:   "Ambição cancelada.",
 	}
-	if state == game.SettlementDesireCompleted || state == game.SettlementDesireExhausted || state == game.SettlementDesireCancelled {
-		// Limpar a ficha da Ambição não remove os itens produzidos: o Arsenal é
-		// uma tabela independente e continua protegendo todos os resultados.
+
+	// Retry idempotente: a primeira transação já devolveu tudo. O registro
+	// cancelado permanece justamente para que repetir o request nunca devolva
+	// recursos ou ouro uma segunda vez.
+	if state == game.SettlementDesireCancelled {
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+		cancelResult.Changed = false
+		return hydrateSettlementAutomationResult(charID, cancelResult)
+	}
+
+	if state == game.SettlementDesireCompleted || state == game.SettlementDesireExhausted {
+		// Limpar a ficha não remove resultados concluídos: o Arsenal é
+		// independente. Não existe reembolso porque a tentativa já terminou.
 		if _, err := tx.Exec(`DELETE FROM hero_desires WHERE id=$1`, desireID); err != nil {
 			return nil, err
 		}
@@ -1217,9 +1272,79 @@ func CancelHeroDesire(charID, desireID string) (*game.SettlementState, error) {
 		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
-		return GetSettlementState(charID)
+		cancelResult.Changed = true
+		cancelResult.LogText = "Ambição concluída removida da fila. O resultado já produzido permanece protegido."
+		return hydrateSettlementAutomationResult(charID, cancelResult)
 	}
-	if _, err := tx.Exec(`UPDATE hero_desires SET state='cancelled',blocked_reason='',revision=revision+1,updated_at=NOW() WHERE id=$1`, desireID); err != nil {
+
+	if state == game.SettlementDesireCrafting {
+		// O finalizador usa o mesmo FOR UPDATE em hero_desires. Cancelar e
+		// concluir são mutuamente exclusivos: nunca produzimos o item e também
+		// devolvemos os insumos da mesma tentativa.
+		rows, err := tx.Query(`SELECT resource_key,quantity FROM hero_desire_resource_reservations WHERE desire_id=$1 ORDER BY resource_key FOR UPDATE`, desireID)
+		if err != nil {
+			return nil, err
+		}
+		reserved := make([]game.ResourceAmount, 0, 8)
+		for rows.Next() {
+			var amount game.ResourceAmount
+			if err := rows.Scan(&amount.Key, &amount.Quantity); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			reserved = append(reserved, amount)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if err := rows.Close(); err != nil {
+			return nil, err
+		}
+
+		if len(reserved) > 0 {
+			capacity, err := campStorageCapacityTx(tx, charID)
+			if err != nil {
+				return nil, err
+			}
+			mutation, err := AddCharacterResourcesTx(tx, charID, reserved, capacity)
+			if err != nil {
+				return nil, err
+			}
+			ledgerID := "desire_cancel:" + desireID
+			if err := recordResourceLedgerTx(tx, charID, ledgerID, "hero_desire_cancel_refund", desireID, mutation.Accepted); err != nil {
+				return nil, err
+			}
+			if err := storePendingResourcesTx(tx, charID, "hero_desire_cancel", desireID, mutation.Overflow); err != nil {
+				return nil, err
+			}
+			cancelResult.ResourceInventory = &mutation.Inventory
+		}
+		if reservedGold > 0 {
+			if _, err := tx.Exec(`UPDATE characters SET gold_bank=gold_bank+$2,state_revision=state_revision+1 WHERE id=$1`, charID, reservedGold); err != nil {
+				return nil, err
+			}
+			// A sessão pode ter ganhos ainda não checkpointados. O handler aplica
+			// apenas este delta e avança a revisão, em vez de substituir seu saldo
+			// pelo snapshot absoluto do PostgreSQL.
+			cancelResult.GoldDelta = reservedGold
+		}
+		if residentID.Valid && residentID.String != "" {
+			if _, err := tx.Exec(`UPDATE settlement_residents SET state='idle',updated_at=NOW() WHERE id=$1`, residentID.String); err != nil {
+				return nil, err
+			}
+		}
+		if _, err := tx.Exec(`DELETE FROM hero_desire_resource_reservations WHERE desire_id=$1`, desireID); err != nil {
+			return nil, err
+		}
+		cancelResult.LogText = "Produção interrompida. Recursos e ouro reservados foram devolvidos; excedentes ficaram protegidos em Cargas Pendentes."
+	}
+
+	if _, err := tx.Exec(`
+		UPDATE hero_desires
+		SET state='cancelled',blocked_reason='',assigned_resident_id=NULL,current_order_started_at=NULL,
+		    current_order_ready_at=NULL,reserved_gold=0,revision=revision+1,updated_at=NOW()
+		WHERE id=$1`, desireID); err != nil {
 		return nil, err
 	}
 	if _, err := tx.Exec(`UPDATE settlements SET revision=revision+1,updated_at=NOW() WHERE id=$1`, settlementID); err != nil {
@@ -1228,7 +1353,9 @@ func CancelHeroDesire(charID, desireID string) (*game.SettlementState, error) {
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return GetSettlementState(charID)
+	game.IncrementTelemetry("hero_desire_cancelled_total{state=" + state + "}")
+	cancelResult.Changed = true
+	return hydrateSettlementAutomationResult(charID, cancelResult)
 }
 
 func ClaimSettlementArmoryItem(charID, armoryID string) (*game.Item, *Inventory, *game.SettlementState, error) {
@@ -1335,4 +1462,45 @@ func formatBuildingName(key string) string {
 	default:
 		return key
 	}
+}
+
+// ListSettlementAutomationCandidates alimenta um único scheduler global. Ele
+// retorna apenas personagens com coleta vencida, craft automático pronto,
+// Ambição recém-enfileirada ou obra concluída; conexões sem trabalho não
+// consultam o banco periodicamente. Estados bloqueados voltam a ser avaliados
+// pelas mutações que podem fornecer recursos, sem polling permanente.
+func ListSettlementAutomationCandidates(now time.Time, limit int) ([]string, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	rows, err := DB.Query(`
+		SELECT character_id::text FROM (
+			SELECT activity.character_id
+			FROM character_activities activity
+			WHERE activity.state IN ('running','claimable') AND activity.ends_at <= $1
+			UNION
+			SELECT settlement.character_id
+			FROM hero_desires desire
+			JOIN settlements settlement ON settlement.id=desire.settlement_id
+			WHERE (desire.state='crafting' AND desire.current_order_ready_at <= $1)
+			   OR (desire.state='queued' AND desire.updated_at <= $1 - INTERVAL '3 seconds')
+			UNION
+			SELECT building.character_id
+			FROM character_camp_buildings building
+			WHERE building.upgrade_target_level IS NOT NULL AND building.upgrade_ends_at <= $1
+		) candidates
+		LIMIT $2`, now.UTC(), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]string, 0, limit)
+	for rows.Next() {
+		var charID string
+		if err := rows.Scan(&charID); err != nil {
+			return nil, err
+		}
+		result = append(result, charID)
+	}
+	return result, rows.Err()
 }

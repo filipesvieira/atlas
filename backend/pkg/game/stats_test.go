@@ -154,12 +154,15 @@ func TestAllBootTemplatesHaveTierScaledMovementBonus(t *testing.T) {
 		level int
 		bonus float64
 	}{
-		"sandalias_ageis":     {tier: 1, level: 1, bonus: 8},
-		"botas_de_couro":      {tier: 2, level: 8, bonus: 10},
-		"coturno_da_lei":      {tier: 2, level: 8, bonus: 8},
-		"botas_de_ferro":      {tier: 3, level: 15, bonus: 9},
-		"botas_de_aco_runico": {tier: 4, level: 25, bonus: 14},
-		"botas_celestiais":    {tier: 5, level: 40, bonus: 20},
+		"sandalias_ageis":         {tier: 1, level: 1, bonus: 8},
+		"botas_de_couro_pioneiro": {tier: 1, level: 1, bonus: 6},
+		"botas_do_urso_ranzinza":  {tier: 1, level: 5, bonus: 6},
+		"sapatilhas_da_feiona":    {tier: 1, level: 5, bonus: 8},
+		"botas_de_couro":          {tier: 2, level: 8, bonus: 10},
+		"coturno_da_lei":          {tier: 2, level: 8, bonus: 8},
+		"botas_de_ferro":          {tier: 3, level: 15, bonus: 9},
+		"botas_de_aco_runico":     {tier: 4, level: 25, bonus: 14},
+		"botas_celestiais":        {tier: 5, level: 40, bonus: 20},
 	}
 
 	bootCount := 0

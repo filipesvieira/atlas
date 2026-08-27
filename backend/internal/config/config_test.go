@@ -64,3 +64,23 @@ func TestIsOriginAllowed(t *testing.T) {
 		t.Errorf("Origem http://evil-attacker.com NÃO deveria ser permitida")
 	}
 }
+
+func TestLoadConfigProductionRequiresExplicitOrigins(t *testing.T) {
+	t.Setenv("ENVIRONMENT", "production")
+	t.Setenv("JWT_SECRET", "production_secret_with_at_least_32_characters")
+	t.Setenv("ATLAS_DEV_TOOLS_ENABLED", "false")
+	t.Setenv("ALLOWED_ORIGINS", "")
+	if _, err := LoadConfig(); err == nil {
+		t.Fatal("production aceitou ALLOWED_ORIGINS ausente")
+	}
+}
+
+func TestLoadConfigProductionRejectsWildcardOrigin(t *testing.T) {
+	t.Setenv("ENVIRONMENT", "production")
+	t.Setenv("JWT_SECRET", "production_secret_with_at_least_32_characters")
+	t.Setenv("ATLAS_DEV_TOOLS_ENABLED", "false")
+	t.Setenv("ALLOWED_ORIGINS", "*")
+	if _, err := LoadConfig(); err == nil {
+		t.Fatal("production aceitou wildcard de origem")
+	}
+}

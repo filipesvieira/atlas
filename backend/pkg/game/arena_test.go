@@ -377,3 +377,52 @@ func TestArenaSpawnPointsUseDifferentCorners(t *testing.T) {
 		seen[point] = true
 	}
 }
+
+func TestArenaCollisionBlocksSherequeHut(t *testing.T) {
+	session := &GameSession{ActiveRegion: "shereque", HeroGridX: 15, HeroGridY: 6}
+	if session.canOccupyArenaTile(18, 6, arenaHeroMover, "") {
+		t.Fatal("o herói não deveria ocupar um tile dentro da cabana de Shereque")
+	}
+	if !session.canOccupyArenaTile(15, 6, arenaHeroMover, "") {
+		t.Fatal("o tile de aproximação da cabana deveria continuar livre")
+	}
+}
+
+func TestArenaCollisionRoutesAroundSherequeHut(t *testing.T) {
+	session := &GameSession{ActiveRegion: "shereque", HeroGridX: 15, HeroGridY: 6}
+	nextX, nextY := session.stepArenaToward(15, 6, 22, 6, "")
+	if nextX == 16 && nextY >= 4 && nextY <= 7 {
+		t.Fatalf("o primeiro passo não deveria atravessar a parede da cabana: (%d,%d)", nextX, nextY)
+	}
+	if nextX == 15 && nextY == 6 {
+		t.Fatal("o herói deveria iniciar o contorno da cabana, não ficar parado")
+	}
+}
+
+func TestArenaCollisionBlocksSherequeSign(t *testing.T) {
+	session := &GameSession{ActiveRegion: "shereque"}
+	if session.canOccupyArenaTile(5, 14, arenaHeroMover, "") {
+		t.Fatal("o herói não deveria ocupar o tile do letreiro da Vila do Shereque")
+	}
+	if !session.canOccupyArenaTile(5, 13, arenaHeroMover, "") {
+		t.Fatal("o tile diante do letreiro deveria continuar livre")
+	}
+}
+
+func TestArenaCollisionBlocksForestTree(t *testing.T) {
+	session := &GameSession{ActiveRegion: "forest"}
+	if session.canOccupyArenaTile(1, 3, arenaHeroMover, "") {
+		t.Fatal("o herói não deveria ocupar o tile de uma árvore da Floresta")
+	}
+	if !session.canOccupyArenaTile(1, 4, arenaHeroMover, "") {
+		t.Fatal("um tile adjacente à árvore deveria continuar livre")
+	}
+}
+
+func TestArenaManualMovementStopsAtSolidObject(t *testing.T) {
+	session := &GameSession{ActiveRegion: "forest", IsExpeditionActive: true, HeroGridX: 11, HeroGridY: 9}
+	session.SetManualMovement("right", true)
+	if session.HeroGridX != 11 || session.HeroGridY != 9 || session.HeroState != "MANUAL_BLOCKED" {
+		t.Fatalf("movimento manual deveria respeitar a fogueira: (%d,%d), estado=%s", session.HeroGridX, session.HeroGridY, session.HeroState)
+	}
+}

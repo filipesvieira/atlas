@@ -135,12 +135,22 @@ export interface GatheringExpeditionDefinition {
   player_selectable: boolean;
 }
 
+export interface EquipmentSetDefinition {
+  key: string;
+  name: string;
+  theme: string;
+  class_focus: string;
+  piece_keys: string[];
+}
+
 export interface RecipeDefinition {
   key: string;
   name: string;
   description: string;
   kind: 'equipment' | 'processing' | 'consumable';
   output_template_key?: string;
+  visual_key?: string;
+  set_key?: string;
   output_resource_key?: string;
   output_quantity?: number;
   profession_key: string;
@@ -224,6 +234,7 @@ interface GameCatalogResponse {
   gathering_expeditions?: GatheringExpeditionDefinition[];
   recipes?: RecipeDefinition[];
   consumables?: ConsumableDefinition[];
+  equipment_sets?: EquipmentSetDefinition[];
   economy_policy?: EconomyPolicy;
 }
 
@@ -270,6 +281,7 @@ export interface GameCatalogData {
   gatheringExpeditions: GatheringExpeditionDefinition[];
   recipes: RecipeDefinition[];
   consumables: ConsumableDefinition[];
+  equipmentSets?: EquipmentSetDefinition[];
   economyPolicy?: EconomyPolicy;
 }
 
@@ -306,6 +318,7 @@ function mapCatalog(response: GameCatalogResponse): GameCatalogData {
     gatheringExpeditions: response.gathering_expeditions || [],
     recipes: response.recipes || [],
     consumables: response.consumables || [],
+    equipmentSets: response.equipment_sets || [],
     economyPolicy: response.economy_policy,
   };
 }

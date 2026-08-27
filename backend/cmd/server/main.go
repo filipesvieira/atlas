@@ -41,6 +41,10 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+type WSTicketRequest struct {
+	CharacterID string `json:"character_id"`
+}
+
 type CreateCharacterRequest struct {
 	Name     string `json:"name"`
 	Vocation string `json:"vocation"`
@@ -89,6 +93,8 @@ func main() {
 		}
 		log.Printf("🧹 Leases de sessões locais anteriores foram limpos")
 	}
+	startSettlementScheduler()
+
 	if cfg.DevToolsEnabled {
 		if err := bootstrapDeveloperAdmin(cfg.DevAdminEmail, cfg.DevAdminPassword); err != nil {
 			log.Fatalf("Erro fatal ao preparar administrador de testes: %v", err)
@@ -126,6 +132,7 @@ func main() {
 		r.Use(AuthMiddleware)
 		r.Get("/api/v1/characters", HandleGetCharacters)
 		r.Post("/api/v1/characters", HandleCreateCharacter)
+		r.Post("/api/v1/auth/ws-ticket", HandleWSTicket)
 		r.Post("/api/v1/expedition/claim", HandleClaimOfflineProgress)
 		r.Get("/api/v1/admin/telemetry", AdminMiddleware(HandleAdminTelemetry))
 		if cfg.DevToolsEnabled {
@@ -134,7 +141,16 @@ func main() {
 	})
 
 	log.Printf("Project Atlas Backend em Go ativo na porta :%s [Consumo ~20MB RAM]\n", cfg.Port)
-	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
+	server := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Erro no servidor: %v", err)
 	}
 }
@@ -178,6 +194,15 @@ func HandleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if len(req.Email) > 254 || len(req.Password) < 8 || len(req.Password) > 128 {
+		jsonError(w, http.StatusBadRequest, "Email ou senha fora dos limites permitidos")
+		return
+	}
+	if !allowRegistrationAttempt(r, time.Now().UTC()) {
+		w.Header().Set("Retry-After", "3600")
+		jsonError(w, http.StatusTooManyRequests, "Muitas tentativas de cadastro a partir desta conexão. Tente novamente mais tarde.")
+		return
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Erro ao criptografar senha")
@@ -211,6 +236,15 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if len(req.Email) > 254 || len(req.Password) > 128 {
+		jsonError(w, http.StatusUnauthorized, "Email ou senha incorretos")
+		return
+	}
+	if !allowLoginAttempt(r, req.Email, time.Now().UTC()) {
+		w.Header().Set("Retry-After", "300")
+		jsonError(w, http.StatusTooManyRequests, "Muitas tentativas de login. Aguarde alguns minutos antes de tentar novamente.")
+		return
+	}
 	acc, err := db.GetAccountByEmail(req.Email)
 	if err != nil {
 		jsonError(w, http.StatusUnauthorized, "Email ou senha incorretos")
@@ -231,6 +265,44 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]any{
 		"token":   tokenStr,
 		"account": acc,
+	})
+}
+
+func HandleWSTicket(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	var req WSTicketRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.CharacterID) == "" || len(req.CharacterID) > 64 {
+		jsonError(w, http.StatusBadRequest, "character_id inválido")
+		return
+	}
+	claims, ok := r.Context().Value("claims").(*Claims)
+	if !ok || claims.AccountID == "" {
+		jsonError(w, http.StatusUnauthorized, "Sessão inválida")
+		return
+	}
+	if !allowWSTicketIssue(r, claims.AccountID, time.Now().UTC()) {
+		jsonError(w, http.StatusTooManyRequests, "Muitas tentativas de conexão em tempo real; aguarde alguns instantes")
+		return
+	}
+	var ownsCharacter bool
+	if err := db.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM characters WHERE id=$1 AND account_id=$2)`, req.CharacterID, claims.AccountID).Scan(&ownsCharacter); err != nil {
+		log.Printf("erro ao validar personagem para ticket websocket: %v", err)
+		jsonError(w, http.StatusInternalServerError, "Não foi possível preparar a conexão em tempo real")
+		return
+	}
+	if !ownsCharacter {
+		jsonError(w, http.StatusForbidden, "Personagem não pertence à conta autenticada")
+		return
+	}
+	ticket, expiresAt, err := issueWSTicket(claims.AccountID, req.CharacterID, time.Now().UTC())
+	if err != nil {
+		log.Printf("erro ao gerar ticket websocket: %v", err)
+		jsonError(w, http.StatusInternalServerError, "Não foi possível preparar a conexão em tempo real")
+		return
+	}
+	jsonResponse(w, http.StatusCreated, map[string]any{
+		"ticket":     ticket,
+		"expires_at": expiresAt,
 	})
 }
 
@@ -488,9 +560,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		authHeader := r.Header.Get("Authorization")
 		tokenStr := ""
 		if len(authHeader) > 7 && strings.EqualFold(authHeader[:7], "Bearer ") {
-			tokenStr = authHeader[7:]
-		} else {
-			tokenStr = r.URL.Query().Get("token")
+			tokenStr = strings.TrimSpace(authHeader[7:])
 		}
 
 		if tokenStr == "" {

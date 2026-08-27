@@ -98,13 +98,19 @@ func MoveCampBuilding(accountID, charID, slotKey string, tileX, tileY, rotation 
 		return nil, fmt.Errorf("não é possível mover uma construção enquanto a obra está em andamento")
 	}
 
-	if target.Level <= 0 && target.BuildingKey != "campfire" {
-		var discovered bool
-		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM character_building_blueprints WHERE character_id=$1 AND building_key=$2)`, charID, target.BuildingKey).Scan(&discovered); err != nil {
-			return nil, err
+	if target.Level <= 0 {
+		definition, exists := game.GetBuildingDefinition(target.BuildingKey)
+		if !exists {
+			return nil, fmt.Errorf("construção inválida: %s", target.BuildingKey)
 		}
-		if !discovered {
-			return nil, fmt.Errorf("descubra o projeto antes de escolher a posição da construção")
+		if !definition.DefaultUnlocked {
+			var discovered bool
+			if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM character_building_blueprints WHERE character_id=$1 AND building_key=$2)`, charID, target.BuildingKey).Scan(&discovered); err != nil {
+				return nil, err
+			}
+			if !discovered {
+				return nil, fmt.Errorf("descubra o projeto antes de escolher a posição da construção")
+			}
 		}
 	}
 

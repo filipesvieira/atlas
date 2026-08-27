@@ -19,6 +19,14 @@ func IncrementTelemetry(name string) {
 	value.(*atomic.Int64).Add(1)
 }
 
+func AddTelemetry(name string, delta int64) {
+	if name == "" || delta == 0 {
+		return
+	}
+	value, _ := runtimeTelemetry.LoadOrStore(name, &atomic.Int64{})
+	value.(*atomic.Int64).Add(delta)
+}
+
 func TelemetrySnapshot() map[string]int64 {
 	keys := []string{}
 	runtimeTelemetry.Range(func(key, _ any) bool {

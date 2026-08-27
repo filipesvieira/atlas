@@ -31,6 +31,10 @@ const migrationNames = [
   '000015_isometric_camp_layout',
   '000016_character_food_buffs',
   '000017_treasury_auto_fund_opt_in',
+  '000018_expand_settlement_space',
+  '000019_expedition_history',
+  '000020_auto_potion_settings',
+  '000021_settlement_scheduler_indexes',
 ];
 const migration = migrationNames
   .map((name) => read(`backend/migrations/${name}.sql`))
@@ -51,7 +55,7 @@ for (const food of ['grilled_fish', 'hunter_skewer', 'explorer_stew', 'tracker_p
 assert(migration.includes('character_active_buffs') && migration.includes('character_consumption_transactions'), 'persistência/idempotência de refeições ausente');
 assert(buffDatabase.includes('getCharacterBuffsOverlappingTx') && buffDatabase.includes('ConsumeCharacterConsumable'), 'consumo ou histórico offline de buffs ausente');
 assert(gatheringKeys.length === 6, `esperadas 6 expedições de coleta; encontradas ${gatheringKeys.length}`);
-assert(monsterParts.length === 39, `esperados 39 mapeamentos temáticos de monstros; encontrados ${monsterParts.length}`);
+assert(monsterParts.length === 40, `esperados 40 mapeamentos temáticos de monstros; encontrados ${monsterParts.length}`);
 assert(!/(ResourceKey:\s*"(?:wood|stone|fiber|iron)")/.test(profileRuntime), 'catálogo runtime ainda contém matéria-prima profissional hardcoded para monstros');
 for (const partKey of monsterPartKeys) assert(recipes.includes(`"${partKey}"`), `material temático sem receita substituta: ${partKey}`);
 assert(rawResources.length >= 15, `taxonomia profissional incompleta: ${rawResources.length} recursos brutos`);
@@ -73,8 +77,8 @@ assert(migration.includes('ALTER COLUMN transaction_id DROP NOT NULL') && migrat
 assert(migration.includes("starter_pack_key = 'classless_all'") && migration.includes('ALTER COLUMN starter_pack_claimed SET DEFAULT TRUE'), 'onboarding classless não foi migrado');
 assert(economyDatabase.includes('$3::text') && economyDatabase.includes('resource_key=$3::text'), 'query de desbloqueio ainda arrisca inferência conflitante do parâmetro de troféu');
 assert(economyDatabase.includes('ActiveGatherings') && economyDatabase.includes('resident_id'), 'coleta ainda não suporta múltiplos trabalhadores do assentamento');
-assert(settlementDatabase.includes('AdvanceHeroDesires') && settlementDatabase.includes('hero_desire_reserve'), 'scheduler ou reserva transacional de Ambições ausente');
-assert(settlementDatabase.includes('settlement_armory') && settlementDatabase.includes('SentToArmory: true'), 'produção automática não está protegida no Arsenal');
+assert(settlementDatabase.includes('AdvanceHeroDesires') && settlementDatabase.includes('hero_desire_reserve') && settlementDatabase.includes('ListSettlementAutomationCandidates'), 'scheduler global ou reserva transacional de Ambições ausente');
+assert(settlementDatabase.includes('settlement_armory') && settlementDatabase.includes('SentToArmory:'), 'produção automática não está protegida no Arsenal');
 assert(migration.includes('recipe_snapshot JSONB') && settlementDatabase.includes('recipeSnapshot'), 'Ambições não congelam a receita para sobreviver a atualizações de catálogo');
 assert(migration.includes('settlement_gold_ledger') && migration.includes('settlement_payroll'), 'Tesouraria ou folha auditável do assentamento ausente');
 assert(migration.includes('treasury_auto_fund_enabled SET DEFAULT FALSE'), 'auto-funding da tesouraria deve ser opt-in para novos assentamentos');

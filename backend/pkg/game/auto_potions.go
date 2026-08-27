@@ -46,11 +46,13 @@ type AutoPotionState struct {
 // sessão, inclusive quando o orçamento se encerra sem que um frasco seja
 // aplicado.
 type AutoPotionSpendResult struct {
-	Applied   bool            `json:"applied"`
-	Reason    string          `json:"reason,omitempty"`
-	GoldBank  int64           `json:"gold_bank"`
-	State     AutoPotionState `json:"state"`
-	PotionKey string          `json:"potion_key"`
+	Applied           bool            `json:"applied"`
+	Reason            string          `json:"reason,omitempty"`
+	GoldBank          int64           `json:"gold_bank"`
+	GoldDelta         int64           `json:"gold_delta,omitempty"`
+	CharacterRevision int64           `json:"character_revision,omitempty"`
+	State             AutoPotionState `json:"state"`
+	PotionKey         string          `json:"potion_key"`
 }
 
 func DefaultAutoPotionSettings() AutoPotionSettings {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { WS_BASE_URL } from '../config';
+import { API_BASE_URL, WS_BASE_URL } from '../config';
 import type { ImportantNotification } from '../types/notifications';
 
 const IGNORED_LOG_TYPES = new Set(['COMBAT_EVENT', 'TICK_UPDATE', 'HERO_MOVEMENT', 'AUTO_SELL_PREVIEW', 'STATE_SNAPSHOT']);
@@ -34,6 +34,8 @@ export interface Item {
   unlock_building_key?: string;
   unlock_max_level?: number;
   template_key?: string;
+  visual_key?: string;
+  set_key?: string;
   source?: 'legacy_drop' | 'monster_drop' | 'boss_drop' | 'crafted' | 'starter_pack' | 'quest_reward' | string;
   created_at?: string;
 }
@@ -353,7 +355,7 @@ export interface CombatMessage {
   state_revision?: number;
   type: string;
   timestamp: string;
-  character: {
+  character?: {
     id: string;
     name: string;
     level: number;
@@ -388,6 +390,16 @@ export interface CombatMessage {
 	highest_level_ever?: number;
 	xp_required?: number;
 	xp_percent?: number;
+  };
+  character_delta?: {
+    health: number;
+    max_health: number;
+    mana: number;
+    max_mana: number;
+    level: number;
+    experience: number;
+    gold_bank: number;
+    unspent_points: number;
   };
   inventory?: InventoryData;
   camp?: CampState;
@@ -641,9 +653,29 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
     let isMounted = true;
     let reconnectTimer: any = null;
 
-    const connect = () => {
+    const connect = async () => {
       if (!isMounted) return;
-      const wsUrl = `${WS_BASE_URL}/ws?token=${encodeURIComponent(token)}&character_id=${encodeURIComponent(characterId)}`;
+      let ticket = '';
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/v1/auth/ws-ticket`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ character_id: characterId }),
+        });
+        if (!response.ok) throw new Error(`ticket websocket: HTTP ${response.status}`);
+        const payload = await response.json();
+        ticket = String(payload.ticket || '');
+        if (!ticket) throw new Error('ticket websocket ausente');
+      } catch (error) {
+        console.error('Não foi possível preparar a conexão WebSocket:', error);
+        if (isMounted) reconnectTimer = setTimeout(() => { void connect(); }, 2000);
+        return;
+      }
+      if (!isMounted) return;
+      const wsUrl = `${WS_BASE_URL}/ws?ticket=${encodeURIComponent(ticket)}`;
 
       const ws = new WebSocket(wsUrl);
       socketRef.current = ws;
@@ -663,6 +695,15 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
         try {
           const msg: CombatMessage = JSON.parse(event.data);
           const previousCharacter = previousCharacterRef.current;
+          // Protocolo V3 envia apenas o delta do personagem no caminho quente.
+          // Materializamos localmente o mesmo shape antigo antes de atualizar UI/Canvas.
+          if (msg.character_delta && previousCharacter) {
+            msg.character = {
+              ...previousCharacter,
+              ...msg.character_delta,
+              state_revision: msg.state_revision ?? previousCharacter.state_revision,
+            };
+          }
 
           if (msg.seq) {
             if (lastSequenceRef.current > 0 && msg.seq > lastSequenceRef.current + 1) {
@@ -861,12 +902,12 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
         if (!isMounted) return;
         setConnected(false);
         reconnectTimer = setTimeout(() => {
-          connect();
+          void connect();
         }, 1500);
       };
     };
 
-    connect();
+    void connect();
 
     return () => {
       isMounted = false;

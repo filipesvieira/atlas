@@ -9,9 +9,8 @@
     "includeEmptyDirectories": false,
     "showLineNumbers": false,
     "git": {
-      "includeDiffs": true,
-      "includeLogs": true,
-      "includeLogsCount": 50,
+      "includeDiffs": false,
+      "includeLogs": false,
       "sortByChanges": true
     }
   },
@@ -31,7 +30,22 @@
       "backend/cmd/server/server",
       "*.bin",
       "*.exe",
-      "*.map"
+      "*.map",
+      "**/target/**",
+      "**/.cache/**",
+      "**/.turbo/**",
+      "**/.parcel-cache/**",
+      "**/.eslintcache",
+      "**/*.tsbuildinfo",
+      "**/test-results/**",
+      "**/playwright-report/**",
+      "**/tmp/**",
+      "**/logs/**",
+      "**/*.log",
+      "**/*.dump",
+      "**/*.sql.gz",
+      "**/.DS_Store",
+      "**/Thumbs.db"
     ]
   }
 }
