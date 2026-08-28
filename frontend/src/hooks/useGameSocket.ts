@@ -348,6 +348,101 @@ export interface CraftBatchResult {
   random_failures: number;
 }
 
+export interface ChatMessage {
+  id: string;
+  channel: 'world' | 'region' | 'kingdom' | 'pvp' | string;
+  sender_id: string;
+  sender_name: string;
+  sender_level: number;
+  text: string;
+  created_at: string;
+}
+
+export interface PublicPlayerProfile {
+  character_id: string;
+  name: string;
+  level: number;
+  region?: string;
+  rating: number;
+  wins: number;
+  losses: number;
+}
+
+export interface DuelChallenge {
+  id: string;
+  request_id?: string;
+  status: 'pending' | 'accepted' | 'declined' | 'cancelled' | 'expired' | string;
+  challenger: PublicPlayerProfile;
+  target: PublicPlayerProfile;
+  created_at: string;
+  expires_at: string;
+  responded_at?: string;
+}
+
+export type PvPTacticalStrategy = 'aggressive' | 'balanced' | 'defensive';
+
+export interface PvPMatchNotice {
+  id: string;
+  challenge_id: string;
+  arena_key: string;
+  status: 'ready' | 'active' | 'completed' | 'cancelled' | string;
+  rules_version: number;
+  created_at: string;
+  player_confirmed: boolean;
+  tactical_strategy?: PvPTacticalStrategy;
+  strategy_version?: number;
+}
+
+export interface PvPCombatActor {
+  character_id: string;
+  name: string;
+  level: number;
+  team: 'a' | 'b' | string;
+  health: number;
+  max_health: number;
+  mana: number;
+  max_mana: number;
+  grid_x: number;
+  grid_y: number;
+  state: string;
+  target_id?: string;
+  archetype: 'melee' | 'distance' | 'magic' | string;
+  skin_key?: string;
+}
+
+export interface PvPCombatEvent {
+  tick: number;
+  kind: string;
+  source_id?: string;
+  target_id?: string;
+  skill_key?: string;
+  amount?: number;
+  is_critical?: boolean;
+  is_healing?: boolean;
+  winner_id?: string;
+}
+
+export interface PvPCombatSnapshot {
+  match_id: string;
+  arena_key: string;
+  status: 'active' | 'completed' | 'cancelled' | string;
+  tick: number;
+  started_at: string;
+  ended_at?: string;
+  winner_id?: string;
+  actors: PvPCombatActor[];
+  events?: PvPCombatEvent[];
+}
+
+
+export interface PvPMatchHistoryEntry {
+  match_id: string; origin: string; opponent_id: string; opponent_name: string; result: 'win'|'loss'|'draw'|string;
+  rating_before: number; rating_after: number; rating_delta: number; combat_power: number; opponent_power: number; started_at: string; ended_at: string;
+}
+export interface PvPReplayEvent { sequence:number; event_type:string; payload:Record<string,unknown>; created_at:string; }
+export interface PvPMatchReplay { match_id:string; events:PvPReplayEvent[]; }
+export interface PvPMatchmakingStatus { queued:boolean; rating:number; combat_power:number; queued_at?:string; }
+
 export interface CombatMessage {
   protocol_version?: number;
   request_id?: string;
@@ -355,6 +450,19 @@ export interface CombatMessage {
   state_revision?: number;
   type: string;
   timestamp: string;
+  stream?: 'social' | string;
+  chat_message?: ChatMessage;
+  chat_history?: ChatMessage[];
+  presence?: { online_count: number };
+  public_profile?: PublicPlayerProfile;
+	duel_challenge?: DuelChallenge;
+	duel_challenges?: DuelChallenge[];
+	pvp_match_notice?: PvPMatchNotice;
+	pvp_combat?: PvPCombatSnapshot;
+  pvp_history?: PvPMatchHistoryEntry[];
+  pvp_replay?: PvPMatchReplay;
+  pvp_matchmaking?: PvPMatchmakingStatus;
+  error?: string;
   character?: {
     id: string;
     name: string;
@@ -367,6 +475,8 @@ export interface CombatMessage {
     gold_bank: number;
     vocation: string;
     origin: string;
+    equipped_skin_key?: string;
+    active_pvp_match_id?: string;
     str?: number;
     dex?: number;
     int_stat?: number;
@@ -606,6 +716,17 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
   const [attackCooldownRemaining, setAttackCooldownRemaining] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [onlineCount, setOnlineCount] = useState(0);
+  const [lastPublicProfile, setLastPublicProfile] = useState<PublicPlayerProfile | null>(null);
+  const [socialError, setSocialError] = useState<string | null>(null);
+	const [pendingDuelChallenges, setPendingDuelChallenges] = useState<DuelChallenge[]>([]);
+	const [pvpMatchNotice, setPvPMatchNotice] = useState<PvPMatchNotice | null>(null);
+	const [pvpArenaWaiting, setPvPArenaWaiting] = useState(false);
+	const [pvpCombat, setPvPCombat] = useState<PvPCombatSnapshot | null>(null);
+	const [pvpHistory, setPvPHistory] = useState<PvPMatchHistoryEntry[]>([]);
+	const [pvpReplay, setPvPReplay] = useState<PvPMatchReplay | null>(null);
+	const [pvpMatchmaking, setPvPMatchmaking] = useState<PvPMatchmakingStatus>({ queued:false, rating:1000, combat_power:0 });
 
   const socketRef = useRef<WebSocket | null>(null);
   const onCombatEventRef = useRef<((event: CombatMessage) => void) | null>(null);
@@ -695,6 +816,47 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
         try {
           const msg: CombatMessage = JSON.parse(event.data);
           const previousCharacter = previousCharacterRef.current;
+
+          if (msg.stream === 'social') {
+            if (msg.chat_history) setChatMessages(msg.chat_history.slice(-100));
+            if (msg.chat_message) {
+              setChatMessages((previous) => {
+                if (previous.some((item) => item.id === msg.chat_message!.id)) return previous;
+                return [...previous, msg.chat_message!].slice(-100);
+              });
+            }
+            if (msg.presence) setOnlineCount(Math.max(0, msg.presence.online_count || 0));
+            if (msg.public_profile) setLastPublicProfile(msg.public_profile);
+			if (msg.duel_challenges) {
+				setPendingDuelChallenges(msg.duel_challenges.filter((challenge) => challenge.status === 'pending'));
+			}
+			if (msg.duel_challenge) {
+				const challenge = msg.duel_challenge;
+				setPendingDuelChallenges((previous) => {
+					const withoutCurrent = previous.filter((item) => item.id !== challenge.id);
+					if (challenge.status === 'pending' && challenge.target.character_id === characterId) {
+						return [...withoutCurrent, challenge];
+					}
+					return withoutCurrent;
+				});
+			}
+			if (msg.pvp_match_notice) {
+				setPvPMatchNotice(msg.pvp_match_notice);
+                setPvPMatchmaking(previous => ({...previous, queued:false}));
+				setPvPArenaWaiting(msg.type === 'PVP_MATCH_WAITING' || msg.pvp_match_notice.player_confirmed === true);
+			}
+			if (msg.pvp_combat) {
+				setPvPCombat(msg.pvp_combat);
+				setPvPArenaWaiting(false);
+			}
+            if (msg.pvp_history) setPvPHistory(msg.pvp_history);
+            if (msg.pvp_replay) setPvPReplay(msg.pvp_replay);
+            if (msg.pvp_matchmaking) setPvPMatchmaking(msg.pvp_matchmaking);
+            if (msg.error) setSocialError(msg.error);
+            else if (msg.type !== 'SOCIAL_ERROR') setSocialError(null);
+            // Eventos sociais usam stream próprio e não participam de seq/state_revision.
+            return;
+          }
           // Protocolo V3 envia apenas o delta do personagem no caminho quente.
           // Materializamos localmente o mesmo shape antigo antes de atualizar UI/Canvas.
           if (msg.character_delta && previousCharacter) {
@@ -1209,6 +1371,82 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 	}
   };
 
+  const sendWorldChat = (text: string) => {
+    const value = text.trim();
+    if (!value || !socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return;
+    socketRef.current.send(JSON.stringify({ action: 'CHAT_SEND', channel: 'world', text: value.slice(0, 200), request_id: makeRequestId('chat') }));
+  };
+
+  const blockChatCharacter = (targetCharacterId: string) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ action: 'CHAT_BLOCK', target_character_id: targetCharacterId, request_id: makeRequestId('chatblock') }));
+      setChatMessages((previous) => previous.filter((message) => message.sender_id !== targetCharacterId));
+    }
+  };
+
+  const unblockChatCharacter = (targetCharacterId: string) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ action: 'CHAT_UNBLOCK', target_character_id: targetCharacterId, request_id: makeRequestId('chatunblock') }));
+    }
+  };
+
+  const reportChatMessage = (messageId: string, reason = 'Conteúdo inadequado') => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ action: 'CHAT_REPORT', message_id: messageId, reason: reason.slice(0, 240), request_id: makeRequestId('chatreport') }));
+    }
+  };
+
+  const requestPublicProfile = (targetCharacterId: string) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ action: 'REQUEST_PUBLIC_PROFILE', target_character_id: targetCharacterId, request_id: makeRequestId('profile') }));
+    }
+  };
+
+  const createDuelChallenge = (targetCharacterId: string) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ action: 'CREATE_DUEL_CHALLENGE', target_character_id: targetCharacterId, request_id: makeRequestId('duel') }));
+    }
+  };
+
+  const respondDuelChallenge = (challengeId: string, accept: boolean) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ action: 'RESPOND_DUEL_CHALLENGE', duel_challenge_id: challengeId, enabled: accept, request_id: makeRequestId('duelreply') }));
+    }
+  };
+
+  const cancelDuelChallenge = (challengeId: string) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ action: 'CANCEL_DUEL_CHALLENGE', duel_challenge_id: challengeId, request_id: makeRequestId('duelcancel') }));
+    }
+  };
+
+  const confirmPvPMatch = (matchId: string, tacticalStrategy: PvPTacticalStrategy = 'balanced') => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        action: 'CONFIRM_PVP_MATCH',
+        pvp_match_id: matchId,
+        pvp_tactical_strategy: tacticalStrategy,
+        pvp_strategy_version: 1,
+        request_id: makeRequestId('pvpconfirm'),
+      }));
+    }
+  };
+
+  const requestPvPHistory = () => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'REQUEST_PVP_HISTORY',request_id:makeRequestId('pvphistory')})); };
+  const requestPvPReplay = (matchId:string) => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'REQUEST_PVP_REPLAY',pvp_match_id:matchId,request_id:makeRequestId('pvpreplay')})); };
+  const joinPvPMatchmaking = (strategy:PvPTacticalStrategy='balanced') => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'JOIN_PVP_MATCHMAKING',pvp_tactical_strategy:strategy,pvp_strategy_version:1,request_id:makeRequestId('pvpqueue')})); };
+  const leavePvPMatchmaking = () => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'LEAVE_PVP_MATCHMAKING',request_id:makeRequestId('pvpleave')})); };
+  const requestPvPMatchmakingStatus = () => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'REQUEST_PVP_MATCHMAKING_STATUS',request_id:makeRequestId('pvpqstatus')})); };
+  const clearPvPReplay = () => setPvPReplay(null);
+
+  const setEquippedSkin = useCallback((skinKey: string) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ action: 'SET_EQUIPPED_SKIN', skin_key: skinKey, request_id: makeRequestId('skin') }));
+    }
+  }, []);
+
+  const clearPublicProfile = () => setLastPublicProfile(null);
+
   const transferTreasuryGold = (direction: 'deposit' | 'withdraw', amount: number) => {
 	if (socketRef.current?.readyState === WebSocket.OPEN) {
 	  socketRef.current.send(JSON.stringify({ action: 'TRANSFER_TREASURY_GOLD', direction, quantity: Math.max(1, Math.floor(amount)), request_id: makeRequestId('treasury') }));
@@ -1256,6 +1494,34 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
     attackCooldownRemaining,
     logs,
     connected,
+    chatMessages,
+    onlineCount,
+    lastPublicProfile,
+    socialError,
+		pendingDuelChallenges,
+		pvpMatchNotice,
+		pvpArenaWaiting,
+		pvpCombat,
+        pvpHistory,
+        pvpReplay,
+        pvpMatchmaking,
+    sendWorldChat,
+    blockChatCharacter,
+    unblockChatCharacter,
+    reportChatMessage,
+    requestPublicProfile,
+		createDuelChallenge,
+		respondDuelChallenge,
+		cancelDuelChallenge,
+		confirmPvPMatch,
+        requestPvPHistory,
+        requestPvPReplay,
+        joinPvPMatchmaking,
+        leavePvPMatchmaking,
+        requestPvPMatchmakingStatus,
+        clearPvPReplay,
+		setEquippedSkin,
+    clearPublicProfile,
     moveHero,
     toggleExpedition,
     setAutoResumeExpedition,

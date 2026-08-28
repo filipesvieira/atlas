@@ -1,5 +1,9 @@
 # MASTER IMPLEMENTATION BLUEPRINT: CORE RPG BALANCE, EQUIPMENT RULES & UI OVERHAUL
 
+> **Status (2026-08-27):** blueprint histórico de refatoração. Use-o para
+> consultar decisões de design, não como instrução para reintroduzir PixiJS ou
+> substituir os contratos atuais. Consulte [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md).
+
 > ⚠️ REGRAS DE EXECUÇÃO CIRÚRGICA:
 > Este plano aborda refatorações cruciais na engine de jogo (Go) e na Interface (React). Altere APENAS os trechos lógicos mencionados, garantindo que o servidor de WebSockets e o banco de dados permaneçam estáveis.
 

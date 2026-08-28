@@ -1,5 +1,9 @@
 # Plano de Implementação — Acampamento, Recursos e Construções
 
+> **Status (2026-08-27):** plano histórico do primeiro vertical slice. Mantido
+> para contexto de produto; o estado vigente está em [`KNOWLEDGE_BASE.md`](KNOWLEDGE_BASE.md)
+> e [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md).
+
 ## 1. Objetivo
 
 Transformar o acampamento em uma segunda camada de progressão do jogo, conectada diretamente às expedições:

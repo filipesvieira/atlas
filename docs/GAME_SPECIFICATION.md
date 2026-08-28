@@ -1,5 +1,9 @@
 # GAME_SPECIFICATION.md
 
+> **Status (2026-08-27):** documento de visão e design. Ele preserva decisões
+> aspiracionais; a implementação gráfica atual usa Canvas 2D, não PixiJS. Para
+> contratos e números atuais, consulte [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md).
+
 ---
 
 ## 1. Executive Summary

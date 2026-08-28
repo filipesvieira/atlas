@@ -1,3 +1,7 @@
+> **Status (2026-08-27):** blueprint histórico de implementação. Não é um
+> retrato fiel do runtime atual: o renderer efetivo é Canvas 2D e o catálogo,
+> migrations e registries atuais estão em [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md).
+
 Compreendido perfeitamente! Para que o **Google Antigravity** tenha acesso a todo o contexto do jogo em um **único documento mestre**, consolidei a especificação completa de Game Design do seu arquivo (`PROJECT_ATLAS_FULL_DESIGN.md`) com a **nova arquitetura tecnológica autoral** (Go + PostgreSQL + Redis + React 19 + PixiJS v8 + `@dnd-kit`).
 
 As referências antigas de OpenTibia/Canary na arquitetura técnica (Seções 24 e 30) foram **atualizadas** para refletir a nova stack leve, autoral e otimizada para o servidor de 2 GB de RAM.

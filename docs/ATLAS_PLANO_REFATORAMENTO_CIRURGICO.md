@@ -1,5 +1,9 @@
 # Project Atlas — Plano de Refatoramento Cirúrgico
 
+> **Status (2026-08-27):** plano histórico baseado em um snapshot anterior.
+> Serve como registro de decisões e backlog; quantidades, biomas convertidos e
+> caminhos de código devem ser conferidos em [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md).
+
 ## Objetivo
 
 Corrigir de forma coesa cinco áreas do jogo sem reescrever sistemas que já funcionam:

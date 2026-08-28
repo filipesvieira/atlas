@@ -1,5 +1,9 @@
 # Plano V2 — Ajustes Cirúrgicos do Acampamento, Recursos e Construções
 
+> **Status (2026-08-27):** plano histórico de implementação. O assentamento
+> atual já possui layout V3, grade 24x18 e sete construções canônicas; consulte
+> [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md) antes de reutilizar uma etapa.
+
 ## 1. Objetivo
 
 Corrigir os problemas de sincronização e bloqueio de progressão do sistema de recursos sem reescrever o jogo inteiro, além de transformar o acampamento em um sistema sustentável para futuras adições de materiais, construções e receitas.

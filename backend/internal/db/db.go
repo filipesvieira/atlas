@@ -69,6 +69,9 @@ type Character struct {
 	StarterPackKey            string             `json:"starter_pack_key,omitempty"`
 	ProgressionBlocked        bool               `json:"progression_blocked,omitempty"`
 	ProgressionBlockReason    string             `json:"progression_block_reason,omitempty"`
+	EquippedSkinKey           string             `json:"equipped_skin_key"`
+	ActivePvPMatchID          string             `json:"active_pvp_match_id,omitempty"`
+	ResumeExpeditionAfterPvP  bool               `json:"resume_expedition_after_pvp,omitempty"`
 }
 
 type EquipmentSlots struct {
@@ -201,8 +204,8 @@ func CreateCharacter(accountID, name, vocation, origin string) (*Character, erro
 	}
 	defer tx.Rollback()
 	query := `
-		INSERT INTO characters (account_id, name, vocation, origin, level, experience, health, max_health, mana, max_mana, gold_bank, str, dex, int_stat, vit, unspent_points, masteries, learned_skills, active_skills, unlocked_regions, starter_pack_claimed, starter_pack_key, progression_version, lifetime_experience, highest_level_ever)
-		VALUES ($1, $2, $3, $4, 1, 0, 225, 225, 115, 115, 100, 5, 5, 5, 5, 0, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, true, 'classless_all', 1, 0, 1)
+		INSERT INTO characters (account_id, name, vocation, origin, level, experience, health, max_health, mana, max_mana, gold_bank, str, dex, int_stat, vit, unspent_points, masteries, learned_skills, active_skills, unlocked_regions, starter_pack_claimed, starter_pack_key, progression_version, lifetime_experience, highest_level_ever, equipped_skin_key)
+		VALUES ($1, $2, $3, $4, 1, 0, 225, 225, 115, 115, 100, 5, 5, 5, 5, 0, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, true, 'classless_all', 1, 0, 1, 'peasant')
 		RETURNING id, account_id, name, vocation, origin, level, experience, health, max_health, mana, max_mana, gold_bank, COALESCE(str, 5), COALESCE(dex, 5), COALESCE(int_stat, 5), COALESCE(vit, 5), COALESCE(unspent_points, 0), COALESCE(masteries, '{}'::jsonb), COALESCE(learned_skills, '[]'::jsonb), COALESCE(active_skills, '[]'::jsonb), last_login, last_logout, COALESCE(starter_pack_claimed, false), COALESCE(starter_pack_key, '')
 	`
 	char := &Character{}
@@ -234,6 +237,7 @@ func CreateCharacter(accountID, name, vocation, origin string) (*Character, erro
 	char.LifetimeExperience = 0
 	char.HighestLevelEver = 1
 	char.StateRevision = 0
+	char.EquippedSkinKey = game.DefaultHeroSkinKey
 
 	// Todos os starters vêm dos mesmos templates usados pelo loot.
 	defaultEquip := EquipmentSlots{}
@@ -742,7 +746,8 @@ func characterToGame(c *Character) *game.CharacterData {
 		LastExpeditionDeathStage: c.LastExpeditionDeathStage, ExpeditionRecoveryUntil: c.ExpeditionRecoveryUntil,
 		StarterPackClaimed: c.StarterPackClaimed, StarterPackKey: c.StarterPackKey,
 		ProgressionVersion: c.ProgressionVersion, LifetimeExperience: c.LifetimeExperience,
-		HighestLevelEver: c.HighestLevelEver,
+		HighestLevelEver: c.HighestLevelEver, EquippedSkinKey: c.EquippedSkinKey,
+		ActivePvPMatchID: c.ActivePvPMatchID, ResumeExpeditionAfterPvP: c.ResumeExpeditionAfterPvP,
 	}
 	game.RefreshProgressionView(result)
 	return result
@@ -767,6 +772,7 @@ func scanLockedCharacter(row rowScanner) (*Character, error) {
 		&c.ProgressionVersion, &c.LifetimeExperience, &c.HighestLevelEver,
 		&c.ExpeditionsCompletedTotal, &c.BossesDefeatedTotal, &c.ExpeditionDeathsTotal,
 		&c.HighestStageReached, &c.LastExpeditionDeathStage, &recoveryUntil,
+		&c.EquippedSkinKey, &c.ActivePvPMatchID, &c.ResumeExpeditionAfterPvP,
 	)
 	if err != nil {
 		return nil, err
@@ -816,7 +822,9 @@ const characterSnapshotColumns = `
 	GREATEST(COALESCE(highest_level_ever,level),level),
 	COALESCE(expeditions_completed_total,0), COALESCE(bosses_defeated_total,0),
 	COALESCE(expedition_deaths_total,0), GREATEST(COALESCE(highest_stage_reached,1),1),
-	COALESCE(last_expedition_death_stage,0), expedition_recovery_until`
+	COALESCE(last_expedition_death_stage,0), expedition_recovery_until,
+	COALESCE(equipped_skin_key,''), COALESCE(active_pvp_match_id,''),
+	COALESCE(resume_expedition_after_pvp,false)`
 
 // ClaimOfflineProgress é a única porta de entrada para aplicar progresso offline.
 // SELECT FOR UPDATE + cursor offline_claimed_at tornam o claim idempotente e impedem

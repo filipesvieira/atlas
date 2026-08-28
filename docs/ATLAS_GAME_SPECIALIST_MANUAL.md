@@ -1,6 +1,6 @@
-# Manual do Especialista de Jogo — Project Atlas MMORPG Idle
+# Manual do Especialista de Jogo — Reino do Avesso
 
-Este manual é o guia definitivo de engenharia, arquitetura, design e boas práticas para o desenvolvimento e evolução contínua do **Atlas MMORPG Idle**.
+Este manual é o guia de engenharia, arquitetura, design e boas práticas para o desenvolvimento e evolução contínua do **Reino do Avesso**. `Atlas` permanece como nome interno de pacotes e contratos legados. O estado verificável do projeto fica em [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md).
 
 ---
 
@@ -23,6 +23,15 @@ Este manual é o guia definitivo de engenharia, arquitetura, design e boas prát
   - Barras clássicas de HP e Mana com gradientes e sombras internas.
   - Super Tooltips ricos mostrando atributos, passivas, requisitos de nível e efeitos especiais.
   - Chips e bordas com as cores determinísticas de raridade do jogo.
+
+### Estado visual atual
+
+- O renderer efetivo do jogo é HTML5 Canvas 2D com cache offscreen e
+  interpolação. `pixi.js` permanece no `package.json`, mas não deve ser tratado
+  como a arquitetura gráfica atual sem uma decisão específica de migração.
+- O acampamento, a Floresta e a Vila do Shereque usam a base isométrica; as
+  outras regiões ainda usam renderers legados até receberem geometria, terreno,
+  colisão e validação equivalentes.
 
 ---
 

@@ -1,4 +1,8 @@
-# Project Atlas — Arquitetura Modular de Conteúdo
+# Reino do Avesso — Arquitetura Modular de Conteúdo
+
+> Estado atual em 2026-08-27. Para divergências entre planos antigos e o
+> checkout, consulte [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md) e o
+> código canônico.
 
 ## Objetivo
 
@@ -56,7 +60,7 @@ uma segunda `WORLD_REGIONS` que poderia divergir.
   monstro.
 - Cenários foram movidos para `renderers/biomes/BiomeRenderers.ts`.
 - Heróis foram movidos para `renderers/heroes/HeroRenderers.ts`.
-- As 35 famílias visuais de monstros foram separadas por tier em
+- As 40 famílias visuais de monstros foram separadas por tier em
   `renderers/monsters/tier1.ts` ... `tier5.ts` e registradas em
   `MonsterRegistry`.
 - `GameViewport` não contém mais a cadeia região -> background nem a cadeia
@@ -72,8 +76,11 @@ uma segunda `WORLD_REGIONS` que poderia divergir.
   acontece ao equipar armas.
 - URLs HTTP/WS foram centralizadas em `config.ts` e aceitam
   `VITE_API_BASE_URL` / `VITE_WS_BASE_URL`.
-- `SpriteGenerator.ts`, que não possuía consumidores e mantinha regras visuais
-  antigas duplicadas, foi removido.
+- `SpriteGenerator.ts` ainda existe no checkout, mas não possui consumidores no
+  caminho atual. Ele é legado preservado para análise/compatibilidade; novas
+  artes devem entrar nos registries e renderers Canvas 2D atuais. Uma eventual
+  remoção deve ser uma tarefa isolada, após confirmar que nenhum consumidor
+  externo depende dele.
 
 ### Backend
 
@@ -177,15 +184,14 @@ Os testes de `loot_test.go` agora verificam adicionalmente:
 da faixa de nível da região, inclusive os casos de regressão de Esgotos e
 Floresta.
 
-## Validação desta entrega
+## Validação do estado atual
 
 - Frontend: `npm run build` passou após cada corte estrutural (`tsc` + Vite).
-- Auditoria independente: `node tools/audit-content.mjs` passou com **8 regiões,
-  35 monstros/bosses, 35 perfis de loot, 73 templates de item e 35 visual_keys,
+- Auditoria independente: `node tools/audit-content.mjs` passou com **9 regiões,
+  40 monstros/bosses, 40 perfis de loot, 111 templates de item e 40 visual_keys,
   sem inconsistências** de nível, tier, preview ou renderer.
-- Backend: os testes Go foram preparados/expandidos, mas não puderam ser
-  executados neste ambiente porque o runtime `go`/`gofmt` não está instalado.
-  Antes de mergear, execute `gofmt -w backend && cd backend && go test ./...`.
+- `audit-camp-content.mjs`, `audit-economy.mjs` e
+  `audit-resource-usage.mjs` também retornaram zero erros.
 
 ## Próximos cortes recomendados
 
@@ -202,7 +208,8 @@ renderers; o motor trabalha apenas com contratos e keys estáveis**.
 
 ## Arena isométrica de expedição — primeira fatia
 
-A Floresta passou a usar a mesma malha visual 24x18 do assentamento, com
+A Floresta e a Vila do Shereque passaram a usar a mesma malha visual 24x18 do
+assentamento, com
 terreno de grama, trilhas, árvores, pedras, fogueira decorativa e rio com
 animação de fluxo. O background estático continua cacheado; água e efeitos
 animados são uma camada dinâmica independente para não recriar o cenário a

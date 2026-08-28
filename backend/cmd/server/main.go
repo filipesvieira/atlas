@@ -93,7 +93,11 @@ func main() {
 		}
 		log.Printf("🧹 Leases de sessões locais anteriores foram limpos")
 	}
+	if err := initializeMultiplayerRuntime(cfg); err != nil {
+		log.Fatalf("Erro fatal ao inicializar multiplayer compartilhado: %v", err)
+	}
 	startSettlementScheduler()
+	startPvPArenaScheduler()
 
 	if cfg.DevToolsEnabled {
 		if err := bootstrapDeveloperAdmin(cfg.DevAdminEmail, cfg.DevAdminPassword); err != nil {

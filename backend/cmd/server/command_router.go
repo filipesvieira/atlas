@@ -35,6 +35,10 @@ func economyCommandLimit(action string) (int, time.Duration, bool) {
 		return 8, time.Second, true
 	case "CRAFT_ITEM":
 		return 4, 2 * time.Second, true
+	case "CHAT_SEND":
+		return 8, 10 * time.Second, true
+	case "CHAT_BLOCK", "CHAT_UNBLOCK", "CHAT_REPORT", "REQUEST_PUBLIC_PROFILE", "CREATE_DUEL_CHALLENGE", "RESPOND_DUEL_CHALLENGE", "CANCEL_DUEL_CHALLENGE", "CONFIRM_PVP_MATCH", "REQUEST_PVP_HISTORY", "REQUEST_PVP_REPLAY", "JOIN_PVP_MATCHMAKING", "LEAVE_PVP_MATCHMAKING", "REQUEST_PVP_MATCHMAKING_STATUS":
+		return 6, 10 * time.Second, true
 	case "START_GATHERING", "CANCEL_GATHERING", "CLAIM_GATHERING_REWARDS", "CLAIM_PENDING_CRAFT", "CLAIM_PENDING_RESOURCES", "CREATE_HERO_DESIRE", "CANCEL_HERO_DESIRE", "CLAIM_ARMORY_ITEM", "TRANSFER_TREASURY_GOLD", "UPDATE_TREASURY_POLICY", "MOVE_CAMP_BUILDING", "START_BUILDING_UPGRADE", "DISCARD_RESOURCE", "SALVAGE_ITEM", "SALVAGE_BATCH", "LEARN_BUILDING_BLUEPRINT", "CONSUME_FOOD":
 		return 6, 2 * time.Second, true
 	default:
@@ -90,46 +94,61 @@ func allowEconomyCommand(charID, action string, now time.Time) bool {
 }
 
 var commandHandlers = map[string]CommandHandler{
-	"TOGGLE_EXPEDITION":           handleToggleExpedition,
-	"MOVE_HERO":                   handleMoveHero,
-	"EQUIP_ITEM":                  handleEquipItem,
-	"UNEQUIP_ITEM":                handleUnequipItem,
-	"CHANGE_REGION":               handleChangeRegion,
-	"SET_STANCE":                  handleSetStance,
-	"DISCARD_ITEM":                handleDiscardItem,
-	"TOGGLE_SKILL":                handleToggleSkill,
-	"ALLOCATE_STAT":               handleAllocateStat,
-	"CHOOSE_STARTER_PACK":         handleChooseStarterPack,
-	"BULK_SELL":                   handleBulkSell,
-	"SET_AUTO_RESUME":             handleSetAutoResume,
-	"START_BUILDING_UPGRADE":      handleStartBuildingUpgrade,
-	"MOVE_CAMP_BUILDING":          handleMoveCampBuilding,
-	"DISCARD_RESOURCE":            handleDiscardResource,
-	"SALVAGE_PREVIEW":             handleSalvagePreview,
-	"SALVAGE_ITEM":                handleSalvageItem,
-	"LEARN_BUILDING_BLUEPRINT":    handleLearnBuildingBlueprint,
-	"SALVAGE_BATCH":               handleSalvageBatch,
-	"UPDATE_AUTO_SELL_SETTINGS":   handleUpdateAutoSellSettings,
-	"UPDATE_AUTO_POTION_SETTINGS": handleUpdateAutoPotionSettings,
-	"REQUEST_AUTO_SELL_PREVIEW":   handleRequestAutoSellPreview,
-	"CLAIM_OVERFLOW_ITEM":         handleClaimOverflowItem,
-	"SELL_OVERFLOW_ITEM":          handleSellOverflowItem,
-	"SELL_ALL_OVERFLOW":           handleSellAllOverflow,
-	"REQUEST_STATE_SYNC":          handleRequestStateSync,
-	"START_GATHERING":             handleStartGathering,
-	"CANCEL_GATHERING":            handleCancelGathering,
-	"CLAIM_GATHERING_REWARDS":     handleClaimGathering,
-	"REQUEST_CRAFT_PREVIEW":       handleCraftPreview,
-	"CRAFT_ITEM":                  handleCraftItem,
-	"REQUEST_ECONOMY_SYNC":        handleEconomySync,
-	"CLAIM_PENDING_CRAFT":         handleClaimPendingCraft,
-	"CLAIM_PENDING_RESOURCES":     handleClaimPendingResources,
-	"CREATE_HERO_DESIRE":          handleCreateHeroDesire,
-	"CANCEL_HERO_DESIRE":          handleCancelHeroDesire,
-	"CLAIM_ARMORY_ITEM":           handleClaimArmoryItem,
-	"TRANSFER_TREASURY_GOLD":      handleTransferTreasuryGold,
-	"UPDATE_TREASURY_POLICY":      handleUpdateTreasuryPolicy,
-	"CONSUME_FOOD":                handleConsumeFood,
+	"TOGGLE_EXPEDITION":              handleToggleExpedition,
+	"MOVE_HERO":                      handleMoveHero,
+	"EQUIP_ITEM":                     handleEquipItem,
+	"UNEQUIP_ITEM":                   handleUnequipItem,
+	"CHANGE_REGION":                  handleChangeRegion,
+	"SET_STANCE":                     handleSetStance,
+	"DISCARD_ITEM":                   handleDiscardItem,
+	"TOGGLE_SKILL":                   handleToggleSkill,
+	"ALLOCATE_STAT":                  handleAllocateStat,
+	"CHOOSE_STARTER_PACK":            handleChooseStarterPack,
+	"BULK_SELL":                      handleBulkSell,
+	"SET_AUTO_RESUME":                handleSetAutoResume,
+	"START_BUILDING_UPGRADE":         handleStartBuildingUpgrade,
+	"MOVE_CAMP_BUILDING":             handleMoveCampBuilding,
+	"DISCARD_RESOURCE":               handleDiscardResource,
+	"SALVAGE_PREVIEW":                handleSalvagePreview,
+	"SALVAGE_ITEM":                   handleSalvageItem,
+	"LEARN_BUILDING_BLUEPRINT":       handleLearnBuildingBlueprint,
+	"SALVAGE_BATCH":                  handleSalvageBatch,
+	"UPDATE_AUTO_SELL_SETTINGS":      handleUpdateAutoSellSettings,
+	"UPDATE_AUTO_POTION_SETTINGS":    handleUpdateAutoPotionSettings,
+	"REQUEST_AUTO_SELL_PREVIEW":      handleRequestAutoSellPreview,
+	"CLAIM_OVERFLOW_ITEM":            handleClaimOverflowItem,
+	"SELL_OVERFLOW_ITEM":             handleSellOverflowItem,
+	"SELL_ALL_OVERFLOW":              handleSellAllOverflow,
+	"REQUEST_STATE_SYNC":             handleRequestStateSync,
+	"START_GATHERING":                handleStartGathering,
+	"CANCEL_GATHERING":               handleCancelGathering,
+	"CLAIM_GATHERING_REWARDS":        handleClaimGathering,
+	"REQUEST_CRAFT_PREVIEW":          handleCraftPreview,
+	"CRAFT_ITEM":                     handleCraftItem,
+	"REQUEST_ECONOMY_SYNC":           handleEconomySync,
+	"CLAIM_PENDING_CRAFT":            handleClaimPendingCraft,
+	"CLAIM_PENDING_RESOURCES":        handleClaimPendingResources,
+	"CREATE_HERO_DESIRE":             handleCreateHeroDesire,
+	"CANCEL_HERO_DESIRE":             handleCancelHeroDesire,
+	"CLAIM_ARMORY_ITEM":              handleClaimArmoryItem,
+	"TRANSFER_TREASURY_GOLD":         handleTransferTreasuryGold,
+	"UPDATE_TREASURY_POLICY":         handleUpdateTreasuryPolicy,
+	"CONSUME_FOOD":                   handleConsumeFood,
+	"CHAT_SEND":                      handleChatSend,
+	"CHAT_BLOCK":                     handleChatBlock,
+	"CHAT_UNBLOCK":                   handleChatUnblock,
+	"CHAT_REPORT":                    handleChatReport,
+	"REQUEST_PUBLIC_PROFILE":         handleRequestPublicProfile,
+	"CREATE_DUEL_CHALLENGE":          handleCreateDuelChallenge,
+	"RESPOND_DUEL_CHALLENGE":         handleRespondDuelChallenge,
+	"CANCEL_DUEL_CHALLENGE":          handleCancelDuelChallenge,
+	"CONFIRM_PVP_MATCH":              handleConfirmPvPMatch,
+	"SET_EQUIPPED_SKIN":              handleSetEquippedSkin,
+	"REQUEST_PVP_HISTORY":            handleRequestPvPHistory,
+	"REQUEST_PVP_REPLAY":             handleRequestPvPReplay,
+	"JOIN_PVP_MATCHMAKING":           handleJoinPvPMatchmaking,
+	"LEAVE_PVP_MATCHMAKING":          handleLeavePvPMatchmaking,
+	"REQUEST_PVP_MATCHMAKING_STATUS": handleRequestPvPMatchmakingStatus,
 }
 
 func validateClientAction(action ClientAction) error {
@@ -139,7 +158,9 @@ func validateClientAction(action ClientAction) error {
 		len(action.ExpeditionKey) > 80 || len(action.RecipeKey) > 160 || len(action.CatalystKey) > 80 ||
 		len(action.ActivityID) > 64 || len(action.DesireID) > 64 || len(action.ArmoryID) > 64 ||
 		len(action.TargetRarity) > 30 || len(action.Direction) > 16 || len(action.SlotKey) > 40 ||
-		len(action.BuildingKey) > 80 || len(action.ResourceKey) > 80 || len(action.ItemIDs) > 200 {
+		len(action.BuildingKey) > 80 || len(action.ResourceKey) > 80 || len(action.ItemIDs) > 200 ||
+		len(action.Channel) > 24 || len([]rune(action.Text)) > 200 || len(action.TargetCharacterID) > 80 ||
+		len(action.MessageID) > 80 || len(action.DuelChallengeID) > 80 || len(action.PvPMatchID) > 80 || len(action.SkinKey) > 32 || len([]rune(action.Reason)) > 240 {
 		return fmt.Errorf("payload excede os limites permitidos")
 	}
 	for _, itemID := range action.ItemIDs {
@@ -151,6 +172,15 @@ func validateClientAction(action ClientAction) error {
 		return fmt.Errorf("quantidade fora dos limites permitidos")
 	}
 	return nil
+}
+
+func heroCommandBlockedDuringPvP(action string) bool {
+	switch action {
+	case "TOGGLE_EXPEDITION", "MOVE_HERO", "EQUIP_ITEM", "UNEQUIP_ITEM", "CHANGE_REGION", "SET_STANCE", "TOGGLE_SKILL", "ALLOCATE_STAT", "CONSUME_FOOD", "SET_EQUIPPED_SKIN":
+		return true
+	default:
+		return false
+	}
 }
 
 // DispatchCommand executa o handler apropriado para a ação recebida.
@@ -166,6 +196,9 @@ func DispatchCommand(ctx *CommandContext) error {
 	if !allowEconomyCommand(ctx.CharID, ctx.Action.Action, time.Now().UTC()) {
 		return sendEconomyError(ctx, fmt.Errorf("muitas operações em sequência; aguarde um instante"))
 	}
+	if ctx.Session.IsPvPActive() && heroCommandBlockedDuringPvP(ctx.Action.Action) {
+		return sendEconomyError(ctx, fmt.Errorf("o herói está em uma Arena PvP; esta ação fica bloqueada até o fim do duelo"))
+	}
 	handler, exists := commandHandlers[ctx.Action.Action]
 	if !exists {
 		log.Printf("⚠️ Ação WebSocket desconhecida ou não registrada: %q (char: %s)", ctx.Action.Action, ctx.CharID)
@@ -177,6 +210,28 @@ func DispatchCommand(ctx *CommandContext) error {
 
 func handleToggleExpedition(ctx *CommandContext) error {
 	ctx.Session.ToggleExpedition()
+	return nil
+}
+
+func handleSetEquippedSkin(ctx *CommandContext) error {
+	normalized := game.NormalizeHeroSkinKey(ctx.Action.SkinKey)
+	if normalized != ctx.Action.SkinKey {
+		return sendEconomyError(ctx, fmt.Errorf("skin inválida"))
+	}
+	revision, err := db.SetCharacterEquippedSkin(ctx.CharID, normalized)
+	if err != nil {
+		return sendEconomyError(ctx, err)
+	}
+	ctx.Session.Mu.Lock()
+	if ctx.Session.Character != nil {
+		ctx.Session.Character.EquippedSkinKey = normalized
+		if revision > ctx.Session.Character.StateRevision {
+			ctx.Session.Character.StateRevision = revision
+		}
+	}
+	character := game.CloneCharacterSnapshot(ctx.Session.Character)
+	ctx.Session.Mu.Unlock()
+	ctx.Session.SendMessage(game.CombatMessage{Type: "SKIN_UPDATED", Timestamp: time.Now().Format("15:04:05"), Character: character, LogText: "🎭 Visual do herói atualizado."})
 	return nil
 }
 
@@ -556,6 +611,142 @@ func handleSellAllOverflow(ctx *CommandContext) error {
 
 func handleRequestStateSync(ctx *CommandContext) error {
 	ctx.Session.RequestStateSync()
+	return nil
+}
+
+func sendSocialError(ctx *CommandContext, err error) error {
+	ctx.Session.SendSocial(game.SocialMessage{Type: "SOCIAL_ERROR", RequestID: ctx.Action.RequestID, Error: err.Error()})
+	return err
+}
+
+func handleChatSend(ctx *CommandContext) error {
+	channel := ctx.Action.Channel
+	if channel == "" {
+		channel = game.ChatChannelWorld
+	}
+	if channel != game.ChatChannelWorld {
+		return sendSocialError(ctx, fmt.Errorf("canal ainda não disponível nesta versão"))
+	}
+	if err := multiplayerHub.SendWorld(ctx.CharID, ctx.Action.RequestID, ctx.Action.Text); err != nil {
+		return sendSocialError(ctx, err)
+	}
+	return nil
+}
+
+func handleChatBlock(ctx *CommandContext) error {
+	if err := multiplayerHub.Block(ctx.CharID, ctx.Action.TargetCharacterID); err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "CHAT_BLOCK_UPDATED", RequestID: ctx.Action.RequestID})
+	return nil
+}
+
+func handleChatUnblock(ctx *CommandContext) error {
+	if err := multiplayerHub.Unblock(ctx.CharID, ctx.Action.TargetCharacterID); err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "CHAT_BLOCK_UPDATED", RequestID: ctx.Action.RequestID})
+	return nil
+}
+
+func handleChatReport(ctx *CommandContext) error {
+	if err := multiplayerHub.Report(ctx.CharID, ctx.Action.MessageID, ctx.Action.Reason); err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "CHAT_REPORT_RECEIVED", RequestID: ctx.Action.RequestID})
+	return nil
+}
+
+func handleRequestPublicProfile(ctx *CommandContext) error {
+	profile, err := multiplayerHub.PublicProfile(ctx.Action.TargetCharacterID)
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "PUBLIC_PROFILE", RequestID: ctx.Action.RequestID, PublicProfile: &profile})
+	return nil
+}
+
+func handleCreateDuelChallenge(ctx *CommandContext) error {
+	challenge, err := multiplayerHub.CreateDuelChallenge(ctx.CharID, ctx.Action.TargetCharacterID, ctx.Action.RequestID)
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "DUEL_CHALLENGE_CREATED", RequestID: ctx.Action.RequestID, DuelChallenge: &challenge})
+	return nil
+}
+
+func handleRespondDuelChallenge(ctx *CommandContext) error {
+	challenge, err := multiplayerHub.RespondDuelChallenge(ctx.CharID, ctx.Action.DuelChallengeID, ctx.Action.Enabled)
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "DUEL_CHALLENGE_UPDATED", RequestID: ctx.Action.RequestID, DuelChallenge: &challenge})
+	if ctx.Action.Enabled && challenge.Status == "accepted" {
+		if _, err := multiplayerHub.CreatePvPMatchFromAcceptedDuel(challenge); err != nil {
+			return sendSocialError(ctx, err)
+		}
+	}
+	return nil
+}
+
+func handleCancelDuelChallenge(ctx *CommandContext) error {
+	challenge, err := multiplayerHub.CancelDuelChallenge(ctx.CharID, ctx.Action.DuelChallengeID)
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "DUEL_CHALLENGE_UPDATED", RequestID: ctx.Action.RequestID, DuelChallenge: &challenge})
+	return nil
+}
+
+func handleConfirmPvPMatch(ctx *CommandContext) error {
+	if _, _, err := multiplayerHub.ConfirmPvPMatchParticipant(ctx.CharID, ctx.Action.PvPMatchID, ctx.Action.PvPTacticalStrategy, ctx.Action.PvPStrategyVersion); err != nil {
+		return sendSocialError(ctx, err)
+	}
+	return nil
+}
+
+func handleRequestPvPHistory(ctx *CommandContext) error {
+	history, err := db.ListPvPMatchHistory(ctx.CharID, 20)
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_HISTORY", RequestID: ctx.Action.RequestID, PvPHistory: history})
+	return nil
+}
+
+func handleRequestPvPReplay(ctx *CommandContext) error {
+	replay, err := db.GetPvPMatchReplay(ctx.CharID, ctx.Action.PvPMatchID)
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_REPLAY", RequestID: ctx.Action.RequestID, PvPReplay: &replay})
+	return nil
+}
+
+func handleJoinPvPMatchmaking(ctx *CommandContext) error {
+	status, err := db.JoinPvPMatchmaking(ctx.CharID, ctx.Action.PvPTacticalStrategy, ctx.Action.PvPStrategyVersion, time.Now().UTC())
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_MATCHMAKING_STATUS", RequestID: ctx.Action.RequestID, Matchmaking: &status})
+	return nil
+}
+
+func handleLeavePvPMatchmaking(ctx *CommandContext) error {
+	if err := db.LeavePvPMatchmaking(ctx.CharID); err != nil {
+		return sendSocialError(ctx, err)
+	}
+	status := game.PvPMatchmakingStatus{}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_MATCHMAKING_STATUS", RequestID: ctx.Action.RequestID, Matchmaking: &status})
+	return nil
+}
+
+func handleRequestPvPMatchmakingStatus(ctx *CommandContext) error {
+	status, err := db.GetPvPMatchmakingStatus(ctx.CharID)
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_MATCHMAKING_STATUS", RequestID: ctx.Action.RequestID, Matchmaking: &status})
 	return nil
 }
 

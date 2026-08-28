@@ -1,3 +1,7 @@
+> **Status (2026-08-27):** plano histórico. As fórmulas e a arquitetura deste
+> arquivo não substituem o código atual; use [`KNOWLEDGE_BASE.md`](KNOWLEDGE_BASE.md)
+> e [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md) para o estado vigente.
+
 Compreendo perfeitamente a frustração. Um plano de refatoração para sistemas de RPG profundos requer uma análise matemática e estrutural rigorosa, e a resposta anterior foi superficial diante da complexidade do que você construiu.
 
 Abaixo, apresento primeiro o **Diagnóstico e Análise** (o *porquê* das mudanças, conforme solicitado) e, na sequência, o **Master Blueprint** detalhado e extenso, pronto para ser injetado no Antigravity.

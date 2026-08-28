@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { GameViewport } from './GameViewport';
+import { PvPArenaViewport } from './PvPArenaViewport';
 import { CombatActionBar } from './CombatActionBar';
-import { ActiveBuff, AutoPotionSettings, AutoPotionState, DerivedStats, Item } from '../../hooks/useGameSocket';
+import { ActiveBuff, AutoPotionSettings, AutoPotionState, DerivedStats, Item, PvPCombatSnapshot } from '../../hooks/useGameSocket';
 
 interface GameCanvasProps {
   setOnCombatEvent?: (cb: (msg: any) => void) => void;
@@ -29,6 +30,7 @@ interface GameCanvasProps {
   onToggleExpedition?: () => void;
   isExpeditionActive?: boolean;
   isConnected?: boolean;
+  pvpCombat?: PvPCombatSnapshot | null;
 }
 
 export function GameCanvas({
@@ -57,9 +59,18 @@ export function GameCanvas({
   onToggleExpedition,
   isExpeditionActive = false,
   isConnected = false,
+  pvpCombat,
 }: GameCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<GameViewport | null>(null);
+  const pvpContainerRef = useRef<HTMLDivElement>(null);
+  const pvpViewportRef = useRef<PvPArenaViewport | null>(null);
+  const [dismissedPvPMatchID, setDismissedPvPMatchID] = useState<string | null>(null);
+  const pvpArenaVisible = Boolean(
+    pvpCombat
+      && (pvpCombat.status === 'active' || pvpCombat.status === 'completed')
+      && dismissedPvPMatchID !== pvpCombat.match_id,
+  );
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -81,6 +92,26 @@ export function GameCanvas({
       viewportRef.current = null;
     };
   }, [setOnCombatEvent]);
+
+  useEffect(() => {
+    if (pvpCombat?.status === 'active') setDismissedPvPMatchID(null);
+  }, [pvpCombat?.match_id, pvpCombat?.status]);
+
+  useEffect(() => {
+    if (!pvpArenaVisible || !pvpContainerRef.current || !pvpCombat) return;
+    const viewport = new PvPArenaViewport(character?.id || '');
+    pvpViewportRef.current = viewport;
+    viewport.init(pvpContainerRef.current);
+    viewport.setSnapshot(pvpCombat);
+    return () => {
+      viewport.destroy();
+      if (pvpViewportRef.current === viewport) pvpViewportRef.current = null;
+    };
+  }, [pvpArenaVisible]);
+
+  useEffect(() => {
+    if (pvpCombat) pvpViewportRef.current?.setSnapshot(pvpCombat);
+  }, [pvpCombat]);
 
   useEffect(() => {
     viewportRef.current?.setCampMoveHandler(onMoveCampBuilding);
@@ -122,7 +153,8 @@ export function GameCanvas({
             <button
               type="button"
               onClick={handleZoomOut}
-              className="h-5 w-5 rounded text-xs font-bold text-slate-300 hover:bg-slate-800 hover:text-amber-300"
+              disabled={pvpArenaVisible}
+              className="h-5 w-5 rounded text-xs font-bold text-slate-300 hover:bg-slate-800 hover:text-amber-300 disabled:opacity-35"
               aria-label="Diminuir zoom"
               title="Diminuir zoom"
             >
@@ -131,7 +163,8 @@ export function GameCanvas({
             <button
               type="button"
               onClick={handleZoomReset}
-              className="h-5 px-1.5 rounded text-[9px] font-mono text-slate-400 hover:bg-slate-800 hover:text-amber-300"
+              disabled={pvpArenaVisible}
+              className="h-5 px-1.5 rounded text-[9px] font-mono text-slate-400 hover:bg-slate-800 hover:text-amber-300 disabled:opacity-35"
               aria-label="Restaurar zoom"
               title="Restaurar zoom"
             >
@@ -140,7 +173,8 @@ export function GameCanvas({
             <button
               type="button"
               onClick={handleZoomIn}
-              className="h-5 w-5 rounded text-xs font-bold text-slate-300 hover:bg-slate-800 hover:text-amber-300"
+              disabled={pvpArenaVisible}
+              className="h-5 w-5 rounded text-xs font-bold text-slate-300 hover:bg-slate-800 hover:text-amber-300 disabled:opacity-35"
               aria-label="Aumentar zoom"
               title="Aumentar zoom"
             >
@@ -165,8 +199,33 @@ export function GameCanvas({
             isWorldFocusMode ? 'h-full max-w-full aspect-[16/7]' : 'w-full aspect-[16/7]'
           }`}
         />
+        <div
+          ref={pvpContainerRef}
+          aria-hidden={!pvpArenaVisible}
+          className={`absolute inset-0 z-20 overflow-hidden rounded-lg border border-violet-400/70 bg-slate-950 shadow-[0_0_28px_rgba(168,85,247,0.38)] transition-opacity ${
+            pvpArenaVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
+        />
+        {pvpArenaVisible && pvpCombat && (
+          <div className="absolute inset-x-3 top-3 z-30 flex items-center justify-between gap-2 rounded border border-violet-400/80 bg-slate-950/90 px-2.5 py-1.5 shadow-lg">
+            <div className="font-pixel-heading text-[9px] text-violet-200">
+              ⚔️ ARENA DE DUELO · {pvpCombat.status === 'active' ? `PULSO ${pvpCombat.tick}` : 'RESULTADO CONFIRMADO'}
+            </div>
+            {pvpCombat.status === 'completed' ? (
+              <button
+                type="button"
+                onClick={() => setDismissedPvPMatchID(pvpCombat.match_id)}
+                className="pixel-btn pixel-btn-dark px-2 py-1 text-[9px]"
+              >
+                VOLTAR À EXPEDIÇÃO
+              </button>
+            ) : (
+              <span className="text-[9px] text-violet-300">SIMULAÇÃO AUTORITATIVA</span>
+            )}
+          </div>
+        )}
         {isWorldFocusMode && (
-          <nav className="absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap gap-1.5 rounded-lg border border-slate-700/90 bg-slate-950/90 p-1.5 shadow-xl backdrop-blur-sm" aria-label="Acessos do modo mundo">
+          <nav className="absolute left-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-wrap gap-1.5 rounded-lg border border-slate-700/90 bg-slate-950/90 p-1.5 shadow-xl backdrop-blur-sm" aria-label="Acessos do modo mundo">
             <button type="button" onClick={onOpenBackpack} className={focusActionClass}>🎒 Mochila</button>
             <button type="button" onClick={onOpenDepot} className={focusActionClass}>📦 Depósito</button>
             <button type="button" onClick={onOpenCamp} className={focusActionClass}>⛺ Acampamento</button>
@@ -182,22 +241,24 @@ export function GameCanvas({
             </button>
           </nav>
         )}
+        {!pvpArenaVisible && (
+          <CombatActionBar
+            displayMode="overlay"
+            character={character}
+            derivedStats={derivedStats}
+            activeBuffs={activeBuffs}
+			autoPotionSettings={autoPotionSettings}
+			autoPotionState={autoPotionState}
+            skillCooldowns={skillCooldowns}
+            attackCooldownRemaining={attackCooldownRemaining}
+            mainHandItem={mainHandItem}
+            onToggleSkill={onToggleSkill}
+            currentStance={currentStance}
+            onSelectStance={onSelectStance}
+			onUpdateAutoPotionSettings={onUpdateAutoPotionSettings}
+          />
+        )}
       </div>
-      {/* Barra de Ação & HUD de Combate MMORPG (com Posturas Táticas Integradas) */}
-      <CombatActionBar
-        character={character}
-        derivedStats={derivedStats}
-        activeBuffs={activeBuffs}
-		autoPotionSettings={autoPotionSettings}
-		autoPotionState={autoPotionState}
-        skillCooldowns={skillCooldowns}
-        attackCooldownRemaining={attackCooldownRemaining}
-        mainHandItem={mainHandItem}
-        onToggleSkill={onToggleSkill}
-        currentStance={currentStance}
-        onSelectStance={onSelectStance}
-		onUpdateAutoPotionSettings={onUpdateAutoPotionSettings}
-      />
     </div>
   );
 }

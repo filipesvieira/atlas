@@ -1,5 +1,9 @@
 # Plano Mestre de Refatoração Arquitetural — Atlas MMORPG V5
 
+> **Status (2026-08-27):** plano mestre histórico. Algumas fases foram
+> implementadas e outras foram superadas por contratos novos; não use este
+> arquivo para inferir o estado atual sem consultar [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md).
+
 ## Segurança, Integridade, Progressão, Motor Modular, Conteúdo Data-Driven, WebSocket, Frontend e Sistemas Idle
 
 **Base analisada:** snapshot `repomix-output.xml`  

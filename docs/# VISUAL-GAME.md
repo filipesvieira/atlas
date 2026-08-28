@@ -1,3 +1,8 @@
+> **Status (2026-08-27):** plano visual histórico. O jogo atual já usa Canvas
+> 2D, registries modulares e arenas isométricas na Floresta e na Vila do
+> Shereque; não execute literalmente a migração PixiJS descrita abaixo. Veja
+> [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md).
+
 Fiz uma auditoria profunda no código atual do repositório (`GameViewport.ts`, `engine.go`, `ws.go`, `loot.go`) e no problema de exibição capturado na imagem.
 
 Abaixo está o **diagnóstico técnico**, a **solução nativa de Pixel Art** (sem depender de arquivos externos) e o **Plano de Implementação Completo** pronto para ser colado diretamente no **Google Antigravity**.

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -12,6 +13,10 @@ type Config struct {
 	Port              string
 	JWTSecret         []byte
 	DatabaseURL       string
+	RedisAddr         string
+	RedisPassword     string
+	RedisDB           int
+	RedisRequired     bool
 	AllowedOrigins    []string
 	TrustProxyHeaders bool
 	DevToolsEnabled   bool
@@ -46,6 +51,13 @@ func LoadConfig() (*Config, error) {
 	dbURL := getEnv("DATABASE_URL", "")
 	if dbURL == "" {
 		dbURL = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", dbHost, dbPort, dbUser, dbPass, dbName, dbSSL)
+	}
+
+	redisHost := getEnv("REDIS_HOST", "localhost")
+	redisPort := getEnv("REDIS_PORT", "6379")
+	redisDB, err := strconv.Atoi(getEnv("REDIS_DB", "0"))
+	if err != nil || redisDB < 0 {
+		return nil, fmt.Errorf("REDIS_DB deve ser um inteiro não negativo")
 	}
 
 	originsRaw := getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173,http://tauri.localhost,tauri://localhost")
@@ -89,6 +101,10 @@ func LoadConfig() (*Config, error) {
 		Port:              port,
 		JWTSecret:         []byte(secretStr),
 		DatabaseURL:       dbURL,
+		RedisAddr:         redisHost + ":" + redisPort,
+		RedisPassword:     os.Getenv("REDIS_PASSWORD"),
+		RedisDB:           redisDB,
+		RedisRequired:     env == "production" || env == "staging",
 		AllowedOrigins:    allowedOrigins,
 		TrustProxyHeaders: trustProxyHeaders,
 		DevToolsEnabled:   devToolsEnabled,

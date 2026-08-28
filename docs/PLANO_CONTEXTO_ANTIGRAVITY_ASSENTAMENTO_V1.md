@@ -1,5 +1,9 @@
 # Atlas — Contexto Mestre para Ajustes no Antigravity IDE
 
+> **Status (2026-08-27):** handoff histórico da primeira versão do
+> assentamento. Para trabalhar no checkout atual, use [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md),
+> [`KNOWLEDGE_BASE.md`](KNOWLEDGE_BASE.md) e o `README.md`.
+
 > Documento de handoff técnico da implementação **Assentamento Vivo V1**.  
 > Baseline: `2026.08-settlement-v1-residents-desires`  
 > Última migration incluída: `000013_settlement_residents_desires.sql`

@@ -1,4 +1,30 @@
+- Multiplayer M3E-B adiciona `rules_version = 3`, estratégia pré-duelo versionada e movimentação tática autoritativa com CHASE/KITE/spacing, além de contrapesos de backpedal e pressão melee; corrige também a finalização que comparava `TEXT` com `UUID` no lock de atividade PvP.
 # Refatoração modular — changelog
+
+## [Unreleased] - 2026-08-27 (Performance V2, Identidade de Equipamentos & Documentação)
+
+- Multiplayer M2A ativou Redis no backend: Pub/Sub do chat mundial, presença global com TTL/ownership de sessão e tickets WebSocket single-use consumidos atomicamente entre réplicas. Redis é obrigatório em staging/produção e possui fallback local apenas em desenvolvimento.
+- Multiplayer M2B tornou o scheduler do assentamento seguro para múltiplas réplicas: advisory lock PostgreSQL elege uma única líder e `atlas.settlement.scheduler.v1` propaga resultados para a instância que hospeda a sessão, sempre recarregando PostgreSQL antes de emitir o snapshot ao cliente.
+- Multiplayer M3A adicionou desafios diretos de duelo persistentes, expiráveis e idempotentes. Convites respeitam bloqueios, atravessam réplicas pelo stream social e ainda não iniciam combate, preservando a separação entre PvP futuro e PvE atual.
+- Multiplayer M3B adicionou a partida PvP persistente: o aceite cria uma `pvp_matches` `ready` com snapshots autoritativos dos participantes e evento inicial auditável. O cliente recebe apenas um aviso de arena preparada; atributos, equipamentos, skills e buffs congelados não são expostos pelo WebSocket.
+- Multiplayer M3C torna o duelo executável: confirmação bilateral expira em 90 segundos, uma líder global de arena roda `PvPCombatInstance` isolada a cada 250 ms e persiste cada pulso para retomar após queda. O cliente recebe apenas estado seguro de combate; não há perda, recompensa ou interferência no PvE.
+- A reconexão recupera a confirmação pendente da arena e a líder global limpa partidas `ready` que venceram, registrando o timeout no histórico auditável.
+- Multiplayer M3D conecta o estado seguro do duelo ao `GameCanvas`: uma arena isométrica pixelada exibe os dois combatentes, profundidade, impacto, vida e resultado, sobreposta ao mundo sem interromper a expedição. Os dois avatares são genéricos por arquétipo, mantendo equipamento e buffs privados.
+- Multiplayer M3E-A versiona a arena em `rules_version = 2`: as até duas habilidades ativas seladas no aceite entram em rotação automática sob regras exclusivas de PvP, com mana, cooldown, dano/cura e recuperação determinística independentes do PvE. Eventos públicos agora carregam somente a chave visual da habilidade e a indicação de cura para o Canvas.
+- O HUD recebeu uma organização de jogo: HP/MP ficam sobre o Canvas, enquanto habilidades, posturas e suprimentos permanecem dentro da arena. Logs e chat global foram unificados em um console por abas, pronto para canais de Clã/Reino e conversas privadas fecháveis quando os respectivos protocolos existirem.
+- O catálogo atual passou a ser `2026.08-performance-v2-equipment-identity-v1`, com 9 regiões, 40 monstros/bosses, 40 perfis de loot, 111 templates e 40 visuais validados pelos auditores.
+- O WebSocket usa `character_delta` nos caminhos quentes, tickets curtos single-use para a conexão e fila serial de persistência para loot, inventário, cargas pendentes e descobertas.
+- `CraftBatch` processa até 20 unidades em uma transação idempotente; a migration `000022_crafting_batch_transactions.sql` mantém o contrato persistente.
+- A identidade visual dos equipamentos foi ampliada com `visual_key`, `set_key`, paletas coerentes e renderers pixel art para os conjuntos e o Cajado de Pirulito.
+- A Vila do Shereque foi registrada como arena isométrica, junto da Floresta, com geometria 24x18, camadas dinâmicas, profundidade e terreno/colisão próprios. As demais regiões continuam legadas até sua conversão.
+- A documentação canônica foi sincronizada com o código atual e passou a separar planos/relatórios históricos de instruções operacionais.
+
+## [Unreleased] - 2026-08-26 (Alpha Hardening V1)
+
+- Rotas HTTP/WebSocket receberam validação de ambiente, limites de payload, deadlines, rate limits e autenticação por ticket efêmero.
+- Checkpoints de personagem e scheduler do assentamento reduziram persistência por tick e retiraram I/O pesado de locks de sessão nos fluxos principais.
+- As sete construções básicas permanecem liberadas na alpha, preservando o sistema de manuais para conteúdo futuro; cancelamento de Ambição em fabricação devolve recursos e ouro de forma transacional.
+- O ciclo econômico ganhou Lingote de Cobre e Farinha de Osso, com auditoria de origem e destino para evitar recursos obtíveis sem utilidade.
 
 ## [V7.6.0] - 2026-08-21 (Histórico de Expedição e Recuperação Offline)
 

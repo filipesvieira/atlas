@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { GameCanvas } from '../Viewport/GameCanvas';
 import { TibiaEquipmentGrid } from '../Inventory/TibiaEquipmentGrid';
 import { ExpeditionRegionSelector } from '../Expedition/ExpeditionRegionSelector';
@@ -12,6 +12,8 @@ import { useGameSocket } from '../../hooks/useGameSocket';
 import { useGameCatalog } from '../../hooks/useGameCatalog';
 import { EconomyHubModal } from '../Economy/EconomyHubModal';
 import type { ImportantNotification } from '../../types/notifications';
+import { CommunicationConsole } from '../Social/CommunicationConsole';
+import { PlayerInteractionLayer } from '../Social/PlayerInteractionLayer';
 
 interface DashboardGridProps {
   token: string;
@@ -22,6 +24,7 @@ interface DashboardGridProps {
 
 export function DashboardGrid({ token, character: initialChar, onCharacterUpdate, onImportantNotification }: DashboardGridProps) {
   const [isDepotOpen, setIsDepotOpen] = useState(false);
+  const legacySkinMigrationRef = useRef<Set<string>>(new Set());
   const [isCampModalOpen, setIsCampModalOpen] = useState(false);
   const [isSkinModalOpen, setIsSkinModalOpen] = useState(false);
   const [isEconomyOpen, setIsEconomyOpen] = useState(false);
@@ -59,6 +62,32 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
     attackCooldownRemaining,
     logs,
     connected,
+    chatMessages,
+    onlineCount,
+    socialError,
+    sendWorldChat,
+    blockChatCharacter,
+    reportChatMessage,
+    requestPublicProfile,
+    lastPublicProfile,
+    clearPublicProfile,
+		pendingDuelChallenges,
+		pvpMatchNotice,
+		pvpArenaWaiting,
+		pvpCombat,
+        pvpHistory,
+        pvpReplay,
+        pvpMatchmaking,
+		createDuelChallenge,
+		respondDuelChallenge,
+		confirmPvPMatch,
+        requestPvPHistory,
+        requestPvPReplay,
+        joinPvPMatchmaking,
+        leavePvPMatchmaking,
+        requestPvPMatchmakingStatus,
+        clearPvPReplay,
+		setEquippedSkin,
     moveHero,
     toggleExpedition,
     setAutoResumeExpedition,
@@ -98,15 +127,24 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
 
   const char = liveChar || initialChar;
 
+  useEffect(() => { if (connected) requestPvPMatchmakingStatus(); }, [connected]);
+
   // Notifica o App.tsx para atualizar a label superior do header em tempo real quando o nível mudar
   useEffect(() => {
     if (char && onCharacterUpdate) {
       onCharacterUpdate(char);
     }
     if (char?.id) {
-      SkinRegistryService.setCharacterId(char.id);
+      SkinRegistryService.setCharacterId(char.id, char.equipped_skin_key);
+      // Migração transparente: personagens existentes tinham a skin somente no
+      // localStorage. O sentinel vazio da migration 000027 permite promovê-la
+      // uma única vez para o backend sem sobrescrever a escolha do jogador.
+      if (!char.equipped_skin_key && connected && !legacySkinMigrationRef.current.has(char.id)) {
+        legacySkinMigrationRef.current.add(char.id);
+        setEquippedSkin(SkinRegistryService.getActiveSkinId(char.id));
+      }
     }
-  }, [char, onCharacterUpdate]);
+  }, [char, connected, onCharacterUpdate, setEquippedSkin]);
 
   useEffect(() => {
     setOnImportantNotification(onImportantNotification || (() => undefined));
@@ -328,23 +366,20 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
             onToggleExpedition={toggleExpedition}
             isExpeditionActive={isExpeditionActive}
             isConnected={connected}
+            pvpCombat={pvpCombat}
           />
 
-          {/* O chat técnico permanece separado da central de notificações da barra superior. */}
-          <div className="pixel-card rounded-xl p-2.5 flex-1 flex flex-col">
-            <h3 className="font-pixel-heading text-xs text-amber-400 mb-2 flex justify-between items-center border-b border-slate-800/80 pb-1.5">
-              <span>💬 Chat de logs</span>
-              <span className="text-[10px] text-slate-500 font-pixel-body">Combate e sistema</span>
-            </h3>
-            <div className="flex-1 max-h-32 overflow-y-auto text-[11px] font-pixel-terminal text-slate-400 space-y-1.5 pr-1 bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
-              {logs.map((log, idx) => (
-                <p key={idx} className="border-b border-slate-900/60 pb-1 leading-relaxed">
-                  <span className="text-amber-500 mr-1 opacity-70">&gt;</span>
-                  {log}
-                </p>
-              ))}
-            </div>
-          </div>
+          <CommunicationConsole
+            selfCharacterId={char.id}
+            logs={logs}
+            worldMessages={chatMessages}
+            onlineCount={onlineCount}
+            error={socialError}
+            onSendWorldMessage={sendWorldChat}
+            onBlock={blockChatCharacter}
+            onReport={reportChatMessage}
+            onInspect={requestPublicProfile}
+          />
         </div>
 
         {/* Painel Direito: Controles & Estatísticas do Personagem (3 Colunas) */}
@@ -459,6 +494,7 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
         isOpen={isSkinModalOpen}
         onClose={() => setIsSkinModalOpen(false)}
         characterId={char?.id}
+        onEquipSkin={setEquippedSkin}
       />
 
 	  {catalog && <EconomyHubModal
@@ -485,6 +521,43 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
 		onTransferTreasuryGold={transferTreasuryGold}
 		onUpdateTreasuryPolicy={updateTreasuryPolicy}
 	  />}
+      <PlayerInteractionLayer
+        pendingDuelChallenges={pendingDuelChallenges}
+        pvpMatchNotice={pvpMatchNotice}
+        pvpArenaWaiting={pvpArenaWaiting}
+        matchmaking={pvpMatchmaking}
+        history={pvpHistory}
+        replay={pvpReplay}
+        onRespondDuelChallenge={respondDuelChallenge}
+        onConfirmPvPMatch={confirmPvPMatch}
+        onJoinQueue={joinPvPMatchmaking}
+        onLeaveQueue={leavePvPMatchmaking}
+        onRequestHistory={requestPvPHistory}
+        onRequestReplay={requestPvPReplay}
+        onClearReplay={clearPvPReplay}
+      />
+      {lastPublicProfile && (
+        <div className="fixed bottom-[330px] right-3 md:bottom-3 md:right-[410px] z-40 w-64 rounded-lg border border-amber-500/40 bg-slate-950/95 p-3 text-xs shadow-2xl">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="font-pixel-heading text-amber-300">{lastPublicProfile.name}</div>
+              <div className="mt-1 text-slate-400">Nível {lastPublicProfile.level} · Rating PvP {lastPublicProfile.rating}</div>
+              <div className="mt-1 text-slate-500">Vitórias {lastPublicProfile.wins} · Derrotas {lastPublicProfile.losses}</div>
+              {lastPublicProfile.region && <div className="mt-1 text-slate-500">Região: {lastPublicProfile.region}</div>}
+            </div>
+            <button type="button" onClick={clearPublicProfile} className="text-slate-500 hover:text-slate-200">×</button>
+          </div>
+		  {lastPublicProfile.character_id !== char.id && (
+			<div className="mt-3 rounded border border-amber-700/50 bg-amber-950/20 p-2">
+			  <div className="text-[10px] text-amber-100/70">Duelo amistoso: nenhum ouro, item ou recurso fica em risco.</div>
+			  <div className="mt-1 text-[9px] text-slate-500">O convite persistente prepara a arena PvP, ainda em construção.</div>
+			  <button type="button" onClick={() => createDuelChallenge(lastPublicProfile.character_id)} className="pixel-btn pixel-btn-gold mt-2 w-full px-2 py-1.5 text-[10px]">
+				⚔️ Enviar desafio de duelo
+			  </button>
+			</div>
+		  )}
+        </div>
+      )}
     </div>
   );
 }

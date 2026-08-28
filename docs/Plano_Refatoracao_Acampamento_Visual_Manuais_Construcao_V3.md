@@ -1,5 +1,9 @@
 # Plano V3 — Refatoração Visual do Acampamento, Manuais, Progressão de Obras e Desmontagem
 
+> **Status (2026-08-27):** plano histórico. Preserve as decisões de design,
+> mas valide níveis, construções, migrations e caminhos de renderer na
+> documentação canônica antes de implementar qualquer item.
+
 ## 1. Objetivo
 
 Transformar o acampamento atual em uma área de progressão visual e funcional, removendo elementos redundantes e fazendo cada melhoria ser percebida tanto no Canvas quanto na jogabilidade.

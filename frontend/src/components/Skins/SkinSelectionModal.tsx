@@ -6,9 +6,10 @@ interface SkinSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   characterId?: string;
+  onEquipSkin?: (skinId: string) => void;
 }
 
-export const SkinSelectionModal: React.FC<SkinSelectionModalProps> = ({ isOpen, onClose, characterId }) => {
+export const SkinSelectionModal: React.FC<SkinSelectionModalProps> = ({ isOpen, onClose, characterId, onEquipSkin }) => {
   const [activeSkinId, setActiveSkinId] = useState<string>(() => SkinRegistryService.getActiveSkinId(characterId));
   const [selectedPreviewSkin, setSelectedPreviewSkin] = useState<HeroSkin>(() => SkinRegistryService.getActiveSkin(characterId));
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -78,6 +79,7 @@ export const SkinSelectionModal: React.FC<SkinSelectionModalProps> = ({ isOpen, 
   const handleEquipSkin = (skin: HeroSkin) => {
     SkinRegistryService.setActiveSkinId(skin.id, characterId);
     setActiveSkinId(skin.id);
+    onEquipSkin?.(skin.id);
   };
 
   const getRarityBadge = (rarity: SkinRarity) => {

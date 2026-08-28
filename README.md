@@ -1,6 +1,9 @@
-# Project Atlas — Assentamento Vivo V1.3 (Vila Isométrica, Cozinha & Economia Persistente)
+# Reino do Avesso — Assentamento Vivo, Arenas Isométricas & Economia Persistente
 
-Versão integral do jogo com progressão protegida, 13 profissões especializadas (6 de coleta e 7 de artesanato, incluindo Cozinheiro), sistema de moradores com dupla profissão e raridade procedural, Ambições automáticas com artesãos dedicados, simulação offline contínua e determinística com auto-retorno e recuperação dinâmica na fogueira, coletas paralelas ao combate e Arsenal protegido.
+Estado atual: catálogo `2026.08-performance-v2-equipment-identity-v1`, com 9 regiões, 40 monstros/bosses, 13 profissões, assentamento persistente, prólogo de Reino do Avesso, combate autoritativo e progressão offline determinística. A Floresta e a Vila do Shereque usam arenas isométricas com terreno próprio; as demais regiões ainda evoluem a partir dos renderers legados.
+
+O índice de divergências, documentos históricos e fontes canônicas está em
+[`docs/DOCUMENTATION_STATUS.md`](docs/DOCUMENTATION_STATUS.md).
 
 No jogo, abra **🏘️ Assentamento, Trabalhos & Oficina**. Em **Ordens de Trabalho**, envie um morador habilitado sem pausar a caçada; ao concluir, ele volta sozinho e deposita o que couber. Em **Ambições & Arsenal**, escolha uma receita descoberta, a raridade desejada e o limite de tentativas; os moradores reservam os custos e produzem automaticamente. Construções continuam no modal do Acampamento e nunca são iniciadas pelos trabalhadores.
 
@@ -11,7 +14,7 @@ Livros de habilidade podem ser estudados com qualquer arma equipada. A compatibi
 
 ## Executável Tauri e backend remoto
 
-O executável contém somente o cliente. O backend Go/PostgreSQL/Redis continua hospedado separadamente. Para uma release Tauri configure no build:
+O executável contém somente o cliente. O backend Go/PostgreSQL continua hospedado separadamente. Redis sustenta a camada realtime compartilhada: Pub/Sub do Chat Mundial, presença global com TTL, tickets WebSocket single-use e propagação das atualizações do scheduler do assentamento para a réplica que hospeda cada sessão. O scheduler possui liderança exclusiva por advisory lock do PostgreSQL, evitando reconciliação duplicada. Em desenvolvimento, se Redis estiver indisponível, o servidor preserva o modo local de uma única instância com aviso explícito; em `staging` e `production`, Redis é obrigatório e o startup falha de forma segura caso não esteja acessível. Para uma release Tauri configure no build:
 
 ```bash
 VITE_API_BASE_URL=https://api.seu-dominio-atlas.com
@@ -26,7 +29,7 @@ acima.
 
 No backend de produção, inclua as origens nativas do Tauri na allowlist usada por `ALLOWED_ORIGINS` (`http://tauri.localhost` para Windows e `tauri://localhost` para o protocolo nativo), além de qualquer origem web oficial.
 
-No acampamento, o layout V2 é persistido em grid isométrico. Construções descobertas podem ser posicionadas antes do primeiro nível e reorganizadas depois de prontas por drag-and-drop; durante o arraste, pressione **R** para girar em 90°. O backend valida limites, footprint, rotação e colisões antes de salvar.
+No acampamento, o layout V3 é persistido em grid isométrico 24x18. Construções descobertas podem ser posicionadas antes do primeiro nível e reorganizadas depois de prontas por drag-and-drop; durante o arraste, pressione **R** para girar em 90°. O backend valida limites, footprint, rotação e colisões antes de salvar.
 
 ## Executar com Docker
 
@@ -42,7 +45,7 @@ docker compose up --build
 - PostgreSQL: `localhost:5432` (`atlas` / `atlas_password`)
 
 O backend aplica as migrations embutidas no startup e encerra imediatamente se o schema ou o catálogo estiver inconsistente. Em banco existente, faça backup antes do primeiro start.
-O `bootstrap.sql` não é uma segunda fonte de schema: ele apenas documenta que a autoridade está em `backend/migrations/000001` a `000017`.
+O `bootstrap.sql` não é uma segunda fonte de schema: ele apenas documenta que a autoridade está nas migrations embutidas de `backend/migrations/000001` até `000026`.
 
 ### Conta local de QA
 
@@ -94,6 +97,7 @@ cd ..
 node tools/audit-content.mjs
 node tools/audit-camp-content.mjs
 node tools/audit-economy.mjs
+node tools/audit-resource-usage.mjs
 ```
 
 Para homologar um save legado, consulte `progression_migration_issues` antes de liberar o personagem. Casos ambíguos são bloqueados e nunca convertidos automaticamente, evitando reset surpresa de nível/XP.

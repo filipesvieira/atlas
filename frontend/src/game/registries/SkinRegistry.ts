@@ -99,9 +99,20 @@ export class SkinRegistryService {
     }
   }
 
-  public static setCharacterId(charId: string) {
-    if (!charId || charId === this.currentCharId) return;
+  public static setCharacterId(charId: string, serverSkinId?: string) {
+    if (!charId) return;
+    const validServerSkin = serverSkinId && AVAILABLE_SKINS.some((s) => s.id === serverSkinId) ? serverSkinId : '';
+    if (charId === this.currentCharId && (!validServerSkin || this.activeSkinId === validServerSkin)) return;
     this.currentCharId = charId;
+    if (validServerSkin) {
+      this.activeSkinId = validServerSkin;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`atlas_active_skin_${charId}`, validServerSkin);
+        localStorage.setItem('atlas_active_skin', validServerSkin);
+      }
+      this.listeners.forEach((cb) => cb(this.activeSkinId));
+      return;
+    }
     if (typeof window !== 'undefined') {
       const storageKey = `atlas_active_skin_${charId}`;
       const saved = localStorage.getItem(storageKey);

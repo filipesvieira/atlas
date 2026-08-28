@@ -1,6 +1,21 @@
-# Atlas MMORPG Idle — Base de Conhecimento & Arquitetura Técnica do Projeto
+# Reino do Avesso — Base de Conhecimento & Arquitetura Técnica
 
-Este documento serve como a **Fonte da Verdade (Single Source of Truth)** do projeto **Atlas MMORPG Idle**. Ele documenta em detalhes a arquitetura técnica, as regras de negócio, as mecânicas de combate, a estrutura do banco de dados, as tabelas de loot e a organização do código para orientar futuras implementações e guiar assistentes de IA.
+Este documento serve como a **Fonte da Verdade (Single Source of Truth)** do projeto **Reino do Avesso**. `Atlas` permanece em nomes internos e contratos de compatibilidade. As regras abaixo refletem o checkout atual; números e decisões históricas devem ser conferidos em [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md).
+
+## 🌎 Multiplayer M2 — Redis compartilhado, PostgreSQL autoritativo e scheduler global
+
+- PostgreSQL continua sendo a fonte persistente para personagem, inventário, economia, chat histórico, bloqueios, denúncias e perfil PvP.
+- Redis é exclusivamente efêmero/realtime: `atlas.social.world.v1` transmite eventos sociais por Pub/Sub; `atlas.settlement.scheduler.v1` transmite a conclusão de trabalhos para os gateways; `atlas:presence:character:v1:<id>` mantém presença com TTL de 60 segundos; `atlas:presence:online:v1` fornece a contagem global após remover entradas vencidas.
+- A presença contém um token por sessão. Um disconnect atrasado só remove sua própria chave e nunca apaga a reconexão que já assumiu o mesmo personagem.
+- Tickets WebSocket são gravados em `atlas:ws-ticket:v1:<ticket>` com TTL de 20 segundos e consumidos por `GETDEL`; portanto continuam single-use mesmo quando o HTTP e o upgrade WebSocket chegam a réplicas distintas.
+- A M3A persiste convites em `pvp_duel_challenges`: expiram em 90 segundos, são idempotentes por `(challenger_character_id, request_id)` e são entregues ao destinatário pelo stream social.
+- A M3B cria uma única `pvp_matches` por desafio aceito, junto de `pvp_match_participants` e `pvp_match_events`. O snapshot JSONB interno congela atributos derivados, equipamento, skills e buffs ativos; vida e mana começam completas sem tocar o estado de expedição. Somente `PvPMatchNotice` (id, arena, status e versão de regras) é enviado ao cliente, evitando expor o build completo do oponente.
+- A M3C exige confirmação bilateral em 90 segundos e promove `ready` para `active` numa única transação. Uma segunda liderança PostgreSQL (`atlas_pvp_arena_scheduler_v1`) executa `PvPCombatInstance` isolada em pulsos de 250 ms, persiste posição, vida, cooldowns e estado aleatório para recuperação, e publica apenas o snapshot seguro de combate no stream social. O duelo não consome poções, não altera a expedição e não concede recompensa nesta versão.
+- Ao reconectar durante `ready`, o gateway consulta a confirmação individual persistida e recompõe o card correto: entrar na arena ou aguardar o oponente. Arenas sem ambas as confirmações expiram de forma autoritativa e registram `MATCH_TIMEOUT`.
+- A M3D conecta esse contrato seguro a `PvPArenaViewport`, um canvas isométrico sobreposto ao `GameCanvas`. O renderer usa a grade 24×18, terreno de runas, tochas e avatares genéricos de guerreiro/arqueiro/mago conforme o arquétipo público. O viewport de expedição não é destruído, e o Canvas PvP não recebe detalhes privados do build adversário.
+- A M3E-A versiona habilidades de duelo sem reutilizar a execução do PvE: `PvPCombatRulesVersion = 2` sela a rotação das até duas skills ativas no instante do aceite. A tabela PvP possui custo, recarga, dano e cura próprios; seus cooldowns e posição de rotação estão no `runtime_state` para recuperação determinística. A rede recebe somente `skill_key` e `is_healing` no evento já resolvido.
+- Em `development`, indisponibilidade de Redis reduz social/tickets/scheduler ao adapter local e emite aviso. Em `staging` e `production`, Redis é obrigatório no startup para impedir visão fragmentada do mundo.
+- O lease de personagem permanece no PostgreSQL e impede duas sessões ativas para o mesmo herói. O scheduler usa uma única liderança global por `pg_try_advisory_lock(hashtext('atlas_settlement_scheduler_v1'))`; se a conexão líder cair, o PostgreSQL libera o lock e outra réplica pode assumir. A líder persiste a mutação normalmente e publica um evento leve; a réplica dona do WebSocket consulta PostgreSQL e aplica snapshots por revisão, sem receber estado de combate por Redis.
 
 ## 🏦 Economia do Acampamento V1.2 — Tesouraria e Folha
 
@@ -15,7 +30,7 @@ Este documento serve como a **Fonte da Verdade (Single Source of Truth)** do pro
 - O ledger `settlement_gold_ledger` e a tabela `settlement_payroll` são a trilha auditável da economia do assentamento.
 - Custos são snapshots com `economy_version`; mudanças futuras não alteram trabalhos em andamento.
 
-## 🏘️ Assentamento Vivo V1.3 (Profissões, Cozinha e Layout Isométrico)
+## 🏘️ Assentamento Vivo — estado atual (Profissões, Cozinha e Layout Isométrico)
 
 O personagem é o herói e proprietário do assentamento. Ele decide construções e permanece focado em combate; moradores persistentes com especialidades individuais assumem coleta e artesanato automático.
 
@@ -76,10 +91,10 @@ Quando a prosperidade e moradia atraem novos moradores, suas especialidades são
 
 ## 📌 1. Visão Geral do Projeto
 
-**Atlas MMORPG Idle** é um jogo MMORPG Idle web de inspiração clássica (estilo Tibia e retro-RPGs), com:
-- **Engine de Combate em Tempo Real**: Desenvolvida em **Go (Gorilla WebSockets)** com simulação tática em grid (15x8) a 750ms por tick.
-- **Viewport 2D Ultra-Fluido**: Renderizador HTML5 Canvas 2D customizado a 60 FPS com fundos cênicos por bioma, efeitos de ataque, feitiços, projéteis e barras de status flutuantes sobre o herói e os monstros.
-- **Sistemas de RPG Profundos**: 11 slots de equipamentos estilo Tibia, 6 maestrias por uso (`Sword`, `Axe`, `Shield`, `Distance`, `Magic`, `Club`), tabela de drops por monstro com *Rarity Caps*, expedições de 5 fases com chefões (*Bosses*) e mapas temáticos inspirados na cultura pop geek nostálgica.
+**Reino do Avesso** é um jogo MMORPG Idle web de inspiração clássica (estilo Tibia e retro-RPGs), com:
+- **Engine de Combate em Tempo Real**: desenvolvida em **Go (Gorilla WebSockets)**, com posição autoritativa em grid regional 24x18 e atualização por eventos/ticks do servidor.
+- **Viewport 2D Ultra-Fluido**: renderizador HTML5 Canvas 2D customizado a 60 FPS, com interpolação, fundos cênicos, efeitos de ataque, feitiços, projéteis e barras de status flutuantes.
+- **Conteúdo modular atual**: 9 regiões, 40 monstros/bosses, 13 profissões, 11 slots de equipamento, 6 maestrias e expedições com quantidade de fases definida pelo catálogo.
 
 ---
 
@@ -94,7 +109,9 @@ atlas/
 │   ├── pkg/game/                   # Motor de Jogo e Regras de Negócio
 │   │   ├── engine.go               # Loop principal (processTick), cálculo de stats, grid, fases e SetRegion
 │   │   ├── loot.go                 # Itens, templates, 11 slots e GenerateLootForMonster
-│   │   ├── expeditions.go          # Mapa do mundo, 5 Tiers, 8 regiões geek, fases e Bosses
+│   │   ├── expeditions.go          # Mapa do mundo, tiers, 9 regiões, fases e Bosses
+│   │   ├── arena_terrain.go        # Grade regional, flags de terreno e definições de arena
+│   │   ├── arena_collision.go      # Ocupação, colisão e navegação autoritativas
 │   │   └── offline.go              # Simulação de progresso offline / descanso
 │   └── internal/db/                # Persistência e Banco de Dados
 │       ├── db.go                   # Migrações SQL, consultas PostgreSQL e persistência JSONB
@@ -109,8 +126,9 @@ atlas/
 │   │   │   │   └── ExpeditionRegionSelector.tsx # Card de expedição ativa e barra de fases
 │   │   │   ├── Inventory/          # Grid de equipamentos estilo Tibia (11 slots)
 │   │   │   └── Onboarding/         # Ajuda informativa dos estilos classless
-│   │   ├── game/
-│   │   │   └── PixelArtRenderer.ts # Renderizador de cenários por bioma e sprites Pixel Art 2D
+│   │   ├── game/                   # Registries e renderers Canvas 2D por domínio
+│   │   │   ├── registries/         # Biomas, heróis, monstros, itens e recursos
+│   │   │   └── renderers/          # Arenas, efeitos, construções e sprites
 │   │   └── hooks/
 │   │       └── useGameSocket.ts    # Hook WebSocket para sincronização em tempo real (envio de region_id)
 └── docs/                           # Documentação técnica do projeto
@@ -121,10 +139,11 @@ atlas/
 
 ## ⚙️ 3. Motor de Combate & Simulação Tática
 
-### Grid de Combate (15x8)
-- A arena é representada por um grid retangular de **15 colunas por 8 linhas** (32x32px por tile).
-- **Posição do Herói**: Fixa na coluna `GridX = 2`, `GridY = 4`.
-- **Spawn de Monstros**: Monstros surgem na borda direita (`GridX = 14`) escalonados em linhas diferentes (`GridY = 2, 4, 6`).
+### Grid de Combate (24x18)
+- A arena autoritativa usa uma grade regional de **24 colunas por 18 linhas**; o frontend converte as coordenadas para a projeção isométrica e interpola o deslocamento.
+- A posição do herói, os pontos de spawn e as rotas não são mais fixos em uma única coluna. Os spawns são distribuídos pela definição da arena, incluindo os quatro cantos quando aplicável.
+- Floresta e Vila do Shereque possuem terreno, obstáculos e colisão próprios; o acampamento usa a mesma geometria isométrica para sua cena.
+- Regiões ainda não convertidas preservam o renderer legado até receberem geometria e terreno equivalentes.
 
 ### Máquina de Estados dos Monstros (`State`)
 1. `CHASE`: O monstro avança em direção ao herói (`GridX--`).
@@ -198,7 +217,7 @@ Chada região possui **5 Fases (Stages)**:
   2. Emitir log e anúncio: `🏆 EXPEDIÇÃO CONCLUÍDA! O CHEFÃO FOI DERROTADO!`.
   3. **Desbloqueia a próxima expedição** na lista `unlocked_regions` salva no banco PostgreSQL!
 
-### O Mapa do Mundo (8 Regiões Geek & Biomas Visuais)
+### O Mapa do Mundo (9 Regiões Geek & Biomas Visuais)
 
 | Tier | ID | Região | Boss & Nível | HP do Boss | Ataque do Boss | Atmosfera Cênica |
 |---|---|---|---|---|---|---|
@@ -220,11 +239,11 @@ $$\text{XP}_{final} = (\text{BaseXP} \times \text{NívelMonstro}) \times \text{F
 
 ---
 
-## 🎨 7. Engine Gráfica & Viewport 2D (`GameViewport.ts`)
+## 🎨 7. Engine Gráfica & Viewport Canvas 2D (`GameViewport.ts`)
 
 - **Tecnologia**: Renderizador 100% síncrono sobre HTML5 Canvas 2D a **60 FPS** sem depender de carregadores de textura assíncronos frágeis.
-- **Gerador de Cenários Dinâmicos (`PixelArtRenderer.ts`)**: Renderiza os 8 biomas distintos e um acampamento vivo detalhado (cabana de madeira, janela iluminada, banco de tronco, suporte de armas e fogueira com anel de pedras) em canvas offscreen.
-- **Gerador de Sprites Pixel Art (35 Monstros Únicos)**: Renderiza sprites 2D em Pixel Art dinâmicos em canvas offscreen por `visual_key` para **35 espécies únicas de monstros** (Vampiro Ancestral, Necromante, Escorpião Infernal, Zumbi Congelado, Orc Mago, Orc Arqueiro, Bandido, Goblin, Aranha, Golem, Demônio, Dragão, etc.). Suporta fallback magenta/checkerboard evidente em caso de chaves desconhecidas.
+- **Renderers modulares de bioma**: `BiomeRegistry` roteia backgrounds, camadas dinâmicas, profundidade e geometria. Floresta e Vila do Shereque usam arenas isométricas 24x18 com efeitos; as demais regiões ainda usam seus renderers legados.
+- **Gerador de Sprites Pixel Art (40 visuais)**: Renderiza sprites 2D em Canvas offscreen por `visual_key` para os 40 monstros/bosses catalogados. `PixelArtRenderer.ts` permanece como fachada de cache para monstros; novos visuais devem ser registrados nos módulos de tier.
 - **Bosses Agigantados (64x64px)**: Bosses são renderizados com dimensões maiores (64x64px), auras elementais animadas e placa com coroa dourada/vermelha.
 - **Placa de Status do Jogador**:
   - Exibe **Nome + Nível** (`Maguin Lv.61`).
@@ -268,11 +287,11 @@ O cliente WebSocket aceita os seguintes comandos estruturados no JSON de envio:
 ## 🔮 10. Diretrizes para Futuras Implementações
 
 1. **Adição de Novas Regiões/Expedições**:
-   - Registrar a nova região no mapa `ExpeditionRegions` em [`expeditions.go`](file:///Users/filipevieira/Documents/atlas/backend/pkg/game/expeditions.go).
-   - Adicionar o card visual correspondente no array `WORLD_REGIONS` em [`ExpeditionSelectionModal.tsx`](file:///Users/filipevieira/Documents/atlas/frontend/src/components/Expedition/ExpeditionSelectionModal.tsx).
-   - Criar a função geradora de bioma `getNewRegionBackground()` em [`PixelArtRenderer.ts`](file:///Users/filipevieira/Documents/atlas/frontend/src/game/PixelArtRenderer.ts) e mapear em [`GameViewport.ts`](file:///Users/filipevieira/Documents/atlas/frontend/src/components/Viewport/GameViewport.ts).
+   - Registrar a nova região no mapa `ExpeditionRegions` em `backend/pkg/game/expeditions.go`, incluindo `BiomeKey`, níveis, fases e drops.
+   - Expor somente os metadados públicos no `GameCatalog`; a UI não deve recriar uma lista `WORLD_REGIONS` independente.
+   - Para um bioma novo, criar renderer modular em `frontend/src/game/renderers/biomes/`, registrá-lo em `BiomeRegistry.ts` e declarar a geometria/terreno correspondente quando for isométrico.
 2. **Adição de Novos Itens & Equipamentos**:
-   - Adicionar o template em `lootTemplates` em [`loot.go`](file:///Users/filipevieira/Documents/atlas/backend/pkg/game/loot.go) e incluir nas tabelas dos monstros desejados em `GenerateLootForMonster`.
+   - Adicionar o template em `lootTemplates` em `backend/pkg/game/loot.go` e referenciá-lo nos perfis canônicos de loot.
 3. **Novas Habilidades & Magias**:
    - Registrar a chave da skill no backend em `engine.go` e adicionar o `SkillBook` correspondente em `loot.go`.
 
@@ -293,7 +312,7 @@ O cliente WebSocket aceita os seguintes comandos estruturados no JSON de envio:
 - Ausência de estado econômico é exibida como carregamento/erro sincronizável, nunca como profissão de nível insuficiente.
 ---
 
-## ⚖️ 11. Sistema de Balanceamento de Equipamentos (REBALANCE V4)
+## ⚖️ 11. Sistema de Balanceamento de Equipamentos (versão atual de itens: 3)
 
 ### Princípios e invariantes
 

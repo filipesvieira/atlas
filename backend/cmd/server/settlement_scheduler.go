@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -9,21 +10,57 @@ import (
 	"github.com/atlas/backend/pkg/game"
 )
 
+const (
+	settlementSchedulerInterval = 3 * time.Second
+	settlementSchedulerRetry    = 5 * time.Second
+)
+
 func startSettlementScheduler() {
 	go func() {
-		ticker := time.NewTicker(3 * time.Second)
-		defer ticker.Stop()
-		for now := range ticker.C {
-			candidates, err := db.ListSettlementAutomationCandidates(now.UTC(), 200)
+		for {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			leadership, acquired, err := db.TryAcquireSettlementSchedulerLeadership(ctx)
+			cancel()
 			if err != nil {
-				log.Printf("scheduler do assentamento: %v", err)
+				log.Printf("scheduler do assentamento: erro ao disputar liderança: %v", err)
+				time.Sleep(settlementSchedulerRetry)
 				continue
 			}
-			for _, charID := range candidates {
-				processSettlementAutomationCandidate(charID, now.UTC())
+			if !acquired {
+				time.Sleep(settlementSchedulerRetry)
+				continue
 			}
+			log.Printf("🟢 Scheduler global do assentamento assumido por esta réplica")
+			runSettlementSchedulerLeader(leadership)
+			releaseCtx, releaseCancel := context.WithTimeout(context.Background(), 3*time.Second)
+			if err := leadership.Release(releaseCtx); err != nil {
+				log.Printf("scheduler do assentamento: erro ao liberar liderança: %v", err)
+			}
+			releaseCancel()
 		}
 	}()
+}
+
+func runSettlementSchedulerLeader(leadership *db.SettlementSchedulerLeadership) {
+	ticker := time.NewTicker(settlementSchedulerInterval)
+	defer ticker.Stop()
+	for now := range ticker.C {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		err := leadership.Ping(ctx)
+		cancel()
+		if err != nil {
+			log.Printf("scheduler do assentamento: liderança perdida: %v", err)
+			return
+		}
+		candidates, err := db.ListSettlementAutomationCandidates(now.UTC(), 200)
+		if err != nil {
+			log.Printf("scheduler do assentamento: %v", err)
+			continue
+		}
+		for _, charID := range candidates {
+			processSettlementAutomationCandidate(charID, now.UTC())
+		}
+	}
 }
 
 func processSettlementAutomationCandidate(charID string, now time.Time) {
@@ -44,51 +81,9 @@ func processSettlementAutomationCandidate(charID string, now time.Time) {
 	if !gatheringChanged && !automationChanged && !campChanged {
 		return
 	}
-
-	sessionsMu.Lock()
-	session := activeSessions[charID]
-	sessionsMu.Unlock()
-	if session == nil {
-		return // estado já foi persistido; será carregado no próximo login
-	}
-	if automationChanged {
-		applySettlementAutomationUpdate(session, automation)
-	}
-	economy, err := db.GetCharacterEconomyState(charID)
-	if err != nil {
-		log.Printf("scheduler: erro ao sincronizar economia de %s: %v", charID, err)
-		return
-	}
-	var resourceInventory *game.ResourceInventorySnapshot
-	if gatheringChanged {
-		resourceInventory, err = db.GetCharacterResourceSnapshot(charID)
-		if err != nil {
-			log.Printf("scheduler: erro ao sincronizar depósito de %s: %v", charID, err)
-			return
-		}
-	} else if automation != nil {
-		resourceInventory = automation.ResourceInventory
-	}
-
-	session.Mu.Lock()
-	if campChanged && camp != nil {
-		session.Camp = camp
-	}
-	if resourceInventory != nil {
-		session.Resources = map[string]int64{}
-		for _, resource := range resourceInventory.Items {
-			session.Resources[resource.Key] = resource.Quantity
-		}
-		if session.Camp != nil {
-			session.Camp.StorageUsed = resourceInventory.StorageUsed
-			session.Camp.StorageCapacity = resourceInventory.StorageCapacity
-			session.Camp.StateRevision = resourceInventory.Revision
-		}
-	}
 	eventType := "SETTLEMENT_UPDATED"
 	logText := ""
-	var craftResult *game.CraftResult
-	if campChanged {
+	if campChanged && camp != nil {
 		eventType = "BUILDING_UPGRADE_COMPLETED"
 		logText = "🏗️ Uma obra do assentamento foi concluída."
 	}
@@ -99,6 +94,7 @@ func processSettlementAutomationCandidate(charID string, now time.Time) {
 		}
 		logText += fmt.Sprintf("🏡 %d trabalhador(es) retornaram sozinho(s) e entregaram a produção.", len(gathered))
 	}
+	var craftResult *game.CraftResult
 	if automationChanged {
 		eventType = automation.EventType
 		craftResult = automation.CraftResult
@@ -107,13 +103,20 @@ func processSettlementAutomationCandidate(charID string, now time.Time) {
 		}
 		logText += automation.LogText
 	}
-	message := game.CombatMessage{
-		Type: eventType, Timestamp: time.Now().Format("15:04:05"),
-		Character: game.CloneCharacterSnapshot(session.Character), Economy: economy,
-		Inventory:         game.CloneInventorySnapshot(session.Inventory),
-		ResourceInventory: resourceInventory, CraftResult: craftResult,
-		Camp: game.CloneCampSnapshot(session.Camp), LogText: logText,
+	event := settlementSchedulerEvent{
+		CharacterID:      charID,
+		EventType:        eventType,
+		LogText:          logText,
+		CampChanged:      campChanged,
+		ResourcesChanged: gatheringChanged || automationChanged,
+		InventoryChanged: automationChanged && automation.Inventory != nil,
+		CraftResult:      craftResult,
 	}
-	session.SendMessageLocked(message)
-	session.Mu.Unlock()
+	if automationChanged {
+		event.GoldDelta = automation.GoldDelta
+		event.CharacterRevision = automation.CharacterRevision
+	}
+	if err := publishSettlementSchedulerEvent(event); err != nil {
+		log.Printf("scheduler: erro ao publicar atualização de %s: %v", charID, err)
+	}
 }

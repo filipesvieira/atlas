@@ -107,11 +107,51 @@ type wsTicketRecord struct {
 	ExpiresAt   time.Time
 }
 
-var wsTicketStore = struct {
+type wsTicketStore interface {
+	Store(ticket string, record wsTicketRecord, ttl time.Duration) error
+	Consume(ticket string, now time.Time) (wsTicketRecord, bool, error)
+}
+
+type inMemoryWSTicketStore struct {
 	sync.Mutex
 	tickets map[string]wsTicketRecord
 	issues  uint64
-}{tickets: make(map[string]wsTicketRecord)}
+}
+
+func newInMemoryWSTicketStore() *inMemoryWSTicketStore {
+	return &inMemoryWSTicketStore{tickets: make(map[string]wsTicketRecord)}
+}
+
+func (s *inMemoryWSTicketStore) Store(ticket string, record wsTicketRecord, _ time.Duration) error {
+	s.Lock()
+	s.tickets[ticket] = record
+	s.issues++
+	if s.issues%128 == 0 {
+		for key, candidate := range s.tickets {
+			if !candidate.ExpiresAt.After(time.Now().UTC()) {
+				delete(s.tickets, key)
+			}
+		}
+	}
+	s.Unlock()
+	return nil
+}
+
+func (s *inMemoryWSTicketStore) Consume(ticket string, now time.Time) (wsTicketRecord, bool, error) {
+	s.Lock()
+	defer s.Unlock()
+	record, ok := s.tickets[ticket]
+	if !ok {
+		return wsTicketRecord{}, false, nil
+	}
+	delete(s.tickets, ticket) // single-use mesmo quando expirado
+	if !record.ExpiresAt.After(now) {
+		return wsTicketRecord{}, false, nil
+	}
+	return record, true, nil
+}
+
+var wsTickets wsTicketStore = newInMemoryWSTicketStore()
 
 const wsTicketTTL = 20 * time.Second
 
@@ -122,17 +162,9 @@ func issueWSTicket(accountID, characterID string, now time.Time) (string, time.T
 	}
 	ticket := base64.RawURLEncoding.EncodeToString(raw)
 	expiresAt := now.Add(wsTicketTTL)
-	wsTicketStore.Lock()
-	wsTicketStore.tickets[ticket] = wsTicketRecord{AccountID: accountID, CharacterID: characterID, ExpiresAt: expiresAt}
-	wsTicketStore.issues++
-	if wsTicketStore.issues%128 == 0 {
-		for key, record := range wsTicketStore.tickets {
-			if !record.ExpiresAt.After(now) {
-				delete(wsTicketStore.tickets, key)
-			}
-		}
+	if err := wsTickets.Store(ticket, wsTicketRecord{AccountID: accountID, CharacterID: characterID, ExpiresAt: expiresAt}, wsTicketTTL); err != nil {
+		return "", time.Time{}, err
 	}
-	wsTicketStore.Unlock()
 	return ticket, expiresAt, nil
 }
 
@@ -140,14 +172,8 @@ func consumeWSTicket(ticket string, now time.Time) (wsTicketRecord, bool) {
 	if ticket == "" {
 		return wsTicketRecord{}, false
 	}
-	wsTicketStore.Lock()
-	defer wsTicketStore.Unlock()
-	record, ok := wsTicketStore.tickets[ticket]
-	if !ok {
-		return wsTicketRecord{}, false
-	}
-	delete(wsTicketStore.tickets, ticket) // single-use mesmo quando expirado
-	if !record.ExpiresAt.After(now) {
+	record, ok, err := wsTickets.Consume(ticket, now)
+	if err != nil || !ok {
 		return wsTicketRecord{}, false
 	}
 	return record, true

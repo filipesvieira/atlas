@@ -1,3 +1,7 @@
+> **Status (2026-08-27):** análise histórica de balanceamento. Os números
+> atuais devem ser conferidos no código e na matriz vigente antes de qualquer
+> alteração. Consulte [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md).
+
 Fiz uma análise detalhada e cirúrgica do código-fonte e das especificações do **Project Atlas** (`engine.go`, `loot.go`, `offline.go`, `db.go`, `ws.go` e documentações).
 
 O jogo já possui uma base limpa em Go e React, mas do ponto de vista de **Game Design, Balanceamento Matemático e Retenção do Jogador (Dopamina)**, existem falhas e lacunas estruturais que tornam a progressão previsível e limitada.

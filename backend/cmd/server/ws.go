@@ -44,43 +44,53 @@ func getCharacterLifecycleLock(characterID string) *sync.Mutex {
 }
 
 type ClientAction struct {
-	Action             string                   `json:"action"`
-	ItemID             string                   `json:"item_id"`
-	Slot               string                   `json:"slot"`
-	RegionID           string                   `json:"region_id"`
-	Region             string                   `json:"region"`
-	Stance             string                   `json:"stance"`
-	Skill              string                   `json:"skill"`
-	Stat               string                   `json:"stat"`
-	Pack               string                   `json:"pack"`
-	ItemIDs            []string                 `json:"item_ids"`
-	Enabled            bool                     `json:"enabled"`
-	BuildingKey        string                   `json:"building_key"`
-	SlotKey            string                   `json:"slot_key"`
-	ResourceKey        string                   `json:"resource_key"`
-	Quantity           int64                    `json:"quantity"`
-	ExpectedRevision   int64                    `json:"expected_revision"`
-	RequestID          string                   `json:"request_id"`
-	SafeMode           bool                     `json:"safe_mode"`
-	AutoSellSettings   *game.AutoSellSettings   `json:"auto_sell_settings,omitempty"`
-	AutoPotionSettings *game.AutoPotionSettings `json:"auto_potion_settings,omitempty"`
-	ExpeditionKey      string                   `json:"expedition_key"`
-	DurationSeconds    int64                    `json:"duration_seconds"`
-	RecipeKey          string                   `json:"recipe_key"`
-	CatalystKey        string                   `json:"catalyst_key"`
-	PreviewRevision    int64                    `json:"preview_revision"`
-	ActivityID         string                   `json:"activity_id"`
-	DesireID           string                   `json:"desire_id"`
-	ArmoryID           string                   `json:"armory_id"`
-	TargetRarity       string                   `json:"target_rarity"`
-	MaxAttempts        int                      `json:"max_attempts"`
-	Priority           int                      `json:"priority"`
-	Direction          string                   `json:"direction"`
-	Pressed            bool                     `json:"pressed"`
-	PersonalReserve    int64                    `json:"personal_reserve"`
-	TileX              int                      `json:"tile_x"`
-	TileY              int                      `json:"tile_y"`
-	Rotation           int                      `json:"rotation"`
+	Action              string                   `json:"action"`
+	ItemID              string                   `json:"item_id"`
+	Slot                string                   `json:"slot"`
+	RegionID            string                   `json:"region_id"`
+	Region              string                   `json:"region"`
+	Stance              string                   `json:"stance"`
+	Skill               string                   `json:"skill"`
+	Stat                string                   `json:"stat"`
+	Pack                string                   `json:"pack"`
+	ItemIDs             []string                 `json:"item_ids"`
+	Enabled             bool                     `json:"enabled"`
+	BuildingKey         string                   `json:"building_key"`
+	SlotKey             string                   `json:"slot_key"`
+	ResourceKey         string                   `json:"resource_key"`
+	Quantity            int64                    `json:"quantity"`
+	ExpectedRevision    int64                    `json:"expected_revision"`
+	RequestID           string                   `json:"request_id"`
+	SafeMode            bool                     `json:"safe_mode"`
+	AutoSellSettings    *game.AutoSellSettings   `json:"auto_sell_settings,omitempty"`
+	AutoPotionSettings  *game.AutoPotionSettings `json:"auto_potion_settings,omitempty"`
+	ExpeditionKey       string                   `json:"expedition_key"`
+	DurationSeconds     int64                    `json:"duration_seconds"`
+	RecipeKey           string                   `json:"recipe_key"`
+	CatalystKey         string                   `json:"catalyst_key"`
+	PreviewRevision     int64                    `json:"preview_revision"`
+	ActivityID          string                   `json:"activity_id"`
+	DesireID            string                   `json:"desire_id"`
+	ArmoryID            string                   `json:"armory_id"`
+	TargetRarity        string                   `json:"target_rarity"`
+	MaxAttempts         int                      `json:"max_attempts"`
+	Priority            int                      `json:"priority"`
+	Direction           string                   `json:"direction"`
+	Pressed             bool                     `json:"pressed"`
+	PersonalReserve     int64                    `json:"personal_reserve"`
+	TileX               int                      `json:"tile_x"`
+	TileY               int                      `json:"tile_y"`
+	Rotation            int                      `json:"rotation"`
+	Channel             string                   `json:"channel"`
+	Text                string                   `json:"text"`
+	TargetCharacterID   string                   `json:"target_character_id"`
+	MessageID           string                   `json:"message_id"`
+	Reason              string                   `json:"reason"`
+	DuelChallengeID     string                   `json:"duel_challenge_id"`
+	PvPMatchID          string                   `json:"pvp_match_id"`
+	PvPTacticalStrategy string                   `json:"pvp_tactical_strategy"`
+	PvPStrategyVersion  int                      `json:"pvp_strategy_version"`
+	SkinKey             string                   `json:"skin_key"`
 }
 
 func convertDBCharToGameChar(c *db.Character) *game.CharacterData {
@@ -88,41 +98,44 @@ func convertDBCharToGameChar(c *db.Character) *game.CharacterData {
 		return nil
 	}
 	return &game.CharacterData{
-		ID:                   c.ID,
-		AccountID:            c.AccountID,
-		Name:                 c.Name,
-		Vocation:             c.Vocation,
-		Origin:               c.Origin,
-		Level:                c.Level,
-		Experience:           c.Experience,
-		Health:               c.Health,
-		MaxHealth:            c.MaxHealth,
-		Mana:                 c.Mana,
-		MaxMana:              c.MaxMana,
-		GoldBank:             c.GoldBank,
-		STR:                  c.STR,
-		DEX:                  c.DEX,
-		INT:                  c.INT,
-		VIT:                  c.VIT,
-		UnspentPoints:        c.UnspentPoints,
-		Masteries:            c.Masteries,
-		LearnedSkills:        c.LearnedSkills,
-		ActiveSkills:         c.ActiveSkills,
-		UnlockedRegions:      c.UnlockedRegions,
-		IsExpeditionActive:   c.IsExpeditionActive,
-		ActiveRegion:         c.ActiveRegion,
-		ActiveStance:         c.ActiveStance,
-		CurrentStage:         c.CurrentStage,
-		IsBossStage:          c.IsBossStage,
-		StateRevision:        c.StateRevision,
-		ProgressionVersion:   c.ProgressionVersion,
-		LifetimeExperience:   c.LifetimeExperience,
-		HighestLevelEver:     c.HighestLevelEver,
-		LastLogin:            c.LastLogin,
-		LastLogout:           c.LastLogout,
-		AutoResumeExpedition: c.AutoResumeExpedition,
-		StarterPackClaimed:   c.StarterPackClaimed,
-		StarterPackKey:       c.StarterPackKey,
+		ID:                       c.ID,
+		AccountID:                c.AccountID,
+		Name:                     c.Name,
+		Vocation:                 c.Vocation,
+		Origin:                   c.Origin,
+		Level:                    c.Level,
+		Experience:               c.Experience,
+		Health:                   c.Health,
+		MaxHealth:                c.MaxHealth,
+		Mana:                     c.Mana,
+		MaxMana:                  c.MaxMana,
+		GoldBank:                 c.GoldBank,
+		STR:                      c.STR,
+		DEX:                      c.DEX,
+		INT:                      c.INT,
+		VIT:                      c.VIT,
+		UnspentPoints:            c.UnspentPoints,
+		Masteries:                c.Masteries,
+		LearnedSkills:            c.LearnedSkills,
+		ActiveSkills:             c.ActiveSkills,
+		UnlockedRegions:          c.UnlockedRegions,
+		IsExpeditionActive:       c.IsExpeditionActive,
+		ActiveRegion:             c.ActiveRegion,
+		ActiveStance:             c.ActiveStance,
+		CurrentStage:             c.CurrentStage,
+		IsBossStage:              c.IsBossStage,
+		StateRevision:            c.StateRevision,
+		ProgressionVersion:       c.ProgressionVersion,
+		LifetimeExperience:       c.LifetimeExperience,
+		HighestLevelEver:         c.HighestLevelEver,
+		LastLogin:                c.LastLogin,
+		LastLogout:               c.LastLogout,
+		AutoResumeExpedition:     c.AutoResumeExpedition,
+		StarterPackClaimed:       c.StarterPackClaimed,
+		StarterPackKey:           c.StarterPackKey,
+		EquippedSkinKey:          c.EquippedSkinKey,
+		ActivePvPMatchID:         c.ActivePvPMatchID,
+		ResumeExpeditionAfterPvP: c.ResumeExpeditionAfterPvP,
 	}
 }
 
@@ -155,41 +168,44 @@ func convertGameCharToDBChar(c *game.CharacterData) *db.Character {
 		return nil
 	}
 	return &db.Character{
-		ID:                   c.ID,
-		AccountID:            c.AccountID,
-		Name:                 c.Name,
-		Vocation:             c.Vocation,
-		Origin:               c.Origin,
-		Level:                c.Level,
-		Experience:           c.Experience,
-		Health:               c.Health,
-		MaxHealth:            c.MaxHealth,
-		Mana:                 c.Mana,
-		MaxMana:              c.MaxMana,
-		GoldBank:             c.GoldBank,
-		STR:                  c.STR,
-		DEX:                  c.DEX,
-		INT:                  c.INT,
-		VIT:                  c.VIT,
-		UnspentPoints:        c.UnspentPoints,
-		Masteries:            c.Masteries,
-		LearnedSkills:        c.LearnedSkills,
-		ActiveSkills:         c.ActiveSkills,
-		UnlockedRegions:      c.UnlockedRegions,
-		IsExpeditionActive:   c.IsExpeditionActive,
-		ActiveRegion:         c.ActiveRegion,
-		ActiveStance:         c.ActiveStance,
-		CurrentStage:         c.CurrentStage,
-		IsBossStage:          c.IsBossStage,
-		StateRevision:        c.StateRevision,
-		ProgressionVersion:   c.ProgressionVersion,
-		LifetimeExperience:   c.LifetimeExperience,
-		HighestLevelEver:     c.HighestLevelEver,
-		LastLogin:            c.LastLogin,
-		LastLogout:           c.LastLogout,
-		AutoResumeExpedition: c.AutoResumeExpedition,
-		StarterPackClaimed:   c.StarterPackClaimed,
-		StarterPackKey:       c.StarterPackKey,
+		ID:                       c.ID,
+		AccountID:                c.AccountID,
+		Name:                     c.Name,
+		Vocation:                 c.Vocation,
+		Origin:                   c.Origin,
+		Level:                    c.Level,
+		Experience:               c.Experience,
+		Health:                   c.Health,
+		MaxHealth:                c.MaxHealth,
+		Mana:                     c.Mana,
+		MaxMana:                  c.MaxMana,
+		GoldBank:                 c.GoldBank,
+		STR:                      c.STR,
+		DEX:                      c.DEX,
+		INT:                      c.INT,
+		VIT:                      c.VIT,
+		UnspentPoints:            c.UnspentPoints,
+		Masteries:                c.Masteries,
+		LearnedSkills:            c.LearnedSkills,
+		ActiveSkills:             c.ActiveSkills,
+		UnlockedRegions:          c.UnlockedRegions,
+		IsExpeditionActive:       c.IsExpeditionActive,
+		ActiveRegion:             c.ActiveRegion,
+		ActiveStance:             c.ActiveStance,
+		CurrentStage:             c.CurrentStage,
+		IsBossStage:              c.IsBossStage,
+		StateRevision:            c.StateRevision,
+		ProgressionVersion:       c.ProgressionVersion,
+		LifetimeExperience:       c.LifetimeExperience,
+		HighestLevelEver:         c.HighestLevelEver,
+		LastLogin:                c.LastLogin,
+		LastLogout:               c.LastLogout,
+		AutoResumeExpedition:     c.AutoResumeExpedition,
+		StarterPackClaimed:       c.StarterPackClaimed,
+		StarterPackKey:           c.StarterPackKey,
+		EquippedSkinKey:          c.EquippedSkinKey,
+		ActivePvPMatchID:         c.ActivePvPMatchID,
+		ResumeExpeditionAfterPvP: c.ResumeExpeditionAfterPvP,
 	}
 }
 
@@ -468,6 +484,17 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 		return
 	}
+	if err := multiplayerHub.Register(session, charID); err != nil {
+		_ = db.SetCharacterOffline(convertGameCharToDBChar(session.Character), convertGameInvToDBInv(session.Inventory))
+		sessionsMu.Lock()
+		delete(activeSessions, charID)
+		sessionsMu.Unlock()
+		lifecycleLock.Unlock()
+		_ = conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+		_ = conn.WriteJSON(map[string]string{"error": "Não foi possível iniciar os serviços multiplayer com segurança"})
+		_ = conn.Close()
+		return
+	}
 	autoGatheredOnLogin := 0
 	if gathered, gatheringErr := db.ReconcileCompletedGatherings(charID, time.Now().UTC(), 100); gatheringErr != nil {
 		log.Printf("erro ao conciliar coletas automáticas de %s no login: %v", charID, gatheringErr)
@@ -494,6 +521,12 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 					_ = conn.Close()
 					return
 				}
+				if err := multiplayerHub.Heartbeat(charID, session); err != nil {
+					// A presença é efêmera e tem TTL. Não derrubamos uma sessão
+					// saudável por uma falha transitória do Redis, mas o próximo
+					// heartbeat a renova e o chat retorna ao estado compartilhado.
+					log.Printf("presença multiplayer indisponível para %s: %v", charID, err)
+				}
 			case <-leaseHeartbeatDone:
 				return
 			}
@@ -502,6 +535,7 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		close(leaseHeartbeatDone)
+		multiplayerHub.Unregister(charID, session)
 		// Interrompe e aguarda o leitor para que nenhuma ação de inventário,
 		// postura ou expedição possa atravessar a captura do snapshot final.
 		_ = conn.Close()
@@ -669,6 +703,21 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		case <-pingTicker.C:
 			_ = conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
 			if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(wsWriteWait)); err != nil {
+				return
+			}
+		case social, ok := <-session.SocialChannel:
+			if !ok {
+				return
+			}
+			payload, marshalErr := json.Marshal(social)
+			if marshalErr != nil {
+				game.IncrementTelemetry("ws_social_marshal_error_total")
+				continue
+			}
+			game.IncrementTelemetry("ws_social_frames_out_total")
+			game.AddTelemetry("ws_social_bytes_out_total", int64(len(payload)))
+			_ = conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+			if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
 				return
 			}
 		case msg, ok := <-session.SendChannel:

@@ -1,7 +1,12 @@
-# Compêndio Completo de Drops de Monstros — Atlas MMORPG Idle
+# Compêndio de Drops de Monstros — Reino do Avesso
 
-> **Documento Oficial de Referência de Drops e Balanceamento de Criaturas**  
-> *Versão do Catálogo: 2026.08 (V7.2.3 - Calibração Hardcore/Prestige)*  
+> **Status (2026-08-27):** compêndio editorial de referência. O código em
+> `backend/pkg/game/loot.go` e os auditores são a autoridade final para drops,
+> chances e conteúdo; este documento deve ser regenerado/revisado quando o
+> catálogo mudar.
+
+> **Documento de Referência de Drops e Balanceamento de Criaturas**
+> *Catálogo atual: `2026.08-performance-v2-equipment-identity-v1`*
 > *Finalidade: Fonte da verdade e compêndio de referência para expansões de monstros, loot tables, partes temáticas e economia de forja.*
 
 ---

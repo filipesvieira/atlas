@@ -1,5 +1,9 @@
 # Atlas — Release Assentamento Vivo V1.1
 
+> **Status:** manifesto histórico da release de 2026-08-15. Para o estado
+> atual, migrations vigentes e conteúdo convertido, consulte
+> [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md).
+
 Data: 2026-08-15  
 Catálogo: `2026.08-settlement-v1.1-usability-growth`  
 Migration mais recente: `000013_settlement_residents_desires.sql`

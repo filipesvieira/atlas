@@ -1,13 +1,22 @@
 # Runbook de Migração — Economia V2
 
+> Estado operacional do checkout atual (2026-08-27). O backend aplica as
+> migrations SQL embutidas em `backend/migrations`; para o mapa consolidado da
+> documentação, consulte [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md).
+
 ## 1. Antes do deploy
 
 1. Gere backup consistente do PostgreSQL.
 2. Guarde contagens de `characters`, `character_inventories`, `character_resources` e soma de `gold_bank`.
-3. Execute os três auditores Node e `go test -race ./...`.
+3. Execute os quatro auditores Node e `go test -race ./...`.
 4. Faça o primeiro deploy com as features habilitadas e `ATLAS_COMMON_EQUIPMENT_DROP_MULTIPLIER=1` se desejar observar a economia antes de reduzir o loot.
 
-O backend aplica, em ordem, `000001` a `000013`. As mudanças econômicas/classless ficam em `000006`–`000012`; o assentamento vivo, moradores, Ambições e Arsenal entram aditivamente em `000013`. O `bootstrap.sql` é apenas documental e não deve ser executado como fonte alternativa de schema.
+O backend aplica, em ordem lexicográfica, os arquivos embutidos de `000001` até
+`000022`. As mudanças econômicas/classless começam em `000006`; assentamento,
+folha, layout isométrico, histórico de expedições, suprimentos automáticos,
+índices do scheduler e lote de crafting entram nas migrations posteriores. O
+`bootstrap.sql` é apenas documental e não deve ser executado como fonte
+alternativa de schema.
 
 Confira a trilha depois do primeiro startup:
 
@@ -83,6 +92,7 @@ cd ..
 node tools/audit-content.mjs
 node tools/audit-camp-content.mjs
 node tools/audit-economy.mjs
+node tools/audit-resource-usage.mjs
 docker compose up --build
 ```
 

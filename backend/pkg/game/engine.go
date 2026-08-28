@@ -135,6 +135,9 @@ type CharacterData struct {
 	ExpeditionRecoveryUntil   time.Time     `json:"expedition_recovery_until,omitempty"`
 	StarterPackClaimed        bool          `json:"starter_pack_claimed"`
 	StarterPackKey            string        `json:"starter_pack_key,omitempty"`
+	EquippedSkinKey           string        `json:"equipped_skin_key"`
+	ActivePvPMatchID          string        `json:"active_pvp_match_id,omitempty"`
+	ResumeExpeditionAfterPvP  bool          `json:"resume_expedition_after_pvp,omitempty"`
 }
 
 // CombatEffectEvent transporta os efeitos visuais e de impacto para o cliente.
@@ -215,6 +218,8 @@ type GameSession struct {
 	Character                  *CharacterData
 	Inventory                  *InventoryData
 	IsExpeditionActive         bool
+	ActivePvPMatchID           string
+	ResumeExpeditionAfterPvP   bool
 	HasBroadcastRestLog        bool
 	RecoveringFromDefeat       bool
 	AutoResumePending          bool
@@ -240,6 +245,7 @@ type GameSession struct {
 	BasicAttackCooldownSec     float64
 	ManaFractionAcc            float64
 	SendChannel                chan CombatMessage
+	SocialChannel              chan SocialMessage
 	StopChan                   chan struct{}
 	TickerDone                 chan struct{}
 	SaveInvFunc                func(charID string, inv *InventoryData) error
@@ -397,29 +403,32 @@ func NewGameSession(char *CharacterData, inv *InventoryData, saveInv func(string
 	}
 
 	session := &GameSession{
-		Character:            char,
-		Inventory:            inv,
-		IsExpeditionActive:   isExpeditionActive,
-		RecoveringFromDefeat: recovering,
-		AutoResumePending:    autoResumePending,
-		ActiveRegion:         activeReg,
-		ActiveStance:         activeStance,
-		CurrentStage:         currentStage,
-		MaxStages:            maxStages,
-		IsBossStage:          char.IsBossStage,
-		CurrentMonsters:      []Monster{},
-		SkillCooldowns:       make(map[string]int),
-		SendChannel:          make(chan CombatMessage, 100),
-		StopChan:             make(chan struct{}),
-		TickerDone:           make(chan struct{}),
-		PersistenceQueue:     make(chan func(), 256),
-		persistenceDone:      make(chan struct{}),
-		SaveInvFunc:          saveInv,
-		SaveCharFunc:         saveChar,
-		GetLootFunc:          getLoot,
-		GetMonsterFunc:       getMonster,
-		AutoPotionSettings:   DefaultAutoPotionSettings(),
-		AutoPotionState:      DefaultAutoPotionState(),
+		Character:                char,
+		Inventory:                inv,
+		IsExpeditionActive:       isExpeditionActive,
+		ActivePvPMatchID:         char.ActivePvPMatchID,
+		ResumeExpeditionAfterPvP: char.ResumeExpeditionAfterPvP,
+		RecoveringFromDefeat:     recovering,
+		AutoResumePending:        autoResumePending,
+		ActiveRegion:             activeReg,
+		ActiveStance:             activeStance,
+		CurrentStage:             currentStage,
+		MaxStages:                maxStages,
+		IsBossStage:              char.IsBossStage,
+		CurrentMonsters:          []Monster{},
+		SkillCooldowns:           make(map[string]int),
+		SendChannel:              make(chan CombatMessage, 100),
+		SocialChannel:            make(chan SocialMessage, 128),
+		StopChan:                 make(chan struct{}),
+		TickerDone:               make(chan struct{}),
+		PersistenceQueue:         make(chan func(), 256),
+		persistenceDone:          make(chan struct{}),
+		SaveInvFunc:              saveInv,
+		SaveCharFunc:             saveChar,
+		GetLootFunc:              getLoot,
+		GetMonsterFunc:           getMonster,
+		AutoPotionSettings:       DefaultAutoPotionSettings(),
+		AutoPotionState:          DefaultAutoPotionState(),
 	}
 	session.resetArenaPosition()
 	// Personagens já acima do marco recebem o kit inicial ao entrar; a skill da
@@ -754,7 +763,11 @@ func (s *GameSession) StartTicker() {
 			return
 		case <-ticker.C:
 			s.Mu.Lock()
-			if s.IsExpeditionActive {
+			if s.ActivePvPMatchID != "" {
+				// Herói reservado pela arena: congela somente a atividade do herói.
+				// Schedulers do assentamento continuam fora desta sessão.
+				s.HasBroadcastRestLog = false
+			} else if s.IsExpeditionActive {
 				s.HasBroadcastRestLog = false
 				s.processTick()
 			} else {
@@ -2745,6 +2758,29 @@ func (s *GameSession) SendMessageLocked(msg CombatMessage) {
 	s.broadcastMessage(msg)
 }
 
+// SendSocial enfileira mensagens sociais sem tocar no lock/tick do combate.
+// Chat/presença podem ser descartados para um cliente lento; o histórico é
+// recuperado na reconexão sem afetar o estado econômico.
+func (s *GameSession) SendSocial(msg SocialMessage) {
+	if s == nil {
+		return
+	}
+	if msg.ProtocolVersion == 0 {
+		msg.ProtocolVersion = 3
+	}
+	if msg.Stream == "" {
+		msg.Stream = SocialStream
+	}
+	if msg.Timestamp == "" {
+		msg.Timestamp = time.Now().UTC().Format(time.RFC3339)
+	}
+	select {
+	case s.SocialChannel <- msg:
+	default:
+		IncrementTelemetry("social_frames_dropped_total")
+	}
+}
+
 // RequestStateSync força a emissão de um snapshot autoritativo completo (STATE_SNAPSHOT).
 func (s *GameSession) RequestStateSync() {
 	s.Mu.Lock()
@@ -2781,8 +2817,59 @@ func (s *GameSession) RequestStateSync() {
 	})
 }
 
+// IsPvPActive informa se o herói está reservado por uma arena autoritativa.
+func (s *GameSession) IsPvPActive() bool {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	return s.ActivePvPMatchID != ""
+}
+
+// ApplyPvPActivityState sincroniza apenas a fronteira de atividade e revisão,
+// preservando XP/ouro ainda não checkpointados na sessão local.
+func (s *GameSession) ApplyPvPActivityState(matchID string, resumeExpedition, expeditionActive bool, stateRevision int64) {
+	if s == nil {
+		return
+	}
+	s.Mu.Lock()
+	previousMatchID := s.ActivePvPMatchID
+	s.ActivePvPMatchID = matchID
+	s.ResumeExpeditionAfterPvP = resumeExpedition
+	s.IsExpeditionActive = expeditionActive
+	if s.Character != nil {
+		s.Character.ActivePvPMatchID = matchID
+		s.Character.ResumeExpeditionAfterPvP = resumeExpedition
+		s.Character.IsExpeditionActive = expeditionActive
+		if stateRevision > s.Character.StateRevision {
+			s.Character.StateRevision = stateRevision
+		}
+	}
+	if matchID != "" {
+		s.clearManualMovement()
+	}
+	changed := previousMatchID != matchID
+	character := CloneCharacterSnapshot(s.Character)
+	s.Mu.Unlock()
+	if changed {
+		logText := "⚔️ Herói reservado para a Arena PvP. A expedição foi congelada."
+		if matchID == "" {
+			if expeditionActive {
+				logText = "🏕️ Duelo encerrado. A expedição anterior foi retomada do ponto em que parou."
+			} else {
+				logText = "🏕️ Duelo encerrado. Herói retornou ao acampamento."
+			}
+		}
+		s.broadcastMessage(CombatMessage{Type: "PVP_ACTIVITY_STATUS", Timestamp: time.Now().Format("15:04:05"), Character: character, IsActive: expeditionActive, LogText: logText})
+	}
+}
+
 func (s *GameSession) ToggleExpedition() bool {
 	s.Mu.Lock()
+	if s.ActivePvPMatchID != "" {
+		current := s.IsExpeditionActive
+		s.Mu.Unlock()
+		s.broadcastMessage(CombatMessage{Type: "PVP_ACTIVITY_BLOCKED", Timestamp: time.Now().Format("15:04:05"), LogText: "⚔️ A expedição não pode ser alterada durante um duelo PvP.", IsActive: current})
+		return current
+	}
 	s.IsExpeditionActive = !s.IsExpeditionActive
 	s.RecoveringFromDefeat = false
 	s.AutoResumePending = false

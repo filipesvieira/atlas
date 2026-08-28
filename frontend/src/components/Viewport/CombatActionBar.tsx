@@ -18,6 +18,7 @@ interface CombatActionBarProps {
   currentStance?: string;
   onSelectStance?: (stance: string) => void;
 	  onUpdateAutoPotionSettings?: (settings: AutoPotionSettings) => void;
+  displayMode?: 'docked' | 'overlay';
 }
 
 export function CombatActionBar({
@@ -32,6 +33,7 @@ export function CombatActionBar({
   currentStance = 'balanced',
   onSelectStance,
 	  onUpdateAutoPotionSettings,
+  displayMode = 'docked',
 }: CombatActionBarProps) {
   const [catalogSkills, setCatalogSkills] = useState<Record<string, SkillCatalogEntry>>({});
   const [localAttackCd, setLocalAttackCd] = useState<number>(0);
@@ -223,11 +225,12 @@ export function CombatActionBar({
   // Progresso do ataque básico (0.0 a 1.0)
   const attackProgress = Math.max(0, Math.min(1.0, 1.0 - (localAttackCd / attackSpeed)));
   const isAttackReady = localAttackCd <= 0.05;
+  const isOverlay = displayMode === 'overlay';
 
   return (
-    <div className="w-full mt-2.5 flex flex-col gap-2.5 bg-slate-950/95 border-2 border-amber-600/50 rounded-xl p-3 shadow-2xl backdrop-blur-md select-none">
+    <div className={isOverlay ? 'pointer-events-none absolute inset-0 z-10 select-none' : 'mt-2.5 flex w-full flex-col gap-2.5 rounded-xl border-2 border-amber-600/50 bg-slate-950/95 p-3 shadow-2xl backdrop-blur-md select-none'}>
       {/* ─── 1. BARRAS DE VIDA (HP) E MANA (MP) ─── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full">
+      <div className={isOverlay ? 'pointer-events-auto absolute inset-x-2 top-2 grid grid-cols-1 gap-1 rounded border border-slate-700/90 bg-slate-950/90 p-1.5 shadow-lg backdrop-blur-sm sm:grid-cols-2 sm:gap-2' : 'grid w-full grid-cols-1 gap-2.5 sm:grid-cols-2'}>
         {/* Barra de Vida */}
         <div className="space-y-0.5">
           <div className="flex justify-between items-center text-[10px] font-pixel-body">
@@ -266,7 +269,7 @@ export function CombatActionBar({
       </div>
 
       {/* ─── 2. LINHA HORIZONTAL DE COMBATE: HABILIDADES + POSTURAS + CADÊNCIA ─── */}
-      <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-900 w-full min-w-0">
+      <div className={isOverlay ? 'pointer-events-auto absolute inset-x-2 bottom-2 flex min-w-0 flex-wrap items-center justify-between gap-1.5 rounded border border-slate-700/90 bg-slate-950/90 p-1.5 shadow-lg backdrop-blur-sm' : 'flex min-w-0 w-full items-center justify-between gap-2 border-t border-slate-900 pt-1.5'}>
         {/* GRUPO A: HABILIDADES & SLOTS (Ataque Básico + Magias 1..4) */}
         <div className="flex items-center gap-1.5 shrink-0">
           {/* SLOT 1: ATAQUE BÁSICO */}
@@ -528,7 +531,7 @@ export function CombatActionBar({
       </div>
 
 		{showAutoPotionPanel && (
-			<section className={`${potionState.budget_exhausted ? 'pixel-alert-frame pixel-alert-critical' : 'border border-amber-700/70'} bg-slate-950/95 px-2.5 py-2 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.9)] font-pixel-body`}>
+			<section className={`${isOverlay ? 'pointer-events-auto absolute bottom-14 right-2 z-20 w-[min(360px,calc(100%-1rem))]' : ''} ${potionState.budget_exhausted ? 'pixel-alert-frame pixel-alert-critical' : 'border border-amber-700/70'} bg-slate-950/95 px-2.5 py-2 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.9)] font-pixel-body`}>
 				<div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
 					<div>
 						<h4 className="font-pixel-heading text-[10px] text-amber-300">🧪 SUPRIMENTOS AUTOMÁTICOS</h4>

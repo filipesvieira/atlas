@@ -1,5 +1,10 @@
 # ESPECIFICAÇÃO DE REFATORAÇÃO: COMBATE VISUAL, PROGRESSÃO DINÂMICA E SISTEMAS DE LOOT
 
+> **Status (2026-08-27):** especificação histórica. O combate e a renderização
+> já evoluíram além deste plano; confira os contratos atuais em
+> [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md) e
+> [`ARENA_TERRAIN_SYSTEM.md`](ARENA_TERRAIN_SYSTEM.md).
+
 > ⚠️ REGRAS INVIOLÁVEIS DE EXECUÇÃO:
 > 1. PRESERVAÇÃO DE CÓDIGO: Não remova ou altere as rotas de Auth, modelos de banco ou estruturas de Go/React existentes. Trabalhe de forma estritamente incremental.
 > 2. ESTABILIDADE DO MVP: O loop de simulação offline e os dados de conta e personagem já funcionantes DEVEM continuar intactos.
