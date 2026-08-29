@@ -72,6 +72,8 @@ export function App() {
   const [notifications, setNotifications] = useState<ImportantNotification[]>([]);
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [isPrologueOpen, setIsPrologueOpen] = useState(false);
+  const [ownProfileRequest, setOwnProfileRequest] = useState(0);
+  const [arenaRequest, setArenaRequest] = useState(0);
   const [selectingCharacterId, setSelectingCharacterId] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
 
@@ -271,11 +273,25 @@ export function App() {
             </div>
 
             <div className="flex items-center gap-3 text-xs font-pixel-body">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded pixel-slot text-slate-200 border-amber-600/40">
+              <button
+                type="button"
+                onClick={() => setOwnProfileRequest((request) => request + 1)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded pixel-slot text-slate-200 border-amber-600/40 hover:border-amber-400 hover:bg-slate-900"
+                title="Abrir perfil PvP do personagem"
+              >
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span className="font-pixel-heading text-amber-300 text-[11px]">{character.name}</span>
                 <span className="text-slate-400 text-[10px]">(Lv. {character.level})</span>
-              </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setArenaRequest((request) => request + 1)}
+                className="pixel-btn pixel-btn-purple px-3 py-1.5 text-[10px] shadow-[0_0_12px_rgba(168,85,247,0.45)]"
+                title="Abrir Central da Arena"
+              >
+                ⚔️ Arena
+              </button>
 
               {account?.role === 'admin' && <span className="rounded border border-fuchsia-500/60 bg-fuchsia-950/80 px-2 py-0.5 text-[9px] font-pixel-heading text-fuchsia-300">QA ADMIN</span>}
 
@@ -316,6 +332,8 @@ export function App() {
             <DashboardGrid
               token={token}
               character={character}
+              ownProfileRequest={ownProfileRequest}
+              arenaRequest={arenaRequest}
               onCharacterUpdate={handleCharacterUpdate}
               onImportantNotification={pushNotification}
             />

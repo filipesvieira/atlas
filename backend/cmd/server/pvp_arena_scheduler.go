@@ -46,6 +46,7 @@ func runPvPArenaLeader(leadership *db.PvPArenaLeadership) {
 	instances := map[string]*game.PvPCombatInstance{}
 	lastRefresh := time.Time{}
 	lastPing := time.Time{}
+	lastSeasonRefresh := time.Time{}
 
 	for now := range ticker.C {
 		if lastPing.IsZero() || now.Sub(lastPing) >= 3*time.Second {
@@ -57,6 +58,14 @@ func runPvPArenaLeader(leadership *db.PvPArenaLeadership) {
 				return
 			}
 			lastPing = now
+		}
+		if lastSeasonRefresh.IsZero() || now.Sub(lastSeasonRefresh) >= 30*time.Second {
+			if season, err := db.RefreshPvPSeasonLifecycle(now.UTC()); err != nil {
+				log.Printf("arena PvP: erro na manutenção da temporada ranqueada: %v", err)
+			} else if lastSeasonRefresh.IsZero() {
+				log.Printf("🏆 Arena ranqueada: temporada %d ativa até %s", season.Number, season.EndsAt.Format(time.RFC3339))
+			}
+			lastSeasonRefresh = now
 		}
 		if lastRefresh.IsZero() || now.Sub(lastRefresh) >= time.Second {
 			if !refreshPvPArenaInstances(instances) {

@@ -237,24 +237,29 @@ func CancelDuelChallenge(challengerID, challengeID string, now time.Time) (game.
 const pvpMatchColumns = `
 	m.id, m.challenge_id, m.mode, m.arena_key, m.status, m.rules_version,
 	m.deterministic_seed, m.created_at, m.ready_expires_at, m.started_at, m.ended_at,
-	m.last_tick, m.runtime_state, m.match_origin`
+	m.last_tick, m.runtime_state, m.match_origin, m.ranked, m.season_id, m.repeat_multiplier`
 
 func getPvPMatchTx(tx *sql.Tx, matchID string) (game.PvPMatch, error) {
 	var match game.PvPMatch
 	var mode, status string
 	var startedAt, endedAt sql.NullTime
 	var challengeID sql.NullString
+	var seasonID sql.NullString
 	var lastTick int64
 	var runtimeRaw []byte
 	err := tx.QueryRow(`SELECT `+pvpMatchColumns+` FROM pvp_matches m WHERE m.id=$1`, matchID).Scan(
 		&match.ID, &challengeID, &mode, &match.ArenaKey, &status, &match.RulesVersion,
 		&match.Seed, &match.CreatedAt, &match.ReadyExpiresAt, &startedAt, &endedAt, &lastTick, &runtimeRaw, &match.MatchOrigin,
+		&match.Ranked, &seasonID, &match.RepeatMultiplier,
 	)
 	if err != nil {
 		return game.PvPMatch{}, err
 	}
 	if challengeID.Valid {
 		match.ChallengeID = challengeID.String
+	}
+	if seasonID.Valid {
+		match.SeasonID = seasonID.String
 	}
 	match.Mode = game.CombatInstanceMode(mode)
 	match.Status = game.PvPMatchStatus(status)
@@ -612,8 +617,8 @@ func GetPendingPvPMatchNotice(characterID string, now time.Time) (*game.PvPMatch
 	}
 	var notice game.PvPMatchNotice
 	err := DB.QueryRow(`
-		SELECT m.id, m.challenge_id, m.arena_key, m.status, m.rules_version, m.created_at,
-			p.confirmed_at IS NOT NULL, p.tactical_strategy, p.strategy_version
+		SELECT m.id, COALESCE(m.challenge_id::text,''), m.arena_key, m.status, m.rules_version, m.created_at,
+			p.confirmed_at IS NOT NULL, p.tactical_strategy, p.strategy_version, m.ranked, m.match_origin
 		FROM pvp_matches m
 		JOIN pvp_match_participants p ON p.match_id=m.id
 		WHERE p.character_id=$1
@@ -623,7 +628,7 @@ func GetPendingPvPMatchNotice(characterID string, now time.Time) (*game.PvPMatch
 	`, characterID, now.UTC()).Scan(
 		&notice.ID, &notice.ChallengeID, &notice.ArenaKey, &notice.Status,
 		&notice.RulesVersion, &notice.CreatedAt, &notice.PlayerConfirmed,
-		&notice.TacticalStrategy, &notice.StrategyVersion,
+		&notice.TacticalStrategy, &notice.StrategyVersion, &notice.Ranked, &notice.MatchOrigin,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -759,7 +764,9 @@ func PersistPvPCombatRuntime(runtime game.PvPCombatRuntimeState, now time.Time) 
 	var status string
 	var lastTick int64
 	var ratingAppliedAt sql.NullTime
-	if err := tx.QueryRow(`SELECT status,last_tick,rating_applied_at FROM pvp_matches WHERE id=$1 FOR UPDATE`, state.MatchID).Scan(&status, &lastTick, &ratingAppliedAt); err != nil {
+	var competitiveAppliedAt sql.NullTime
+	var ranked bool
+	if err := tx.QueryRow(`SELECT status,last_tick,rating_applied_at,competitive_applied_at,ranked FROM pvp_matches WHERE id=$1 FOR UPDATE`, state.MatchID).Scan(&status, &lastTick, &ratingAppliedAt, &competitiveAppliedAt, &ranked); err != nil {
 		return err
 	}
 	if status != string(game.PvPMatchActive) && status != string(game.PvPMatchCompleted) {
@@ -787,7 +794,13 @@ func PersistPvPCombatRuntime(runtime game.PvPCombatRuntimeState, now time.Time) 
 		if err := endPvPActivitiesForMatchTx(tx, state.MatchID, now); err != nil {
 			return err
 		}
-		if !ratingAppliedAt.Valid {
+		if ranked {
+			if !competitiveAppliedAt.Valid {
+				if err := applyPvPRankedResultTx(tx, state.MatchID, state.WinnerID, now); err != nil {
+					return err
+				}
+			}
+		} else if !ratingAppliedAt.Valid {
 			if err := applyPvPRatingTx(tx, state.MatchID, state.WinnerID, now); err != nil {
 				return err
 			}
@@ -1050,12 +1063,15 @@ func ListPvPMatchHistory(characterID string, limit int) ([]game.PvPMatchHistoryE
 	}
 	rows, err := DB.Query(`
 		SELECT m.id,m.match_origin, opp.character_id, COALESCE(opp.snapshot->>'name','Adversário'),
-			mine.rating_before,COALESCE(mine.rating_after,mine.rating_before),mine.combat_power,opp.combat_power,
+			COALESCE(mine.season_rating_before,mine.rating_before),
+			COALESCE(mine.season_rating_after,mine.rating_after,mine.season_rating_before,mine.rating_before),
+			mine.combat_power,opp.combat_power,m.ranked,COALESCE(s.season_number,0),mine.honor_awarded,m.repeat_multiplier,
 			COALESCE(m.started_at,m.created_at),COALESCE(m.ended_at,m.created_at),
 			COALESCE(m.runtime_state->'snapshot'->>'winner_id','')
 		FROM pvp_matches m
 		JOIN pvp_match_participants mine ON mine.match_id=m.id AND mine.character_id=$1
 		JOIN pvp_match_participants opp ON opp.match_id=m.id AND opp.character_id<>$1
+		LEFT JOIN pvp_seasons s ON s.id=m.season_id
 		WHERE m.status='completed'
 		ORDER BY COALESCE(m.ended_at,m.created_at) DESC LIMIT $2
 	`, characterID, limit)
@@ -1067,7 +1083,7 @@ func ListPvPMatchHistory(characterID string, limit int) ([]game.PvPMatchHistoryE
 	for rows.Next() {
 		var e game.PvPMatchHistoryEntry
 		var winner string
-		if err := rows.Scan(&e.MatchID, &e.Origin, &e.OpponentID, &e.OpponentName, &e.RatingBefore, &e.RatingAfter, &e.CombatPower, &e.OpponentPower, &e.StartedAt, &e.EndedAt, &winner); err != nil {
+		if err := rows.Scan(&e.MatchID, &e.Origin, &e.OpponentID, &e.OpponentName, &e.RatingBefore, &e.RatingAfter, &e.CombatPower, &e.OpponentPower, &e.Ranked, &e.SeasonNumber, &e.HonorAwarded, &e.RepeatMultiplier, &e.StartedAt, &e.EndedAt, &winner); err != nil {
 			return nil, err
 		}
 		e.RatingDelta = e.RatingAfter - e.RatingBefore
@@ -1151,15 +1167,15 @@ func JoinPvPMatchmaking(characterID, tacticalStrategy string, strategyVersion in
 	if err != nil {
 		return game.PvPMatchmakingStatus{}, err
 	}
-	if _, err := tx.Exec(`INSERT INTO pvp_matchmaking_queue(character_id,rating_snapshot,combat_power_snapshot,tactical_strategy,strategy_version,participant_snapshot,queued_at,heartbeat_at)
-		VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$7)
-		ON CONFLICT(character_id) DO UPDATE SET rating_snapshot=$2,combat_power_snapshot=$3,tactical_strategy=$4,strategy_version=$5,participant_snapshot=$6::jsonb,heartbeat_at=$7`, characterID, profile.Rating, snapshot.CombatPower, strategy, strategyVersion, string(raw), now.UTC()); err != nil {
+	if _, err := tx.Exec(`INSERT INTO pvp_matchmaking_queue(character_id,rating_snapshot,combat_power_snapshot,tactical_strategy,strategy_version,participant_snapshot,queued_at,heartbeat_at,queue_mode,season_id)
+		VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$7,'casual',NULL)
+		ON CONFLICT(character_id) DO UPDATE SET rating_snapshot=$2,combat_power_snapshot=$3,tactical_strategy=$4,strategy_version=$5,participant_snapshot=$6::jsonb,queued_at=$7,heartbeat_at=$7,queue_mode='casual',season_id=NULL`, characterID, profile.Rating, snapshot.CombatPower, strategy, strategyVersion, string(raw), now.UTC()); err != nil {
 		return game.PvPMatchmakingStatus{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return game.PvPMatchmakingStatus{}, err
 	}
-	return game.PvPMatchmakingStatus{Queued: true, Rating: profile.Rating, CombatPower: snapshot.CombatPower, QueuedAt: now.UTC()}, nil
+	return game.PvPMatchmakingStatus{Queued: true, Rating: profile.Rating, CombatPower: snapshot.CombatPower, QueuedAt: now.UTC(), QueueMode: "casual"}, nil
 }
 
 func LeavePvPMatchmaking(characterID string) error {
@@ -1169,7 +1185,38 @@ func LeavePvPMatchmaking(characterID string) error {
 
 func GetPvPMatchmakingStatus(characterID string) (game.PvPMatchmakingStatus, error) {
 	var s game.PvPMatchmakingStatus
-	err := DB.QueryRow(`SELECT rating_snapshot,combat_power_snapshot,queued_at FROM pvp_matchmaking_queue WHERE character_id=$1`, characterID).Scan(&s.Rating, &s.CombatPower, &s.QueuedAt)
+	var seasonNumber sql.NullInt64
+	var tier sql.NullString
+	var honor sql.NullInt64
+	err := DB.QueryRow(`
+		SELECT q.rating_snapshot,q.combat_power_snapshot,q.queued_at,q.queue_mode,
+		       s.season_number,
+		       CASE WHEN q.queue_mode='ranked' THEN
+		         CASE
+		           WHEN COALESCE(sp.placements_played,0) < $2 THEN 'placement'
+		           WHEN q.rating_snapshot >= 1800 THEN 'master'
+		           WHEN q.rating_snapshot >= 1600 THEN 'diamond'
+		           WHEN q.rating_snapshot >= 1400 THEN 'platinum'
+		           WHEN q.rating_snapshot >= 1200 THEN 'gold'
+		           WHEN q.rating_snapshot >= 1000 THEN 'silver'
+		           ELSE 'bronze'
+		         END
+		       END,
+		       CASE WHEN q.queue_mode='ranked' THEN COALESCE(sp.honor,0) END
+		FROM pvp_matchmaking_queue q
+		LEFT JOIN pvp_seasons s ON s.id=q.season_id
+		LEFT JOIN pvp_season_profiles sp ON sp.season_id=q.season_id AND sp.character_id=q.character_id
+		WHERE q.character_id=$1
+	`, characterID, game.PvPRankedPlacementsRequired).Scan(&s.Rating, &s.CombatPower, &s.QueuedAt, &s.QueueMode, &seasonNumber, &tier, &honor)
+	if seasonNumber.Valid {
+		s.SeasonNumber = int(seasonNumber.Int64)
+	}
+	if tier.Valid {
+		s.Tier = tier.String
+	}
+	if honor.Valid {
+		s.Honor = honor.Int64
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return s, nil
 	}
@@ -1182,11 +1229,14 @@ func GetPvPMatchmakingStatus(characterID string) (game.PvPMatchmakingStatus, err
 
 type matchmakingCandidate struct {
 	characterID     string
+	accountID       string
 	rating, power   int
 	strategy        string
 	strategyVersion int
 	raw             []byte
 	queuedAt        time.Time
+	queueMode       string
+	seasonID        string
 }
 
 func MatchPvPQueue(now time.Time, maxPairs int) ([]game.PvPMatch, error) {
@@ -1201,23 +1251,35 @@ func MatchPvPQueue(now time.Time, maxPairs int) ([]game.PvPMatch, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
-	// Entradas sem heartbeat por mais de 5 minutos são consideradas abandonadas.
 	if _, err := tx.Exec(`DELETE FROM pvp_matchmaking_queue WHERE queued_at < $1`, now.UTC().Add(-30*time.Minute)); err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query(`SELECT character_id,rating_snapshot,combat_power_snapshot,tactical_strategy,strategy_version,participant_snapshot,queued_at FROM pvp_matchmaking_queue q
+	rows, err := tx.Query(`
+		SELECT q.character_id,COALESCE(c.account_id::text,''),q.rating_snapshot,q.combat_power_snapshot,
+		       q.tactical_strategy,q.strategy_version,q.participant_snapshot,q.queued_at,
+		       q.queue_mode,COALESCE(q.season_id::text,'')
+		FROM pvp_matchmaking_queue q
+		JOIN characters c ON c.id=q.character_id
 		WHERE NOT EXISTS (
 			SELECT 1 FROM pvp_match_participants pp JOIN pvp_matches m ON m.id=pp.match_id
 			WHERE pp.character_id=q.character_id AND m.status IN ('ready','active')
 		)
-		ORDER BY queued_at FOR UPDATE`)
+		  AND (
+			q.queue_mode='casual' OR EXISTS(
+				SELECT 1 FROM pvp_seasons season
+				WHERE season.id=q.season_id AND season.status='active' AND season.ends_at > $1
+			)
+		  )
+		ORDER BY q.queued_at
+		FOR UPDATE OF q
+	`, now.UTC())
 	if err != nil {
 		return nil, err
 	}
 	cands := []matchmakingCandidate{}
 	for rows.Next() {
 		var c matchmakingCandidate
-		if err := rows.Scan(&c.characterID, &c.rating, &c.power, &c.strategy, &c.strategyVersion, &c.raw, &c.queuedAt); err != nil {
+		if err := rows.Scan(&c.characterID, &c.accountID, &c.rating, &c.power, &c.strategy, &c.strategyVersion, &c.raw, &c.queuedAt, &c.queueMode, &c.seasonID); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -1227,6 +1289,7 @@ func MatchPvPQueue(now time.Time, maxPairs int) ([]game.PvPMatch, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
 	used := map[int]bool{}
 	matches := []game.PvPMatch{}
 	for i, a := range cands {
@@ -1240,6 +1303,12 @@ func MatchPvPQueue(now time.Time, maxPairs int) ([]game.PvPMatch, error) {
 				continue
 			}
 			b := cands[j]
+			if a.queueMode != b.queueMode || (a.accountID != "" && a.accountID == b.accountID) {
+				continue
+			}
+			if a.queueMode == "ranked" && (a.seasonID == "" || a.seasonID != b.seasonID) {
+				continue
+			}
 			wait := now.Sub(a.queuedAt)
 			if w := now.Sub(b.queuedAt); w > wait {
 				wait = w
@@ -1268,6 +1337,7 @@ func MatchPvPQueue(now time.Time, maxPairs int) ([]game.PvPMatch, error) {
 		if best < 0 {
 			continue
 		}
+
 		b := cands[best]
 		var pa, pb game.PvPParticipantSnapshot
 		if err := json.Unmarshal(a.raw, &pa); err != nil {
@@ -1284,21 +1354,54 @@ func MatchPvPQueue(now time.Time, maxPairs int) ([]game.PvPMatch, error) {
 		pb.StrategyVersion = b.strategyVersion
 		rawA, _ := json.Marshal(pa)
 		rawB, _ := json.Marshal(pb)
+
+		ranked := a.queueMode == "ranked"
+		origin := "matchmaking"
+		if ranked {
+			origin = "ranked_matchmaking"
+		}
 		var matchID string
 		seed := now.UTC().UnixNano() + int64(i)
-		if err := tx.QueryRow(`INSERT INTO pvp_matches(challenge_id,mode,arena_key,status,rules_version,deterministic_seed,ready_expires_at,match_origin) VALUES(NULL,'duel','duel_arena','ready',$1,$2,$3,'matchmaking') RETURNING id`, game.PvPCombatRulesVersion, seed, now.UTC().Add(60*time.Second)).Scan(&matchID); err != nil {
-			return nil, err
+		if ranked {
+			if err := tx.QueryRow(`
+				INSERT INTO pvp_matches(challenge_id,mode,arena_key,status,rules_version,deterministic_seed,ready_expires_at,match_origin,ranked,season_id)
+				VALUES(NULL,'duel','duel_arena','ready',$1,$2,$3,$4,true,$5::uuid)
+				RETURNING id
+			`, game.PvPCombatRulesVersion, seed, now.UTC().Add(60*time.Second), origin, a.seasonID).Scan(&matchID); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := tx.QueryRow(`
+				INSERT INTO pvp_matches(challenge_id,mode,arena_key,status,rules_version,deterministic_seed,ready_expires_at,match_origin,ranked)
+				VALUES(NULL,'duel','duel_arena','ready',$1,$2,$3,$4,false)
+				RETURNING id
+			`, game.PvPCombatRulesVersion, seed, now.UTC().Add(60*time.Second), origin).Scan(&matchID); err != nil {
+				return nil, err
+			}
 		}
+
 		for _, v := range []struct {
 			c   matchmakingCandidate
 			p   game.PvPParticipantSnapshot
 			raw []byte
 		}{{a, pa, rawA}, {b, pb, rawB}} {
-			if _, err := tx.Exec(`INSERT INTO pvp_match_participants(match_id,character_id,team,snapshot,tactical_strategy,strategy_version,rating_before,combat_power) VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,$8)`, matchID, v.c.characterID, v.p.Team, string(v.raw), v.p.TacticalStrategy, v.p.StrategyVersion, v.c.rating, v.c.power); err != nil {
+			if ranked {
+				if _, err := tx.Exec(`
+					INSERT INTO pvp_match_participants(match_id,character_id,team,snapshot,tactical_strategy,strategy_version,rating_before,combat_power,season_rating_before)
+					VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$7)
+				`, matchID, v.c.characterID, v.p.Team, string(v.raw), v.p.TacticalStrategy, v.p.StrategyVersion, v.c.rating, v.c.power); err != nil {
+					return nil, err
+				}
+			} else if _, err := tx.Exec(`
+				INSERT INTO pvp_match_participants(match_id,character_id,team,snapshot,tactical_strategy,strategy_version,rating_before,combat_power)
+				VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,$8)
+			`, matchID, v.c.characterID, v.p.Team, string(v.raw), v.p.TacticalStrategy, v.p.StrategyVersion, v.c.rating, v.c.power); err != nil {
 				return nil, err
 			}
 		}
-		if err := appendPvPMatchEventTx(tx, matchID, "MATCH_READY", map[string]any{"origin": "matchmaking", "rules_version": game.PvPCombatRulesVersion}, now); err != nil {
+		if err := appendPvPMatchEventTx(tx, matchID, "MATCH_READY", map[string]any{
+			"origin": origin, "rules_version": game.PvPCombatRulesVersion, "ranked": ranked,
+		}, now); err != nil {
 			return nil, err
 		}
 		if _, err := tx.Exec(`DELETE FROM pvp_matchmaking_queue WHERE character_id IN ($1,$2)`, a.characterID, b.characterID); err != nil {

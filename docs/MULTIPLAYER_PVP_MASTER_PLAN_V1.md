@@ -64,15 +64,17 @@ Em desenvolvimento há fallback local quando Redis não responde. Em `staging` e
 - M3F concluída: matchmaking usa Rating + Combat Power calculado no servidor, com tolerância progressiva por tempo de fila e confirmação explícita antes de `active`;
 - M3F concluída: interações PvP saem do `WorldChatPanel` e usam camada própria de convites/arena, preparada para futuros convites de trading.
 
-O duelo já começa automaticamente depois da confirmação dos dois participantes. Enquanto a partida estiver `active`, a atividade do herói é exclusiva da arena: a expedição fica congelada e é retomada no encerramento quando aplicável; atividades independentes do assentamento continuam. O card social continua como transmissão resumida, enquanto a arena é visualizada no `GameCanvas`. A M3E-B tática está implementada. A próxima fatia da M3 deve consolidar telemetria/balanceamento, histórico/replay resumido e matchmaking por Rating + Combat Power antes da Arena Ranqueada M4.
+O duelo já começa automaticamente depois da confirmação dos dois participantes. Enquanto a partida estiver `active`, a atividade do herói é exclusiva da arena: a expedição fica congelada e é retomada no encerramento quando aplicável; atividades independentes do assentamento continuam. A M3 está funcionalmente fechada: desafio direto, runtime autoritativo, skills, tática CHASE/KITE, histórico/replay e matchmaking casual por Rating + Combat Power já existem. A evolução competitiva segue na M4.
 
-## Etapa M4 — Arena ranqueada
+## Etapa M4 — Arena ranqueada (M4-A implementada; M4-B pendente)
 
-- filas por faixa de poder/rating;
-- temporadas;
-- honra, títulos, banners e cosméticos;
-- snapshot defensivo assíncrono opcional para partidas quando o oponente estiver offline;
-- anti-win-trading e retorno decrescente para confrontos repetidos.
+- M4-A concluída: fila Casual e Ranqueada são separadas; somente `ranked_matchmaking` altera a temporada;
+- M4-A concluída: temporadas de 28 dias, 5 placements, soft reset, tiers Bronze/Prata/Ouro/Platina/Diamante/Mestre e ladder server-authoritative;
+- M4-A concluída: honra sazonal e bundles persistentes de título/banner/cosmético por tier, com claim idempotente em `pvp_cosmetic_unlocks`;
+- M4-A concluída: proteção inicial anti-win-trading impede pareamento entre personagens da mesma conta e aplica retorno decrescente por dupla em 24h até zerar rating/honra;
+- M4-A concluída: histórico identifica partidas ranqueadas, honra e multiplicador de repetição;
+- M4-B pendente: snapshot defensivo assíncrono opcional para partidas quando o oponente estiver offline;
+- M4-B pendente: política ranqueada de abandono/desconexão, telemetria competitiva e equip/render final dos cosméticos sazonais.
 
 ## Etapa M5 — Acampamento -> Reino defensável
 

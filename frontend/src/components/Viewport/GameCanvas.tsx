@@ -2,7 +2,32 @@ import { useEffect, useRef, useState } from 'react';
 import { GameViewport } from './GameViewport';
 import { PvPArenaViewport } from './PvPArenaViewport';
 import { CombatActionBar } from './CombatActionBar';
-import { ActiveBuff, AutoPotionSettings, AutoPotionState, DerivedStats, Item, PvPCombatSnapshot } from '../../hooks/useGameSocket';
+import { ActiveBuff, AutoPotionSettings, AutoPotionState, DerivedStats, Item, PvPCombatActor, PvPCombatSnapshot } from '../../hooks/useGameSocket';
+
+function PvPResourceBar({ actor, self }: { actor: PvPCombatActor; self: boolean }) {
+  const healthPercent = actor.max_health > 0 ? Math.max(0, Math.min(100, (actor.health / actor.max_health) * 100)) : 0;
+  const manaPercent = actor.max_mana > 0 ? Math.max(0, Math.min(100, (actor.mana / actor.max_mana) * 100)) : 0;
+  const accent = self ? 'border-cyan-400/70' : 'border-rose-400/70';
+
+  return (
+    <div className={`rounded border ${accent} bg-slate-950/90 px-2 py-1 shadow-lg backdrop-blur-sm`}>
+      <div className={`flex items-center justify-between gap-2 font-pixel-heading text-[8px] ${self ? 'text-cyan-200' : 'text-rose-200'}`}>
+        <span className="truncate">{self ? 'VOCÊ' : actor.name} · Lv.{actor.level}</span>
+        <span className="shrink-0">{actor.state}</span>
+      </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded bg-slate-800">
+        <div className="h-full bg-rose-500 transition-[width] duration-200" style={{ width: `${healthPercent}%` }} />
+      </div>
+      <div className="mt-0.5 flex items-center justify-between font-pixel-terminal text-[8px] text-rose-200">
+        <span>♥ {actor.health}/{actor.max_health}</span>
+        <span>🔮 {actor.mana}/{actor.max_mana}</span>
+      </div>
+      <div className="mt-0.5 h-1 overflow-hidden rounded bg-slate-800">
+        <div className="h-full bg-sky-500 transition-[width] duration-200" style={{ width: `${manaPercent}%` }} />
+      </div>
+    </div>
+  );
+}
 
 interface GameCanvasProps {
   setOnCombatEvent?: (cb: (msg: any) => void) => void;
@@ -28,6 +53,7 @@ interface GameCanvasProps {
   onOpenSettlement?: () => void;
   onOpenWorldMap?: () => void;
   onToggleExpedition?: () => void;
+  onReturnToCamp?: () => void;
   isExpeditionActive?: boolean;
   isConnected?: boolean;
   pvpCombat?: PvPCombatSnapshot | null;
@@ -57,6 +83,7 @@ export function GameCanvas({
   onOpenSettlement,
   onOpenWorldMap,
   onToggleExpedition,
+  onReturnToCamp,
   isExpeditionActive = false,
   isConnected = false,
   pvpCombat,
@@ -135,6 +162,9 @@ export function GameCanvas({
   const handleZoomReset = () => viewportRef.current?.resetZoom();
 
   const focusActionClass = 'pixel-btn pixel-btn-dark px-2 py-1.5 text-[9px] sm:text-[10px] whitespace-nowrap';
+  const ownPvPActor = pvpCombat?.actors.find((actor) => actor.character_id === character?.id);
+  const opponentPvPActor = pvpCombat?.actors.find((actor) => actor.character_id !== character?.id);
+	const pvpWinner = pvpCombat?.actors.find((actor) => actor.character_id === pvpCombat.winner_id);
 
   return (
     <div className={`flex flex-col items-center justify-center bg-slate-900 border border-slate-800 shadow-xl overflow-hidden w-full max-w-full ${
@@ -206,25 +236,40 @@ export function GameCanvas({
             pvpArenaVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
         />
-        {pvpArenaVisible && pvpCombat && (
-          <div className="absolute inset-x-3 top-3 z-30 flex items-center justify-between gap-2 rounded border border-violet-400/80 bg-slate-950/90 px-2.5 py-1.5 shadow-lg">
-            <div className="font-pixel-heading text-[9px] text-violet-200">
-              ⚔️ ARENA DE DUELO · {pvpCombat.status === 'active' ? `PULSO ${pvpCombat.tick}` : 'RESULTADO CONFIRMADO'}
-            </div>
-            {pvpCombat.status === 'completed' ? (
-              <button
-                type="button"
-                onClick={() => setDismissedPvPMatchID(pvpCombat.match_id)}
-                className="pixel-btn pixel-btn-dark px-2 py-1 text-[9px]"
-              >
-                VOLTAR À EXPEDIÇÃO
-              </button>
-            ) : (
-              <span className="text-[9px] text-violet-300">SIMULAÇÃO AUTORITATIVA</span>
-            )}
+        {pvpArenaVisible && ownPvPActor && opponentPvPActor && (
+          <div className="pointer-events-none absolute inset-x-3 top-2 z-30 grid gap-1.5 sm:grid-cols-2">
+            <PvPResourceBar actor={ownPvPActor} self />
+            <PvPResourceBar actor={opponentPvPActor} self={false} />
           </div>
         )}
-        {isWorldFocusMode && (
+        {pvpArenaVisible && pvpCombat?.status === 'completed' && (
+          <div
+            className="absolute inset-0 z-40 flex items-center justify-center p-3"
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => event.stopPropagation()}
+          >
+            <section className="w-full max-w-[26.25rem] border-2 border-amber-400 bg-slate-950/95 px-3 py-2.5 text-center shadow-[0_0_24px_rgba(250,204,21,0.28)]" aria-live="polite">
+              <div className="font-pixel-heading text-[11px] text-amber-200 sm:text-sm">
+                {pvpWinner ? `VITÓRIA DE ${pvpWinner.name.toUpperCase()}` : 'EMPATE NA ARENA'}
+              </div>
+              <div className="mt-1 text-[9px] text-violet-200">Nenhum ouro, item ou recurso foi perdido.</div>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onReturnToCamp?.();
+                  setDismissedPvPMatchID(pvpCombat.match_id);
+                }}
+                className="pixel-btn pixel-btn-dark mt-2 px-2 py-1 text-[8px] sm:text-[9px]"
+                aria-label="Voltar ao acampamento após o duelo"
+              >
+                ↩ VOLTAR AO ACAMPAMENTO
+              </button>
+            </section>
+          </div>
+        )}
+        {isWorldFocusMode && !pvpArenaVisible && (
           <nav className="absolute left-2 top-2 z-30 flex max-w-[calc(100%-1rem)] flex-wrap gap-1.5 rounded-lg border border-slate-700/90 bg-slate-950/90 p-1.5 shadow-xl backdrop-blur-sm" aria-label="Acessos do modo mundo">
             <button type="button" onClick={onOpenBackpack} className={focusActionClass}>🎒 Mochila</button>
             <button type="button" onClick={onOpenDepot} className={focusActionClass}>📦 Depósito</button>

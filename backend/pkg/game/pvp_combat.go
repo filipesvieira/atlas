@@ -304,7 +304,10 @@ func (instance *PvPCombatInstance) moveLocked() {
 		instance.movementAccumulators[index] -= 1
 
 		if retreating {
-			intents[index].x, intents[index].y = stepGridAwayWithin(actor.GridX, actor.GridY, target.GridX, target.GridY, duelArenaWidth, duelArenaHeight)
+			// O contorno começa antes da borda. O sentido vem do participante,
+			// ficando determinístico para restore/replay e evitando o padrão de
+			// dois atores presos nos mesmos cantos da arena.
+			intents[index].x, intents[index].y = stepGridAwayWithOrbitWithin(actor.GridX, actor.GridY, target.GridX, target.GridY, duelArenaWidth, duelArenaHeight, pvpOrbitClockwise(actor.CharacterID))
 			intents[index].state = "KITE"
 		} else {
 			intents[index].x, intents[index].y = stepGridTowardWithin(actor.GridX, actor.GridY, target.GridX, target.GridY, duelArenaWidth, duelArenaHeight)
@@ -353,6 +356,15 @@ func (instance *PvPCombatInstance) moveLocked() {
 		instance.actors[index].State = intents[index].state
 		instance.movedThisTick[index] = old != [2]int{instance.actors[index].GridX, instance.actors[index].GridY}
 	}
+}
+
+func pvpOrbitClockwise(characterID string) bool {
+	var hash uint32 = 2166136261
+	for _, value := range characterID {
+		hash ^= uint32(value)
+		hash *= 16777619
+	}
+	return hash&1 == 0
 }
 
 func (instance *PvPCombatInstance) legacyMoveLocked() {

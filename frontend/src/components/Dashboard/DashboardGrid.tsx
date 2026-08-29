@@ -18,11 +18,13 @@ import { PlayerInteractionLayer } from '../Social/PlayerInteractionLayer';
 interface DashboardGridProps {
   token: string;
   character: any;
+  ownProfileRequest?: number;
+  arenaRequest?: number;
   onCharacterUpdate?: (char: any) => void;
   onImportantNotification?: (notification: ImportantNotification) => void;
 }
 
-export function DashboardGrid({ token, character: initialChar, onCharacterUpdate, onImportantNotification }: DashboardGridProps) {
+export function DashboardGrid({ token, character: initialChar, ownProfileRequest = 0, arenaRequest = 0, onCharacterUpdate, onImportantNotification }: DashboardGridProps) {
   const [isDepotOpen, setIsDepotOpen] = useState(false);
   const legacySkinMigrationRef = useRef<Set<string>>(new Set());
   const [isCampModalOpen, setIsCampModalOpen] = useState(false);
@@ -32,6 +34,8 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
   const [isWorldFocusMode, setIsWorldFocusMode] = useState(false);
   const [backpackOpenRequest, setBackpackOpenRequest] = useState(0);
   const [mapOpenRequest, setMapOpenRequest] = useState(0);
+  const lastOwnProfileRequestRef = useRef(0);
+  const lastPvPSettlementSyncRef = useRef<string | null>(null);
   const { catalog } = useGameCatalog();
 
   const {
@@ -78,6 +82,8 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
         pvpHistory,
         pvpReplay,
         pvpMatchmaking,
+        pvpSeason,
+        pvpLadder,
 		createDuelChallenge,
 		respondDuelChallenge,
 		confirmPvPMatch,
@@ -86,10 +92,16 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
         joinPvPMatchmaking,
         leavePvPMatchmaking,
         requestPvPMatchmakingStatus,
+        joinPvPRanked,
+        leavePvPRanked,
+        requestPvPSeasonStatus,
+        requestPvPLadder,
+        claimPvPSeasonRewards,
         clearPvPReplay,
 		setEquippedSkin,
     moveHero,
     toggleExpedition,
+    returnToCamp,
     setAutoResumeExpedition,
     equipItem,
     unequipItem,
@@ -121,13 +133,37 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
     transferTreasuryGold,
     updateTreasuryPolicy,
 		updateAutoPotionSettings,
+    requestStateSync,
     setOnCombatEvent,
     setOnImportantNotification,
   } = useGameSocket(token, initialChar.id, initialChar);
 
   const char = liveChar || initialChar;
 
-  useEffect(() => { if (connected) requestPvPMatchmakingStatus(); }, [connected]);
+  useEffect(() => {
+    if (!connected) return;
+    requestPvPMatchmakingStatus();
+    requestPvPSeasonStatus();
+  }, [connected]);
+
+  useEffect(() => {
+    if (ownProfileRequest > 0 && ownProfileRequest !== lastOwnProfileRequestRef.current && char?.id) {
+      lastOwnProfileRequestRef.current = ownProfileRequest;
+      requestPublicProfile(char.id);
+    }
+  }, [ownProfileRequest, char?.id, requestPublicProfile]);
+
+  // O término do duelo é entregue pelo stream social. Após o servidor devolver
+  // a sessão ao acampamento, buscamos uma única vez o estado normal e a
+  // economia: o primeiro restaura layout e atividade; a segunda traz os
+  // moradores usados pelo renderer do acampamento.
+  useEffect(() => {
+    if (!pvpCombat || (pvpCombat.status !== 'completed' && pvpCombat.status !== 'cancelled')) return;
+    if (lastPvPSettlementSyncRef.current === pvpCombat.match_id) return;
+    lastPvPSettlementSyncRef.current = pvpCombat.match_id;
+    requestStateSync();
+    requestEconomySync();
+  }, [pvpCombat?.match_id, pvpCombat?.status, requestEconomySync, requestStateSync]);
 
   // Notifica o App.tsx para atualizar a label superior do header em tempo real quando o nível mudar
   useEffect(() => {
@@ -364,6 +400,7 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
             onOpenSettlement={() => setIsEconomyOpen(true)}
             onOpenWorldMap={() => setMapOpenRequest((request) => request + 1)}
             onToggleExpedition={toggleExpedition}
+			onReturnToCamp={returnToCamp}
             isExpeditionActive={isExpeditionActive}
             isConnected={connected}
             pvpCombat={pvpCombat}
@@ -526,21 +563,30 @@ export function DashboardGrid({ token, character: initialChar, onCharacterUpdate
         pvpMatchNotice={pvpMatchNotice}
         pvpArenaWaiting={pvpArenaWaiting}
         matchmaking={pvpMatchmaking}
+        season={pvpSeason}
+        ladder={pvpLadder}
         history={pvpHistory}
+        arenaRequest={arenaRequest}
+        pvpCombat={pvpCombat}
         replay={pvpReplay}
         onRespondDuelChallenge={respondDuelChallenge}
         onConfirmPvPMatch={confirmPvPMatch}
         onJoinQueue={joinPvPMatchmaking}
         onLeaveQueue={leavePvPMatchmaking}
+        onJoinRanked={joinPvPRanked}
+        onLeaveRanked={leavePvPRanked}
+        onRequestSeason={requestPvPSeasonStatus}
+        onRequestLadder={requestPvPLadder}
+        onClaimSeasonRewards={claimPvPSeasonRewards}
         onRequestHistory={requestPvPHistory}
         onRequestReplay={requestPvPReplay}
         onClearReplay={clearPvPReplay}
       />
       {lastPublicProfile && (
-        <div className="fixed bottom-[330px] right-3 md:bottom-3 md:right-[410px] z-40 w-64 rounded-lg border border-amber-500/40 bg-slate-950/95 p-3 text-xs shadow-2xl">
+        <div className="fixed right-3 top-20 z-[70] w-72 rounded-lg border border-amber-500/60 bg-slate-950/95 p-3 text-xs shadow-2xl">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <div className="font-pixel-heading text-amber-300">{lastPublicProfile.name}</div>
+              <div className="font-pixel-heading text-amber-300">⚔️ {lastPublicProfile.name}</div>
               <div className="mt-1 text-slate-400">Nível {lastPublicProfile.level} · Rating PvP {lastPublicProfile.rating}</div>
               <div className="mt-1 text-slate-500">Vitórias {lastPublicProfile.wins} · Derrotas {lastPublicProfile.losses}</div>
               {lastPublicProfile.region && <div className="mt-1 text-slate-500">Região: {lastPublicProfile.region}</div>}

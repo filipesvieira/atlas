@@ -67,8 +67,6 @@ export class PvPArenaViewport {
   private effects = new CombatEffectRegistry();
   private processedEvents = new Set<string>();
   private matchID = '';
-  private status = 'active';
-  private winnerID = '';
   private tick = 0;
   private selfCharacterID = '';
 
@@ -163,8 +161,6 @@ export class PvPArenaViewport {
       }
       this.tick = snapshot.tick;
     }
-    this.status = snapshot.status;
-    this.winnerID = snapshot.winner_id || '';
   }
 
   private applyCombatEvent(event: PvPCombatEvent) {
@@ -397,7 +393,6 @@ export class PvPArenaViewport {
     this.renderProjectiles(ctx);
     this.effects.render(ctx);
     this.renderFloatingDamage(ctx);
-    if (this.status === 'completed' && this.pendingImpacts.length === 0) this.renderResult(ctx);
   }
 
   private renderTorches(ctx: CanvasRenderingContext2D, now: number) {
@@ -539,24 +534,6 @@ export class PvPArenaViewport {
       ctx.fillStyle = floating.color;
       ctx.fillText(floating.text, floating.x, floating.y);
     }
-    ctx.restore();
-  }
-
-  private renderResult(ctx: CanvasRenderingContext2D) {
-    const winner = this.actors.get(this.winnerID);
-    ctx.save();
-    ctx.fillStyle = 'rgba(10, 5, 24, 0.78)';
-    ctx.fillRect(270, 174, 420, 68);
-    ctx.strokeStyle = '#facc15';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(270, 174, 420, 68);
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 14px monospace';
-    ctx.fillStyle = '#fde68a';
-    ctx.fillText(winner ? `VITÓRIA DE ${winner.name.toUpperCase()}` : 'EMPATE NA ARENA', CANVAS_WIDTH / 2, 202);
-    ctx.font = 'bold 9px monospace';
-    ctx.fillStyle = '#c4b5fd';
-    ctx.fillText('Nenhum ouro, item ou recurso foi perdido.', CANVAS_WIDTH / 2, 222);
     ctx.restore();
   }
 

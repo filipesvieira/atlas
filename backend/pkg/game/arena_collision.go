@@ -146,7 +146,10 @@ func (s *GameSession) stepArenaAway(x, y, threatX, threatY int, ignoreMonsterID 
 	currentDistance := gridDistance(x, y, threatX, threatY)
 	width, height := s.arenaDimensions()
 	directX, directY := stepGridAwayWithin(x, y, threatX, threatY, width, height)
-	if (directX != x || directY != y) && s.canOccupyArenaTile(directX, directY, arenaMoverForID(ignoreMonsterID), ignoreMonsterID) {
+	const softEdgeMargin = 2
+	if (directX != x || directY != y) &&
+		arenaEdgeClearance(directX, directY, width, height) >= softEdgeMargin &&
+		s.canOccupyArenaTile(directX, directY, arenaMoverForID(ignoreMonsterID), ignoreMonsterID) {
 		// A fuga sem obstáculos mantém o vetor original (inclusive a direção
 		// cardinal). As alternativas abaixo só entram quando a casa direta é
 		// realmente ocupada ou quando o ator está encostado no limite.
@@ -156,7 +159,11 @@ func (s *GameSession) stepArenaAway(x, y, threatX, threatY int, ignoreMonsterID 
 	candidates = append(candidates, arenaCandidateTiles(x, y)...)
 
 	bestX, bestY := x, y
-	bestDistance := currentDistance
+	bestScore := -1.0
+	orbitClockwise := pvpOrbitClockwise(ignoreMonsterID)
+	if ignoreMonsterID == "" {
+		orbitClockwise = pvpOrbitClockwise(s.HeroTargetID)
+	}
 	seen := make(map[[2]int]struct{}, len(candidates))
 	for _, candidate := range candidates {
 		candidateX := s.clampArenaX(candidate[0])
@@ -170,11 +177,28 @@ func (s *GameSession) stepArenaAway(x, y, threatX, threatY int, ignoreMonsterID 
 			continue
 		}
 		distance := gridDistance(candidateX, candidateY, threatX, threatY)
-		if distance > bestDistance {
-			bestX, bestY, bestDistance = candidateX, candidateY, distance
+		if distance < currentDistance {
+			continue
+		}
+		clearance := arenaEdgeClearance(candidateX, candidateY, width, height)
+		// Ao aproximar-se da borda, só aceita uma alternativa que mantenha a
+		// faixa interna. Se não houver, o fallback abaixo mantém a fuga viva.
+		if clearance < softEdgeMargin {
+			continue
+		}
+		cross := float64((threatX-x)*(candidateY-y) - (threatY-y)*(candidateX-x))
+		if !orbitClockwise {
+			cross = -cross
+		}
+		score := distance + cross*0.08
+		if score > bestScore {
+			bestX, bestY, bestScore = candidateX, candidateY, score
 		}
 	}
-	return bestX, bestY
+	if bestScore >= 0 {
+		return bestX, bestY
+	}
+	return directX, directY
 }
 
 // placeMonsterAtSpawn mantém o spawn visual espalhado, mas evita que uma

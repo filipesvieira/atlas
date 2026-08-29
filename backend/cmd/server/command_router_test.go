@@ -66,6 +66,25 @@ func TestDispatchCommand_ToggleExpedition(t *testing.T) {
 	}
 }
 
+func TestDispatchCommand_ReturnToCamp(t *testing.T) {
+	sess := createTestSession()
+	sess.IsExpeditionActive = true
+	ctx := &CommandContext{
+		AccountID: "acc-1",
+		CharID:    "char-test-1",
+		Session:   sess,
+		Action: ClientAction{
+			Action: "RETURN_TO_CAMP",
+		},
+	}
+	if err := DispatchCommand(ctx); err != nil {
+		t.Fatalf("Erro ao despachar RETURN_TO_CAMP: %v", err)
+	}
+	if sess.IsExpeditionActive {
+		t.Fatal("RETURN_TO_CAMP deve manter a sessão no acampamento")
+	}
+}
+
 func TestDispatchCommand_SetStance(t *testing.T) {
 	sess := createTestSession()
 	ctx := &CommandContext{

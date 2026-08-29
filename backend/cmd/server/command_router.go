@@ -37,7 +37,7 @@ func economyCommandLimit(action string) (int, time.Duration, bool) {
 		return 4, 2 * time.Second, true
 	case "CHAT_SEND":
 		return 8, 10 * time.Second, true
-	case "CHAT_BLOCK", "CHAT_UNBLOCK", "CHAT_REPORT", "REQUEST_PUBLIC_PROFILE", "CREATE_DUEL_CHALLENGE", "RESPOND_DUEL_CHALLENGE", "CANCEL_DUEL_CHALLENGE", "CONFIRM_PVP_MATCH", "REQUEST_PVP_HISTORY", "REQUEST_PVP_REPLAY", "JOIN_PVP_MATCHMAKING", "LEAVE_PVP_MATCHMAKING", "REQUEST_PVP_MATCHMAKING_STATUS":
+	case "CHAT_BLOCK", "CHAT_UNBLOCK", "CHAT_REPORT", "REQUEST_PUBLIC_PROFILE", "CREATE_DUEL_CHALLENGE", "RESPOND_DUEL_CHALLENGE", "CANCEL_DUEL_CHALLENGE", "CONFIRM_PVP_MATCH", "REQUEST_PVP_HISTORY", "REQUEST_PVP_REPLAY", "JOIN_PVP_MATCHMAKING", "LEAVE_PVP_MATCHMAKING", "REQUEST_PVP_MATCHMAKING_STATUS", "JOIN_PVP_RANKED", "LEAVE_PVP_RANKED", "REQUEST_PVP_SEASON_STATUS", "REQUEST_PVP_LADDER", "CLAIM_PVP_SEASON_REWARDS":
 		return 6, 10 * time.Second, true
 	case "START_GATHERING", "CANCEL_GATHERING", "CLAIM_GATHERING_REWARDS", "CLAIM_PENDING_CRAFT", "CLAIM_PENDING_RESOURCES", "CREATE_HERO_DESIRE", "CANCEL_HERO_DESIRE", "CLAIM_ARMORY_ITEM", "TRANSFER_TREASURY_GOLD", "UPDATE_TREASURY_POLICY", "MOVE_CAMP_BUILDING", "START_BUILDING_UPGRADE", "DISCARD_RESOURCE", "SALVAGE_ITEM", "SALVAGE_BATCH", "LEARN_BUILDING_BLUEPRINT", "CONSUME_FOOD":
 		return 6, 2 * time.Second, true
@@ -95,6 +95,7 @@ func allowEconomyCommand(charID, action string, now time.Time) bool {
 
 var commandHandlers = map[string]CommandHandler{
 	"TOGGLE_EXPEDITION":              handleToggleExpedition,
+	"RETURN_TO_CAMP":                 handleReturnToCamp,
 	"MOVE_HERO":                      handleMoveHero,
 	"EQUIP_ITEM":                     handleEquipItem,
 	"UNEQUIP_ITEM":                   handleUnequipItem,
@@ -149,6 +150,11 @@ var commandHandlers = map[string]CommandHandler{
 	"JOIN_PVP_MATCHMAKING":           handleJoinPvPMatchmaking,
 	"LEAVE_PVP_MATCHMAKING":          handleLeavePvPMatchmaking,
 	"REQUEST_PVP_MATCHMAKING_STATUS": handleRequestPvPMatchmakingStatus,
+	"JOIN_PVP_RANKED":                handleJoinPvPRanked,
+	"LEAVE_PVP_RANKED":               handleLeavePvPRanked,
+	"REQUEST_PVP_SEASON_STATUS":      handleRequestPvPSeasonStatus,
+	"REQUEST_PVP_LADDER":             handleRequestPvPLadder,
+	"CLAIM_PVP_SEASON_REWARDS":       handleClaimPvPSeasonRewards,
 }
 
 func validateClientAction(action ClientAction) error {
@@ -176,7 +182,7 @@ func validateClientAction(action ClientAction) error {
 
 func heroCommandBlockedDuringPvP(action string) bool {
 	switch action {
-	case "TOGGLE_EXPEDITION", "MOVE_HERO", "EQUIP_ITEM", "UNEQUIP_ITEM", "CHANGE_REGION", "SET_STANCE", "TOGGLE_SKILL", "ALLOCATE_STAT", "CONSUME_FOOD", "SET_EQUIPPED_SKIN":
+	case "TOGGLE_EXPEDITION", "RETURN_TO_CAMP", "MOVE_HERO", "EQUIP_ITEM", "UNEQUIP_ITEM", "CHANGE_REGION", "SET_STANCE", "TOGGLE_SKILL", "ALLOCATE_STAT", "CONSUME_FOOD", "SET_EQUIPPED_SKIN":
 		return true
 	default:
 		return false
@@ -210,6 +216,11 @@ func DispatchCommand(ctx *CommandContext) error {
 
 func handleToggleExpedition(ctx *CommandContext) error {
 	ctx.Session.ToggleExpedition()
+	return nil
+}
+
+func handleReturnToCamp(ctx *CommandContext) error {
+	ctx.Session.ReturnToCamp()
 	return nil
 }
 
@@ -747,6 +758,50 @@ func handleRequestPvPMatchmakingStatus(ctx *CommandContext) error {
 		return sendSocialError(ctx, err)
 	}
 	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_MATCHMAKING_STATUS", RequestID: ctx.Action.RequestID, Matchmaking: &status})
+	return nil
+}
+
+func handleJoinPvPRanked(ctx *CommandContext) error {
+	status, err := db.JoinPvPRankedMatchmaking(ctx.CharID, ctx.Action.PvPTacticalStrategy, ctx.Action.PvPStrategyVersion, time.Now().UTC())
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_MATCHMAKING_STATUS", RequestID: ctx.Action.RequestID, Matchmaking: &status})
+	return nil
+}
+
+func handleLeavePvPRanked(ctx *CommandContext) error {
+	return handleLeavePvPMatchmaking(ctx)
+}
+
+func handleRequestPvPSeasonStatus(ctx *CommandContext) error {
+	status, err := db.GetPvPSeasonStatus(ctx.CharID, time.Now().UTC())
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_SEASON_STATUS", RequestID: ctx.Action.RequestID, PvPSeason: &status})
+	return nil
+}
+
+func handleRequestPvPLadder(ctx *CommandContext) error {
+	ladder, err := db.ListPvPLadder(ctx.CharID, time.Now().UTC(), 50)
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_LADDER", RequestID: ctx.Action.RequestID, PvPLadder: ladder})
+	return nil
+}
+
+func handleClaimPvPSeasonRewards(ctx *CommandContext) error {
+	rewards, err := db.ClaimPvPSeasonRewards(ctx.CharID, time.Now().UTC())
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_SEASON_REWARDS_CLAIMED", RequestID: ctx.Action.RequestID, PvPRewards: rewards})
+	status, err := db.GetPvPSeasonStatus(ctx.CharID, time.Now().UTC())
+	if err == nil {
+		ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_SEASON_STATUS", PvPSeason: &status})
+	}
 	return nil
 }
 

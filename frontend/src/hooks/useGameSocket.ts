@@ -391,6 +391,8 @@ export interface PvPMatchNotice {
   player_confirmed: boolean;
   tactical_strategy?: PvPTacticalStrategy;
   strategy_version?: number;
+  ranked?: boolean;
+  match_origin?: string;
 }
 
 export interface PvPCombatActor {
@@ -436,12 +438,97 @@ export interface PvPCombatSnapshot {
 
 
 export interface PvPMatchHistoryEntry {
-  match_id: string; origin: string; opponent_id: string; opponent_name: string; result: 'win'|'loss'|'draw'|string;
-  rating_before: number; rating_after: number; rating_delta: number; combat_power: number; opponent_power: number; started_at: string; ended_at: string;
+  match_id: string;
+  origin: string;
+  opponent_id: string;
+  opponent_name: string;
+  result: 'win'|'loss'|'draw'|string;
+  rating_before: number;
+  rating_after: number;
+  rating_delta: number;
+  combat_power: number;
+  opponent_power: number;
+  ranked?: boolean;
+  season_number?: number;
+  honor_awarded?: number;
+  repeat_multiplier?: number;
+  started_at: string;
+  ended_at: string;
 }
 export interface PvPReplayEvent { sequence:number; event_type:string; payload:Record<string,unknown>; created_at:string; }
 export interface PvPMatchReplay { match_id:string; events:PvPReplayEvent[]; }
-export interface PvPMatchmakingStatus { queued:boolean; rating:number; combat_power:number; queued_at?:string; }
+export interface PvPMatchmakingStatus {
+  queued:boolean;
+  rating:number;
+  combat_power:number;
+  queued_at?:string;
+  queue_mode?:'casual'|'ranked'|string;
+  season_number?:number;
+  tier?:string;
+  honor?:number;
+}
+
+export interface PvPRankTierInfo {
+  key:string;
+  name:string;
+  min_rating:number;
+  icon:string;
+  order:number;
+}
+
+export interface PvPRankedProfile {
+  season_id:string;
+  character_id:string;
+  rating:number;
+  peak_rating:number;
+  wins:number;
+  losses:number;
+  draws:number;
+  placements_played:number;
+  honor:number;
+  tier:PvPRankTierInfo;
+}
+
+export interface PvPSeason {
+  id:string;
+  number:number;
+  name:string;
+  status:string;
+  starts_at:string;
+  ends_at:string;
+  closed_at?:string;
+}
+
+export interface PvPSeasonReward {
+  id:string;
+  season_id:string;
+  season_number:number;
+  reward_key:string;
+  reward_type:string;
+  metadata:Record<string,string>;
+  earned_at:string;
+  claimed_at?:string;
+}
+
+export interface PvPSeasonStatus {
+  season:PvPSeason;
+  profile:PvPRankedProfile;
+  pending_rewards:PvPSeasonReward[];
+}
+
+export interface PvPLadderEntry {
+  rank:number;
+  character_id:string;
+  name:string;
+  level:number;
+  rating:number;
+  peak_rating:number;
+  wins:number;
+  losses:number;
+  draws:number;
+  honor:number;
+  tier:PvPRankTierInfo;
+}
 
 export interface CombatMessage {
   protocol_version?: number;
@@ -462,6 +549,9 @@ export interface CombatMessage {
   pvp_history?: PvPMatchHistoryEntry[];
   pvp_replay?: PvPMatchReplay;
   pvp_matchmaking?: PvPMatchmakingStatus;
+  pvp_season?: PvPSeasonStatus;
+  pvp_ladder?: PvPLadderEntry[];
+  pvp_rewards?: PvPSeasonReward[];
   error?: string;
   character?: {
     id: string;
@@ -727,6 +817,8 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 	const [pvpHistory, setPvPHistory] = useState<PvPMatchHistoryEntry[]>([]);
 	const [pvpReplay, setPvPReplay] = useState<PvPMatchReplay | null>(null);
 	const [pvpMatchmaking, setPvPMatchmaking] = useState<PvPMatchmakingStatus>({ queued:false, rating:1000, combat_power:0 });
+	const [pvpSeason, setPvPSeason] = useState<PvPSeasonStatus | null>(null);
+	const [pvpLadder, setPvPLadder] = useState<PvPLadderEntry[]>([]);
 
   const socketRef = useRef<WebSocket | null>(null);
   const onCombatEventRef = useRef<((event: CombatMessage) => void) | null>(null);
@@ -826,7 +918,11 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
               });
             }
             if (msg.presence) setOnlineCount(Math.max(0, msg.presence.online_count || 0));
-            if (msg.public_profile) setLastPublicProfile(msg.public_profile);
+            // SOCIAL_READY inclui o próprio perfil para composição de estado,
+            // mas não deve abrir um popover automaticamente no login. O cartão
+            // só aparece após REQUEST_PUBLIC_PROFILE (clique no nome ou em um
+            // jogador do chat).
+            if (msg.public_profile && msg.type !== 'SOCIAL_READY') setLastPublicProfile(msg.public_profile);
 			if (msg.duel_challenges) {
 				setPendingDuelChallenges(msg.duel_challenges.filter((challenge) => challenge.status === 'pending'));
 			}
@@ -848,10 +944,20 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 			if (msg.pvp_combat) {
 				setPvPCombat(msg.pvp_combat);
 				setPvPArenaWaiting(false);
+                if (msg.pvp_combat.status === 'completed' && ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ action: 'REQUEST_PVP_HISTORY', request_id: makeRequestId('pvphistoryend') }));
+                  ws.send(JSON.stringify({ action: 'REQUEST_PVP_SEASON_STATUS', request_id: makeRequestId('pvpseasonend') }));
+                  ws.send(JSON.stringify({ action: 'REQUEST_PVP_LADDER', request_id: makeRequestId('pvpladderend') }));
+                }
 			}
             if (msg.pvp_history) setPvPHistory(msg.pvp_history);
             if (msg.pvp_replay) setPvPReplay(msg.pvp_replay);
             if (msg.pvp_matchmaking) setPvPMatchmaking(msg.pvp_matchmaking);
+            if (msg.pvp_season) setPvPSeason(msg.pvp_season);
+            if (msg.pvp_ladder) setPvPLadder(msg.pvp_ladder);
+            if (msg.pvp_rewards && msg.type === 'PVP_SEASON_REWARDS_CLAIMED') {
+              setPvPSeason((previous) => previous ? { ...previous, pending_rewards: previous.pending_rewards.filter((reward) => !msg.pvp_rewards!.some((claimed) => claimed.id === reward.id)) } : previous);
+            }
             if (msg.error) setSocialError(msg.error);
             else if (msg.type !== 'SOCIAL_ERROR') setSocialError(null);
             // Eventos sociais usam stream próprio e não participam de seq/state_revision.
@@ -1094,6 +1200,12 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
   const toggleExpedition = () => {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ action: 'TOGGLE_EXPEDITION' }));
+    }
+  };
+
+  const returnToCamp = () => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ action: 'RETURN_TO_CAMP' }));
     }
   };
 
@@ -1437,6 +1549,11 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
   const joinPvPMatchmaking = (strategy:PvPTacticalStrategy='balanced') => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'JOIN_PVP_MATCHMAKING',pvp_tactical_strategy:strategy,pvp_strategy_version:1,request_id:makeRequestId('pvpqueue')})); };
   const leavePvPMatchmaking = () => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'LEAVE_PVP_MATCHMAKING',request_id:makeRequestId('pvpleave')})); };
   const requestPvPMatchmakingStatus = () => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'REQUEST_PVP_MATCHMAKING_STATUS',request_id:makeRequestId('pvpqstatus')})); };
+  const joinPvPRanked = (strategy:PvPTacticalStrategy='balanced') => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'JOIN_PVP_RANKED',pvp_tactical_strategy:strategy,pvp_strategy_version:1,request_id:makeRequestId('pvpranked')})); };
+  const leavePvPRanked = () => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'LEAVE_PVP_RANKED',request_id:makeRequestId('pvprankedleave')})); };
+  const requestPvPSeasonStatus = () => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'REQUEST_PVP_SEASON_STATUS',request_id:makeRequestId('pvpseason')})); };
+  const requestPvPLadder = () => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'REQUEST_PVP_LADDER',request_id:makeRequestId('pvpladder')})); };
+  const claimPvPSeasonRewards = () => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'CLAIM_PVP_SEASON_REWARDS',request_id:makeRequestId('pvpreward')})); };
   const clearPvPReplay = () => setPvPReplay(null);
 
   const setEquippedSkin = useCallback((skinKey: string) => {
@@ -1505,6 +1622,8 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
         pvpHistory,
         pvpReplay,
         pvpMatchmaking,
+        pvpSeason,
+        pvpLadder,
     sendWorldChat,
     blockChatCharacter,
     unblockChatCharacter,
@@ -1519,11 +1638,17 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
         joinPvPMatchmaking,
         leavePvPMatchmaking,
         requestPvPMatchmakingStatus,
+        joinPvPRanked,
+        leavePvPRanked,
+        requestPvPSeasonStatus,
+        requestPvPLadder,
+        claimPvPSeasonRewards,
         clearPvPReplay,
 		setEquippedSkin,
     clearPublicProfile,
     moveHero,
     toggleExpedition,
+    returnToCamp,
     setAutoResumeExpedition,
     equipItem,
     unequipItem,

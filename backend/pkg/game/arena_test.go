@@ -349,6 +349,13 @@ func TestKiteContinuesAlongArenaEdge(t *testing.T) {
 	}
 }
 
+func TestKiteTurnsBeforeArenaEdge(t *testing.T) {
+	x, y := stepGridAwayWithOrbitWithin(21, 9, 15, 9, GridWidth, GridHeight, true)
+	if x == 22 || arenaEdgeClearance(x, y, GridWidth, GridHeight) < 2 {
+		t.Fatalf("kite deveria contornar antes da borda: (%d,%d)", x, y)
+	}
+}
+
 func TestLivingFleeingTargetIsReacquiredAfterPreviousTargetDies(t *testing.T) {
 	session := &GameSession{
 		HeroGridX:    7,

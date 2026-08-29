@@ -34,6 +34,10 @@ const baseTabs: Array<{ id: BaseTabKey; icon: string; label: string; available: 
 // conectar; durante a sessão, o socket conserva no máximo 100 mensagens.
 const WORLD_CHAT_WINDOW_SIZE = 100;
 
+type ModerationIntent =
+  | { kind: 'block'; characterId: string; characterName: string }
+  | { kind: 'report'; messageId: string; characterName: string };
+
 function formatChatTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '--:--';
@@ -74,6 +78,7 @@ export function CommunicationConsole({
 }: CommunicationConsoleProps) {
   const [activeTab, setActiveTab] = useState<string>('logs');
   const [text, setText] = useState('');
+  const [moderationIntent, setModerationIntent] = useState<ModerationIntent | null>(null);
   const worldListRef = useRef<HTMLDivElement | null>(null);
   const visibleWorldMessages = useMemo(() => worldMessages.slice(-WORLD_CHAT_WINDOW_SIZE), [worldMessages]);
 
@@ -180,8 +185,8 @@ export function CommunicationConsole({
                   <span className="text-slate-300">{message.text}</span>
                   {!self && (
                     <span className="ml-2 hidden gap-1 group-hover:inline-flex">
-                      <button className="text-[9px] text-slate-500 hover:text-rose-300" onClick={() => window.confirm(`Bloquear ${message.sender_name} no chat?`) && onBlock(message.sender_id)}>bloquear</button>
-                      <button className="text-[9px] text-slate-500 hover:text-amber-300" onClick={() => window.confirm('Denunciar esta mensagem para moderação?') && onReport(message.id)}>denunciar</button>
+                      <button className="text-[9px] text-slate-500 hover:text-rose-300" onClick={() => setModerationIntent({ kind: 'block', characterId: message.sender_id, characterName: message.sender_name })}>bloquear</button>
+                      <button className="text-[9px] text-slate-500 hover:text-amber-300" onClick={() => setModerationIntent({ kind: 'report', messageId: message.id, characterName: message.sender_name })}>denunciar</button>
                     </span>
                   )}
                 </div>
@@ -216,6 +221,35 @@ export function CommunicationConsole({
               ? 'Mensagens privadas aparecerão aqui quando o protocolo direto for liberado. A aba já pode ser fechada sem afetar os demais canais.'
               : 'Este espaço será ativado quando o respectivo sistema social existir no servidor. O chat global e os logs continuam disponíveis agora.'}
           </p>
+        </div>
+      )}
+
+      {moderationIntent && (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-xl border border-slate-700 bg-slate-950 p-4 shadow-2xl">
+            <div className="font-pixel-heading text-[11px] text-amber-300">
+              {moderationIntent.kind === 'block' ? '🚫 Bloquear no chat' : '⚠️ Denunciar mensagem'}
+            </div>
+            <p className="mt-3 text-xs leading-relaxed text-slate-300">
+              {moderationIntent.kind === 'block'
+                ? `Bloquear ${moderationIntent.characterName}? As mensagens futuras deste personagem deixarão de aparecer para você.`
+                : `Enviar a mensagem de ${moderationIntent.characterName} para a fila de moderação?`}
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setModerationIntent(null)} className="pixel-btn pixel-btn-dark py-2 text-[10px]">Cancelar</button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (moderationIntent.kind === 'block') onBlock(moderationIntent.characterId);
+                  else onReport(moderationIntent.messageId);
+                  setModerationIntent(null);
+                }}
+                className="pixel-btn pixel-btn-crimson py-2 text-[10px]"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>

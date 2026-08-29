@@ -167,6 +167,55 @@ func stepGridAwayWithin(x, y, threatX, threatY, width, height int) (int, int) {
 	return bestX, bestY
 }
 
+// arenaEdgeClearance mede quantos tiles livres ainda existem até o limite mais
+// próximo. A margem permite que atores ranged mudem de direção antes de virar
+// uma corrida repetitiva pela borda — importante também para arenas futuras
+// com paredes, água ou outros obstáculos próximos das extremidades.
+func arenaEdgeClearance(x, y, width, height int) int {
+	return min(min(x, width-1-x), min(y, height-1-y))
+}
+
+// stepGridAwayWithOrbitWithin preserva a distância do oponente, mas começa a
+// contornar antes do limite. O sentido é estável por combatente, portanto não
+// cria jitter nem depende de aleatoriedade do cliente.
+func stepGridAwayWithOrbitWithin(x, y, threatX, threatY, width, height int, clockwise bool) (int, int) {
+	const softEdgeMargin = 2
+	currentX, currentY := x, y
+	directX, directY := stepGridAwayWithin(x, y, threatX, threatY, width, height)
+	if (directX != currentX || directY != currentY) && arenaEdgeClearance(directX, directY, width, height) >= softEdgeMargin {
+		return directX, directY
+	}
+
+	currentDistance := gridDistance(currentX, currentY, threatX, threatY)
+	bestX, bestY := currentX, currentY
+	bestScore := math.Inf(-1)
+	for _, candidate := range arenaCandidateTiles(currentX, currentY) {
+		candidateX := clampArenaCoordinate(candidate[0], width)
+		candidateY := clampArenaCoordinate(candidate[1], height)
+		if candidateX == currentX && candidateY == currentY || arenaEdgeClearance(candidateX, candidateY, width, height) < softEdgeMargin {
+			continue
+		}
+		distance := gridDistance(candidateX, candidateY, threatX, threatY)
+		if distance < currentDistance {
+			continue
+		}
+		// Produto vetorial escolhe um dos dois contornos possíveis e deixa a
+		// fuga legível, sem todos os ranged repetirem o mesmo canto.
+		cross := float64((threatX-currentX)*(candidateY-currentY) - (threatY-currentY)*(candidateX-currentX))
+		if !clockwise {
+			cross = -cross
+		}
+		score := distance + cross*0.08
+		if score > bestScore {
+			bestX, bestY, bestScore = candidateX, candidateY, score
+		}
+	}
+	if bestScore > math.Inf(-1) {
+		return bestX, bestY
+	}
+	return directX, directY
+}
+
 // Os pontos de entrada usam os quatro cantos da malha antes de recorrer às
 // faixas centrais. Isso dá espaço para portais e evita uma fila visual no
 // mesmo lado do cenário quando a fase possui vários monstros.

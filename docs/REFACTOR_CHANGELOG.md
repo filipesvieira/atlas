@@ -675,3 +675,13 @@
 - Valores vazios mantêm o comportamento legado de fuga, permitindo configurar
   novos monstros gradualmente sem alterar regiões existentes.
 - Validação: `GOCACHE=/tmp/atlas-go-cache go test ./...` e `npm run build` OK.
+## 2026-08-28 — Multiplayer M4-A Ranked
+
+- revisão do `CommunicationConsole`/HUD social e remoção do `WorldChatPanel` legado;
+- `PlayerInteractionLayer` refatorada para Casual, Ranqueada e Histórico;
+- migration `000030_pvp_ranked_seasons.sql`;
+- temporadas, placements, tiers, ladder, honra e rewards sazonais;
+- anti-win-trading inicial por conta + retorno decrescente da mesma dupla;
+- correção de reconnect de matchmaking com `challenge_id` nulo;
+- M4-B permanece pendente para abandono/desconexão, snapshot defensivo assíncrono opcional, telemetria e apresentação final dos cosméticos.
+

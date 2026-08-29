@@ -2917,6 +2917,62 @@ func (s *GameSession) ToggleExpedition() bool {
 	return s.IsExpeditionActive
 }
 
+// ReturnToCamp encerra explicitamente a expedição atual. Diferente de
+// ToggleExpedition, esta ação é idempotente e não pode iniciar uma expedição
+// por acidente quando usada pela tela de resultado de um duelo PvP.
+func (s *GameSession) ReturnToCamp() {
+	s.Mu.Lock()
+	if s.ActivePvPMatchID != "" {
+		current := s.IsExpeditionActive
+		s.Mu.Unlock()
+		s.broadcastMessage(CombatMessage{Type: "PVP_ACTIVITY_BLOCKED", Timestamp: time.Now().Format("15:04:05"), LogText: "⚔️ O retorno ao acampamento fica disponível após o duelo PvP.", IsActive: current})
+		return
+	}
+
+	s.IsExpeditionActive = false
+	s.RecoveringFromDefeat = false
+	s.AutoResumePending = false
+	s.CurrentMonsters = []Monster{}
+	s.resetArenaPosition()
+	s.clearManualMovement()
+	s.syncPersistentExpeditionState()
+	if s.SaveCharFunc != nil {
+		_ = s.SaveCharFunc(s.Character)
+	}
+
+	totalAtk, totalDef := s.CalculateStats()
+	character := CloneCharacterSnapshot(s.Character)
+	inventory := CloneInventorySnapshot(s.Inventory)
+	activeRegion := s.ActiveRegion
+	activeStance := s.ActiveStance
+	currentStage := s.CurrentStage
+	maxStages := s.MaxStages
+	isBossStage := s.IsBossStage
+	autoPotionSettings := s.AutoPotionSettings
+	autoPotionState := s.AutoPotionState
+	s.Mu.Unlock()
+
+	s.EnsureTickerRunning()
+	s.broadcastMessage(CombatMessage{
+		Type:               "EXPEDITION_STATUS",
+		Timestamp:          time.Now().Format("15:04:05"),
+		Character:          character,
+		Inventory:          inventory,
+		Monsters:           []Monster{},
+		TotalAttack:        totalAtk,
+		TotalDefense:       totalDef,
+		AutoPotionSettings: &autoPotionSettings,
+		AutoPotionState:    &autoPotionState,
+		ActiveRegion:       activeRegion,
+		ActiveStance:       activeStance,
+		CurrentStage:       currentStage,
+		MaxStages:          maxStages,
+		IsBossStage:        isBossStage,
+		LogText:            "⛺ Herói retornou ao acampamento.",
+		IsActive:           false,
+	})
+}
+
 func (s *GameSession) SetAutoResumeExpedition(enabled bool) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()

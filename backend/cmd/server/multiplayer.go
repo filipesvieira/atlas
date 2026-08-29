@@ -617,6 +617,7 @@ func (h *worldChatHub) ConfirmPvPMatchParticipant(characterID, matchID, tactical
 	notice := game.PvPMatchNotice{
 		ID: match.ID, ChallengeID: match.ChallengeID, ArenaKey: match.ArenaKey,
 		Status: match.Status, RulesVersion: match.RulesVersion, CreatedAt: match.CreatedAt,
+		Ranked: match.Ranked, MatchOrigin: match.MatchOrigin,
 	}
 	for _, participant := range match.Participants {
 		participantNotice := notice
@@ -669,6 +670,7 @@ func (h *worldChatHub) publishPvPMatch(recipientID string, match game.PvPMatch) 
 		ID: match.ID, ChallengeID: match.ChallengeID, ArenaKey: match.ArenaKey,
 		Status: match.Status, RulesVersion: match.RulesVersion, CreatedAt: match.CreatedAt,
 		TacticalStrategy: game.PvPStrategyBalanced, StrategyVersion: game.PvPTacticalStrategyVersion,
+		Ranked: match.Ranked, MatchOrigin: match.MatchOrigin,
 	}
 	for _, participant := range match.Participants {
 		if participant.CharacterID != recipientID {

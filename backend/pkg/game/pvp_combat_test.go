@@ -283,6 +283,26 @@ func TestPvPTacticalRangedKitesButMeleeEventuallyClosesGap(t *testing.T) {
 	}
 }
 
+func TestPvPTacticalKiteTurnsBeforeArenaEdge(t *testing.T) {
+	match := testPvPMatch(20, 20, 100_000, 100_000)
+	match.RulesVersion = PvPTacticalCombatRulesVersion
+	match.Participants[0].DerivedStats.PrimaryArchetype = "melee"
+	match.Participants[1].DerivedStats.PrimaryArchetype = "distance"
+	instance, err := NewPvPCombatInstance(match)
+	if err != nil {
+		t.Fatal(err)
+	}
+	instance.actors[0].GridX, instance.actors[0].GridY = 15, 9
+	instance.actors[1].GridX, instance.actors[1].GridY = 21, 9
+	instance.movementAccumulators[1] = 0.99
+
+	snapshot := instance.Tick(time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC))
+	ranged := snapshot.Actors[1]
+	if ranged.GridX == 22 || arenaEdgeClearance(ranged.GridX, ranged.GridY, duelArenaWidth, duelArenaHeight) < 2 {
+		t.Fatalf("ranged deveria iniciar contorno antes da borda: %+v", ranged)
+	}
+}
+
 func TestPvPTacticalRangedDoesNotCastOffensiveSkillOnRetreatPulse(t *testing.T) {
 	match := testPvPMatch(20, 20, 10_000, 10_000)
 	match.RulesVersion = PvPTacticalCombatRulesVersion
