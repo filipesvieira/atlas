@@ -1,6 +1,7 @@
 package game
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
@@ -405,5 +406,54 @@ func TestNormalizePvPTacticalStrategyFallsBackToBalanced(t *testing.T) {
 	}
 	if got := NormalizePvPTacticalStrategy("../../invalid"); got != PvPStrategyBalanced {
 		t.Fatalf("estratégia inválida deve cair em balanced: %s", got)
+	}
+}
+func TestPvPForfeitCompletesThroughAuthoritativeTick(t *testing.T) {
+	match := testPvPMatch(20, 20, 500, 500)
+	match.Status = PvPMatchActive
+	match.RulesVersion = PvPTacticalCombatRulesVersion
+	instance, err := NewPvPCombatInstance(match)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !instance.RequestForfeit("a") {
+		t.Fatal("participante ativo deveria conseguir solicitar desistência")
+	}
+	snapshot := instance.Tick(time.Date(2026, 8, 29, 1, 0, 0, 0, time.UTC))
+	if snapshot.Status != PvPMatchCompleted || snapshot.WinnerID != "b" {
+		t.Fatalf("forfeit deveria concluir pelo tick autoritativo: %+v", snapshot)
+	}
+	if snapshot.Actors[0].State != "DEAD" || snapshot.Actors[0].Health != 0 {
+		t.Fatalf("desistente deveria materializar derrota: %+v", snapshot.Actors[0])
+	}
+}
+
+func TestPvPCombatMetricsSurviveRuntimeRestore(t *testing.T) {
+	match := testPvPMatch(35, 24, 10_000, 10_000)
+	match.Status = PvPMatchActive
+	match.RulesVersion = PvPTacticalCombatRulesVersion
+	match.Participants[0].DerivedStats.PrimaryArchetype = "melee"
+	match.Participants[1].DerivedStats.PrimaryArchetype = "distance"
+	original, err := NewPvPCombatInstance(match)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for step := 0; step < 20; step++ {
+		original.Tick(time.Date(2026, 8, 29, 1, 0, 0, step*250_000_000, time.UTC))
+	}
+	runtime := original.RuntimeState()
+	if runtime.Metrics[0].CharacterID != "a" || runtime.Metrics[1].CharacterID != "b" {
+		t.Fatalf("métricas devem manter identidade dos participantes: %+v", runtime.Metrics)
+	}
+	if runtime.Metrics[0].MovementTicks == 0 && runtime.Metrics[1].MovementTicks == 0 {
+		t.Fatalf("simulação tática deveria registrar movimentação: %+v", runtime.Metrics)
+	}
+	restored, err := RestorePvPCombatInstance(match, runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restoredRuntime := restored.RuntimeState()
+	if !reflect.DeepEqual(restoredRuntime.Metrics, runtime.Metrics) {
+		t.Fatalf("métricas divergiram após restore: antes=%+v depois=%+v", runtime.Metrics, restoredRuntime.Metrics)
 	}
 }

@@ -320,6 +320,69 @@ var (
 	}
 )
 
+// RegisterBuildingDefinition permite que módulos de conteúdo adicionem novas
+// estruturas sem tornar o registry base um arquivo monolítico. Chaves existentes
+// nunca são sobrescritas.
+func RegisterBuildingDefinition(def BuildingDefinition) error {
+	if def.Key == "" || def.Name == "" {
+		return fmt.Errorf("definição de construção sem chave ou nome")
+	}
+	if def.MaxLevel <= 0 || def.MaxLevel != len(def.Levels) {
+		return fmt.Errorf("construção %s com níveis inválidos", def.Key)
+	}
+	if def.PlacementMode == "" {
+		def.PlacementMode = BuildingPlacementFree
+	}
+	if def.PlacementMode != BuildingPlacementFree && def.PlacementMode != BuildingPlacementPerimeter {
+		return fmt.Errorf("construção %s com placement mode inválido: %s", def.Key, def.PlacementMode)
+	}
+	if def.UnlockStage != "" && !SettlementStageKnown(def.UnlockStage) {
+		return fmt.Errorf("construção %s com estágio de desbloqueio inválido: %s", def.Key, def.UnlockStage)
+	}
+	buildingRegistryMu.Lock()
+	defer buildingRegistryMu.Unlock()
+	if _, exists := buildingRegistry[def.Key]; exists {
+		return fmt.Errorf("construção duplicada: %s", def.Key)
+	}
+	buildingRegistry[def.Key] = def
+	return nil
+}
+
+func BuildingPlacementMode(buildingKey string) string {
+	def, exists := GetBuildingDefinition(buildingKey)
+	if !exists || def.PlacementMode == "" {
+		return BuildingPlacementFree
+	}
+	return def.PlacementMode
+}
+
+func IsPerimeterBuilding(buildingKey string) bool {
+	return BuildingPlacementMode(buildingKey) == BuildingPlacementPerimeter
+}
+
+func BuildingUnlocksAtStage(def BuildingDefinition, currentStage string) bool {
+	return def.UnlockStage != "" && SettlementStageAtLeast(currentStage, def.UnlockStage)
+}
+
+// BuildingMaxLevelForStage retorna o maior nível permitido pelo estágio atual.
+// É usado por QA e ferramentas administrativas para não criar uma Cidade com
+// upgrades que, no fluxo real, só poderiam existir após a promoção a Reino.
+func BuildingMaxLevelForStage(def BuildingDefinition, stageKey string) int {
+	maxLevel := 0
+	for _, level := range def.Levels {
+		if level.Level <= 0 || level.Level > def.MaxLevel {
+			continue
+		}
+		if level.RequiredSettlementStage != "" && !SettlementStageAtLeast(stageKey, level.RequiredSettlementStage) {
+			continue
+		}
+		if level.Level > maxLevel {
+			maxLevel = level.Level
+		}
+	}
+	return maxLevel
+}
+
 // GetBuildingDefinition retorna os metadados de uma construção por chave.
 func GetBuildingDefinition(key string) (BuildingDefinition, bool) {
 	buildingRegistryMu.RLock()
@@ -363,7 +426,16 @@ func ValidateBuildingRegistry() error {
 		if def.MaxLevel != len(def.Levels) {
 			return fmt.Errorf("construção %s: MaxLevel (%d) != len(Levels) (%d)", bKey, def.MaxLevel, len(def.Levels))
 		}
+		if def.PlacementMode != "" && def.PlacementMode != BuildingPlacementFree && def.PlacementMode != BuildingPlacementPerimeter {
+			return fmt.Errorf("construção %s: placement mode inválido: %s", bKey, def.PlacementMode)
+		}
+		if def.UnlockStage != "" && !SettlementStageKnown(def.UnlockStage) {
+			return fmt.Errorf("construção %s: unlock stage inválido: %s", bKey, def.UnlockStage)
+		}
 		for _, lvl := range def.Levels {
+			if lvl.RequiredSettlementStage != "" && !SettlementStageKnown(lvl.RequiredSettlementStage) {
+				return fmt.Errorf("construção %s Nv %d referencia estágio desconhecido: %s", bKey, lvl.Level, lvl.RequiredSettlementStage)
+			}
 			for _, cost := range lvl.Costs {
 				if _, ok := GetResourceDefinition(cost.Key); !ok {
 					return fmt.Errorf("construção %s Nv %d referencia recurso desconhecido: %s", bKey, lvl.Level, cost.Key)

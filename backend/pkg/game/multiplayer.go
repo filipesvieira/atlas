@@ -45,6 +45,8 @@ type PublicPlayerProfile struct {
 	Wins        int    `json:"wins"`
 	Losses      int    `json:"losses"`
 	CombatPower int    `json:"combat_power,omitempty"`
+	TitleKey    string `json:"title_key,omitempty"`
+	BannerKey   string `json:"banner_key,omitempty"`
 }
 
 type PvPProfile struct {
@@ -104,24 +106,26 @@ type PvPParticipantSnapshot struct {
 }
 
 type PvPMatch struct {
-	ID               string                   `json:"id"`
-	ChallengeID      string                   `json:"challenge_id"`
-	Mode             CombatInstanceMode       `json:"mode"`
-	ArenaKey         string                   `json:"arena_key"`
-	Status           PvPMatchStatus           `json:"status"`
-	RulesVersion     int                      `json:"rules_version"`
-	Seed             int64                    `json:"seed"`
-	CreatedAt        time.Time                `json:"created_at"`
-	ReadyExpiresAt   time.Time                `json:"ready_expires_at"`
-	StartedAt        *time.Time               `json:"started_at,omitempty"`
-	EndedAt          *time.Time               `json:"ended_at,omitempty"`
-	Participants     []PvPParticipantSnapshot `json:"participants"`
-	LastTick         uint64                   `json:"-"`
-	MatchOrigin      string                   `json:"match_origin,omitempty"`
-	Ranked           bool                     `json:"ranked,omitempty"`
-	SeasonID         string                   `json:"season_id,omitempty"`
-	RepeatMultiplier float64                  `json:"repeat_multiplier,omitempty"`
-	RuntimeState     *PvPCombatRuntimeState   `json:"-"`
+	ID                 string                   `json:"id"`
+	ChallengeID        string                   `json:"challenge_id"`
+	Mode               CombatInstanceMode       `json:"mode"`
+	ArenaKey           string                   `json:"arena_key"`
+	Status             PvPMatchStatus           `json:"status"`
+	RulesVersion       int                      `json:"rules_version"`
+	Seed               int64                    `json:"seed"`
+	CreatedAt          time.Time                `json:"created_at"`
+	ReadyExpiresAt     time.Time                `json:"ready_expires_at"`
+	StartedAt          *time.Time               `json:"started_at,omitempty"`
+	EndedAt            *time.Time               `json:"ended_at,omitempty"`
+	Participants       []PvPParticipantSnapshot `json:"participants"`
+	LastTick           uint64                   `json:"-"`
+	MatchOrigin        string                   `json:"match_origin,omitempty"`
+	Ranked             bool                     `json:"ranked,omitempty"`
+	SeasonID           string                   `json:"season_id,omitempty"`
+	RepeatMultiplier   float64                  `json:"repeat_multiplier,omitempty"`
+	CompletionReason   string                   `json:"completion_reason,omitempty"`
+	ForfeitRequestedBy string                   `json:"forfeit_requested_by,omitempty"`
+	RuntimeState       *PvPCombatRuntimeState   `json:"-"`
 }
 
 // PvPMatchNotice é a visão segura entregue ao cliente. Os snapshots completos
@@ -141,22 +145,27 @@ type PvPMatchNotice struct {
 }
 
 type PvPMatchHistoryEntry struct {
-	MatchID          string    `json:"match_id"`
-	Origin           string    `json:"origin"`
-	OpponentID       string    `json:"opponent_id"`
-	OpponentName     string    `json:"opponent_name"`
-	Result           string    `json:"result"`
-	RatingBefore     int       `json:"rating_before"`
-	RatingAfter      int       `json:"rating_after"`
-	RatingDelta      int       `json:"rating_delta"`
-	CombatPower      int       `json:"combat_power"`
-	OpponentPower    int       `json:"opponent_power"`
-	Ranked           bool      `json:"ranked,omitempty"`
-	SeasonNumber     int       `json:"season_number,omitempty"`
-	HonorAwarded     int       `json:"honor_awarded,omitempty"`
-	RepeatMultiplier float64   `json:"repeat_multiplier,omitempty"`
-	StartedAt        time.Time `json:"started_at"`
-	EndedAt          time.Time `json:"ended_at"`
+	MatchID             string           `json:"match_id"`
+	Origin              string           `json:"origin"`
+	OpponentID          string           `json:"opponent_id"`
+	OpponentName        string           `json:"opponent_name"`
+	Result              string           `json:"result"`
+	RatingBefore        int              `json:"rating_before"`
+	RatingAfter         int              `json:"rating_after"`
+	RatingDelta         int              `json:"rating_delta"`
+	CombatPower         int              `json:"combat_power"`
+	OpponentPower       int              `json:"opponent_power"`
+	Ranked              bool             `json:"ranked,omitempty"`
+	SeasonNumber        int              `json:"season_number,omitempty"`
+	HonorAwarded        int              `json:"honor_awarded,omitempty"`
+	RepeatMultiplier    float64          `json:"repeat_multiplier,omitempty"`
+	CompletionReason    string           `json:"completion_reason,omitempty"`
+	DurationSeconds     int              `json:"duration_seconds,omitempty"`
+	DisconnectCount     int              `json:"disconnect_count,omitempty"`
+	DisconnectedSeconds int              `json:"disconnected_seconds,omitempty"`
+	Metrics             PvPCombatMetrics `json:"metrics,omitempty"`
+	StartedAt           time.Time        `json:"started_at"`
+	EndedAt             time.Time        `json:"ended_at"`
 }
 
 type PvPReplayEvent struct {
@@ -182,29 +191,61 @@ type PvPMatchmakingStatus struct {
 	Honor        int64     `json:"honor,omitempty"`
 }
 
+type PvPTierDistributionEntry struct {
+	Tier    PvPRankTierInfo `json:"tier"`
+	Players int             `json:"players"`
+	Percent float64         `json:"percent"`
+}
+
+type PvPCompetitiveOverview struct {
+	SeasonNumber         int                        `json:"season_number"`
+	PositionedPlayers    int                        `json:"positioned_players"`
+	RankedMatches        int                        `json:"ranked_matches"`
+	AverageDurationSec   int                        `json:"average_duration_seconds"`
+	ForfeitMatches       int                        `json:"forfeit_matches"`
+	RepeatLimitedMatches int                        `json:"repeat_limited_matches"`
+	TierDistribution     []PvPTierDistributionEntry `json:"tier_distribution"`
+}
+
+type PvPCosmeticUnlock struct {
+	Type         string    `json:"type"`
+	Key          string    `json:"key"`
+	SeasonNumber int       `json:"season_number,omitempty"`
+	UnlockedAt   time.Time `json:"unlocked_at"`
+}
+
+type PvPCosmeticCollection struct {
+	EquippedTitle    string              `json:"equipped_title,omitempty"`
+	EquippedBanner   string              `json:"equipped_banner,omitempty"`
+	EquippedCosmetic string              `json:"equipped_cosmetic,omitempty"`
+	Unlocks          []PvPCosmeticUnlock `json:"unlocks"`
+}
+
 // SocialMessage usa o mesmo socket físico, mas um stream e fila separados do
 // estado do jogo. Eventos sociais nunca incrementam SequenceCounter/StateRevision.
 type SocialMessage struct {
-	ProtocolVersion int                    `json:"protocol_version"`
-	Stream          string                 `json:"stream"`
-	Type            string                 `json:"type"`
-	Timestamp       string                 `json:"timestamp"`
-	RequestID       string                 `json:"request_id,omitempty"`
-	ChatMessage     *ChatMessage           `json:"chat_message,omitempty"`
-	ChatHistory     []ChatMessage          `json:"chat_history,omitempty"`
-	Presence        *PresenceSnapshot      `json:"presence,omitempty"`
-	PublicProfile   *PublicPlayerProfile   `json:"public_profile,omitempty"`
-	DuelChallenge   *DuelChallenge         `json:"duel_challenge,omitempty"`
-	DuelChallenges  []DuelChallenge        `json:"duel_challenges,omitempty"`
-	PvPMatchNotice  *PvPMatchNotice        `json:"pvp_match_notice,omitempty"`
-	PvPCombat       *PvPCombatSnapshot     `json:"pvp_combat,omitempty"`
-	PvPHistory      []PvPMatchHistoryEntry `json:"pvp_history,omitempty"`
-	PvPReplay       *PvPMatchReplay        `json:"pvp_replay,omitempty"`
-	Matchmaking     *PvPMatchmakingStatus  `json:"pvp_matchmaking,omitempty"`
-	PvPSeason       *PvPSeasonStatus       `json:"pvp_season,omitempty"`
-	PvPLadder       []PvPLadderEntry       `json:"pvp_ladder,omitempty"`
-	PvPRewards      []PvPSeasonReward      `json:"pvp_rewards,omitempty"`
-	Error           string                 `json:"error,omitempty"`
+	ProtocolVersion int                     `json:"protocol_version"`
+	Stream          string                  `json:"stream"`
+	Type            string                  `json:"type"`
+	Timestamp       string                  `json:"timestamp"`
+	RequestID       string                  `json:"request_id,omitempty"`
+	ChatMessage     *ChatMessage            `json:"chat_message,omitempty"`
+	ChatHistory     []ChatMessage           `json:"chat_history,omitempty"`
+	Presence        *PresenceSnapshot       `json:"presence,omitempty"`
+	PublicProfile   *PublicPlayerProfile    `json:"public_profile,omitempty"`
+	DuelChallenge   *DuelChallenge          `json:"duel_challenge,omitempty"`
+	DuelChallenges  []DuelChallenge         `json:"duel_challenges,omitempty"`
+	PvPMatchNotice  *PvPMatchNotice         `json:"pvp_match_notice,omitempty"`
+	PvPCombat       *PvPCombatSnapshot      `json:"pvp_combat,omitempty"`
+	PvPHistory      []PvPMatchHistoryEntry  `json:"pvp_history,omitempty"`
+	PvPReplay       *PvPMatchReplay         `json:"pvp_replay,omitempty"`
+	Matchmaking     *PvPMatchmakingStatus   `json:"pvp_matchmaking,omitempty"`
+	PvPSeason       *PvPSeasonStatus        `json:"pvp_season,omitempty"`
+	PvPLadder       []PvPLadderEntry        `json:"pvp_ladder,omitempty"`
+	PvPRewards      []PvPSeasonReward       `json:"pvp_rewards,omitempty"`
+	PvPCompetitive  *PvPCompetitiveOverview `json:"pvp_competitive,omitempty"`
+	PvPCosmetics    *PvPCosmeticCollection  `json:"pvp_cosmetics,omitempty"`
+	Error           string                  `json:"error,omitempty"`
 }
 
 // Tipos abaixo são contratos preparatórios. O PvE atual continua usando

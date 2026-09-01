@@ -37,7 +37,7 @@ func economyCommandLimit(action string) (int, time.Duration, bool) {
 		return 4, 2 * time.Second, true
 	case "CHAT_SEND":
 		return 8, 10 * time.Second, true
-	case "CHAT_BLOCK", "CHAT_UNBLOCK", "CHAT_REPORT", "REQUEST_PUBLIC_PROFILE", "CREATE_DUEL_CHALLENGE", "RESPOND_DUEL_CHALLENGE", "CANCEL_DUEL_CHALLENGE", "CONFIRM_PVP_MATCH", "REQUEST_PVP_HISTORY", "REQUEST_PVP_REPLAY", "JOIN_PVP_MATCHMAKING", "LEAVE_PVP_MATCHMAKING", "REQUEST_PVP_MATCHMAKING_STATUS", "JOIN_PVP_RANKED", "LEAVE_PVP_RANKED", "REQUEST_PVP_SEASON_STATUS", "REQUEST_PVP_LADDER", "CLAIM_PVP_SEASON_REWARDS":
+	case "CHAT_BLOCK", "CHAT_UNBLOCK", "CHAT_REPORT", "REQUEST_PUBLIC_PROFILE", "CREATE_DUEL_CHALLENGE", "RESPOND_DUEL_CHALLENGE", "CANCEL_DUEL_CHALLENGE", "CONFIRM_PVP_MATCH", "FORFEIT_PVP_MATCH", "REQUEST_PVP_HISTORY", "REQUEST_PVP_REPLAY", "JOIN_PVP_MATCHMAKING", "LEAVE_PVP_MATCHMAKING", "REQUEST_PVP_MATCHMAKING_STATUS", "JOIN_PVP_RANKED", "LEAVE_PVP_RANKED", "REQUEST_PVP_SEASON_STATUS", "REQUEST_PVP_LADDER", "REQUEST_PVP_COMPETITIVE", "CLAIM_PVP_SEASON_REWARDS", "REQUEST_PVP_COSMETICS", "SET_PVP_COSMETIC":
 		return 6, 10 * time.Second, true
 	case "START_GATHERING", "CANCEL_GATHERING", "CLAIM_GATHERING_REWARDS", "CLAIM_PENDING_CRAFT", "CLAIM_PENDING_RESOURCES", "CREATE_HERO_DESIRE", "CANCEL_HERO_DESIRE", "CLAIM_ARMORY_ITEM", "TRANSFER_TREASURY_GOLD", "UPDATE_TREASURY_POLICY", "MOVE_CAMP_BUILDING", "START_BUILDING_UPGRADE", "DISCARD_RESOURCE", "SALVAGE_ITEM", "SALVAGE_BATCH", "LEARN_BUILDING_BLUEPRINT", "CONSUME_FOOD":
 		return 6, 2 * time.Second, true
@@ -144,6 +144,7 @@ var commandHandlers = map[string]CommandHandler{
 	"RESPOND_DUEL_CHALLENGE":         handleRespondDuelChallenge,
 	"CANCEL_DUEL_CHALLENGE":          handleCancelDuelChallenge,
 	"CONFIRM_PVP_MATCH":              handleConfirmPvPMatch,
+	"FORFEIT_PVP_MATCH":              handleForfeitPvPMatch,
 	"SET_EQUIPPED_SKIN":              handleSetEquippedSkin,
 	"REQUEST_PVP_HISTORY":            handleRequestPvPHistory,
 	"REQUEST_PVP_REPLAY":             handleRequestPvPReplay,
@@ -154,7 +155,10 @@ var commandHandlers = map[string]CommandHandler{
 	"LEAVE_PVP_RANKED":               handleLeavePvPRanked,
 	"REQUEST_PVP_SEASON_STATUS":      handleRequestPvPSeasonStatus,
 	"REQUEST_PVP_LADDER":             handleRequestPvPLadder,
+	"REQUEST_PVP_COMPETITIVE":        handleRequestPvPCompetitive,
 	"CLAIM_PVP_SEASON_REWARDS":       handleClaimPvPSeasonRewards,
+	"REQUEST_PVP_COSMETICS":          handleRequestPvPCosmetics,
+	"SET_PVP_COSMETIC":               handleSetPvPCosmetic,
 }
 
 func validateClientAction(action ClientAction) error {
@@ -166,7 +170,7 @@ func validateClientAction(action ClientAction) error {
 		len(action.TargetRarity) > 30 || len(action.Direction) > 16 || len(action.SlotKey) > 40 ||
 		len(action.BuildingKey) > 80 || len(action.ResourceKey) > 80 || len(action.ItemIDs) > 200 ||
 		len(action.Channel) > 24 || len([]rune(action.Text)) > 200 || len(action.TargetCharacterID) > 80 ||
-		len(action.MessageID) > 80 || len(action.DuelChallengeID) > 80 || len(action.PvPMatchID) > 80 || len(action.SkinKey) > 32 || len([]rune(action.Reason)) > 240 {
+		len(action.MessageID) > 80 || len(action.DuelChallengeID) > 80 || len(action.PvPMatchID) > 80 || len(action.PvPCosmeticType) > 24 || len(action.PvPCosmeticKey) > 120 || len(action.SkinKey) > 32 || len([]rune(action.Reason)) > 240 {
 		return fmt.Errorf("payload excede os limites permitidos")
 	}
 	for _, itemID := range action.ItemIDs {
@@ -716,6 +720,24 @@ func handleConfirmPvPMatch(ctx *CommandContext) error {
 	return nil
 }
 
+func handleForfeitPvPMatch(ctx *CommandContext) error {
+	match, err := db.RequestPvPForfeit(ctx.CharID, ctx.Action.PvPMatchID, time.Now().UTC())
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	if match.Status == game.PvPMatchCancelled {
+		notice := game.PvPMatchNotice{ID: match.ID, ChallengeID: match.ChallengeID, ArenaKey: match.ArenaKey, Status: match.Status, RulesVersion: match.RulesVersion, CreatedAt: match.CreatedAt, Ranked: match.Ranked, MatchOrigin: match.MatchOrigin}
+		for _, participant := range match.Participants {
+			if err := multiplayerHub.publishPvPMatchNotice(participant.CharacterID, "PVP_MATCH_CANCELLED", notice); err != nil {
+				return sendSocialError(ctx, err)
+			}
+		}
+		return nil
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_FORFEIT_PENDING", RequestID: ctx.Action.RequestID})
+	return nil
+}
+
 func handleRequestPvPHistory(ctx *CommandContext) error {
 	history, err := db.ListPvPMatchHistory(ctx.CharID, 20)
 	if err != nil {
@@ -792,12 +814,42 @@ func handleRequestPvPLadder(ctx *CommandContext) error {
 	return nil
 }
 
+func handleRequestPvPCompetitive(ctx *CommandContext) error {
+	overview, err := db.GetPvPCompetitiveOverview(ctx.CharID, time.Now().UTC())
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_COMPETITIVE_OVERVIEW", RequestID: ctx.Action.RequestID, PvPCompetitive: &overview})
+	return nil
+}
+
+func handleRequestPvPCosmetics(ctx *CommandContext) error {
+	collection, err := db.GetPvPCosmetics(ctx.CharID)
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_COSMETICS", RequestID: ctx.Action.RequestID, PvPCosmetics: &collection})
+	return nil
+}
+
+func handleSetPvPCosmetic(ctx *CommandContext) error {
+	collection, err := db.SetPvPCosmetic(ctx.CharID, ctx.Action.PvPCosmeticType, ctx.Action.PvPCosmeticKey)
+	if err != nil {
+		return sendSocialError(ctx, err)
+	}
+	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_COSMETICS", RequestID: ctx.Action.RequestID, PvPCosmetics: &collection})
+	return nil
+}
+
 func handleClaimPvPSeasonRewards(ctx *CommandContext) error {
 	rewards, err := db.ClaimPvPSeasonRewards(ctx.CharID, time.Now().UTC())
 	if err != nil {
 		return sendSocialError(ctx, err)
 	}
 	ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_SEASON_REWARDS_CLAIMED", RequestID: ctx.Action.RequestID, PvPRewards: rewards})
+	if cosmetics, cosmeticErr := db.GetPvPCosmetics(ctx.CharID); cosmeticErr == nil {
+		ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_COSMETICS", PvPCosmetics: &cosmetics})
+	}
 	status, err := db.GetPvPSeasonStatus(ctx.CharID, time.Now().UTC())
 	if err == nil {
 		ctx.Session.SendSocial(game.SocialMessage{Type: "PVP_SEASON_STATUS", PvPSeason: &status})

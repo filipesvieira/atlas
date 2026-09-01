@@ -15,6 +15,8 @@ export interface BuildingRenderContext {
   scale: number;
   time: number;
   footprint: BuildingFootprint;
+  /** Variações usadas somente quando a construção é desenhada fora de um lote. */
+  variant?: 'perimeter-south';
 }
 
 export interface CampBuildingSlotConfig {

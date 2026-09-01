@@ -212,6 +212,44 @@ export function drawIsoPanelGrid(ctx: CanvasRenderingContext2D, points: IsoPoint
   ctx.stroke();
 }
 
+/**
+ * Desenha um patamar conectado à base de um painel e alinhado aos eixos do
+ * terreno 2:1. Usar a própria porta como âncora evita plataformas horizontais
+ * que parecem descoladas da construção quando a câmera aproxima.
+ */
+export function drawIsoPanelApron(
+  ctx: CanvasRenderingContext2D,
+  panel: IsoPoint[],
+  side: 'left' | 'right',
+  extension: number,
+  fill: string,
+  edge = '#1c1917',
+  thickness = 3
+) {
+  if (panel.length !== 4) return;
+  const [baseA, baseB] = panel;
+  const direction = side === 'right' ? 1 : -1;
+  const offset = { x: extension * direction, y: extension / 2 };
+  const farA = { x: baseA.x + offset.x, y: baseA.y + offset.y };
+  const farB = { x: baseB.x + offset.x, y: baseB.y + offset.y };
+
+  polygon(ctx, [farA, farB, { x: farB.x, y: farB.y + thickness }, { x: farA.x, y: farA.y + thickness }], edge, edge);
+  polygon(ctx, [baseA, baseB, farB, farA], fill, edge);
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+  ctx.lineWidth = 1;
+  for (const amount of [0.33, 0.66]) {
+    const start = lerp(baseA, baseB, amount);
+    const finish = lerp(farA, farB, amount);
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(finish.x, finish.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function drawIsoGroundPost(
   ctx: CanvasRenderingContext2D,
   x: number,

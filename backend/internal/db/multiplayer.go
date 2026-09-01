@@ -237,7 +237,8 @@ func CancelDuelChallenge(challengerID, challengeID string, now time.Time) (game.
 const pvpMatchColumns = `
 	m.id, m.challenge_id, m.mode, m.arena_key, m.status, m.rules_version,
 	m.deterministic_seed, m.created_at, m.ready_expires_at, m.started_at, m.ended_at,
-	m.last_tick, m.runtime_state, m.match_origin, m.ranked, m.season_id, m.repeat_multiplier`
+	m.last_tick, m.runtime_state, m.match_origin, m.ranked, m.season_id, m.repeat_multiplier,
+	m.completion_reason, m.forfeit_requested_by`
 
 func getPvPMatchTx(tx *sql.Tx, matchID string) (game.PvPMatch, error) {
 	var match game.PvPMatch
@@ -245,12 +246,13 @@ func getPvPMatchTx(tx *sql.Tx, matchID string) (game.PvPMatch, error) {
 	var startedAt, endedAt sql.NullTime
 	var challengeID sql.NullString
 	var seasonID sql.NullString
+	var forfeitRequestedBy sql.NullString
 	var lastTick int64
 	var runtimeRaw []byte
 	err := tx.QueryRow(`SELECT `+pvpMatchColumns+` FROM pvp_matches m WHERE m.id=$1`, matchID).Scan(
 		&match.ID, &challengeID, &mode, &match.ArenaKey, &status, &match.RulesVersion,
 		&match.Seed, &match.CreatedAt, &match.ReadyExpiresAt, &startedAt, &endedAt, &lastTick, &runtimeRaw, &match.MatchOrigin,
-		&match.Ranked, &seasonID, &match.RepeatMultiplier,
+		&match.Ranked, &seasonID, &match.RepeatMultiplier, &match.CompletionReason, &forfeitRequestedBy,
 	)
 	if err != nil {
 		return game.PvPMatch{}, err
@@ -260,6 +262,9 @@ func getPvPMatchTx(tx *sql.Tx, matchID string) (game.PvPMatch, error) {
 	}
 	if seasonID.Valid {
 		match.SeasonID = seasonID.String
+	}
+	if forfeitRequestedBy.Valid {
+		match.ForfeitRequestedBy = forfeitRequestedBy.String
 	}
 	match.Mode = game.CombatInstanceMode(mode)
 	match.Status = game.PvPMatchStatus(status)
@@ -492,7 +497,7 @@ func ConfirmPvPMatchParticipant(matchID, characterID, tacticalStrategy string, s
 		return game.PvPMatch{}, false, err
 	}
 	if status == string(game.PvPMatchReady) && !readyExpiresAt.After(now.UTC()) {
-		if _, err := tx.Exec(`UPDATE pvp_matches SET status='cancelled', ended_at=$2 WHERE id=$1`, matchID, now.UTC()); err != nil {
+		if _, err := tx.Exec(`UPDATE pvp_matches SET status='cancelled', ended_at=$2, completion_reason='ready_timeout' WHERE id=$1`, matchID, now.UTC()); err != nil {
 			return game.PvPMatch{}, false, err
 		}
 		if err := appendPvPMatchEventTx(tx, matchID, "MATCH_TIMEOUT", map[string]string{"reason": "ready_timeout"}, now); err != nil {
@@ -719,7 +724,7 @@ func ExpireReadyPvPMatches(now time.Time) (int, error) {
 	}
 	for _, matchID := range matchIDs {
 		if _, err := tx.Exec(`
-			UPDATE pvp_matches SET status='cancelled', ended_at=$2
+			UPDATE pvp_matches SET status='cancelled', ended_at=$2, completion_reason='ready_timeout'
 			WHERE id=$1 AND status='ready'
 		`, matchID, now.UTC()); err != nil {
 			return 0, err
@@ -784,9 +789,16 @@ func PersistPvPCombatRuntime(runtime game.PvPCombatRuntimeState, now time.Time) 
 	if state.Status == game.PvPMatchCompleted {
 		if _, err := tx.Exec(`
 			UPDATE pvp_matches
-			SET status='completed', ended_at=$2, last_tick=$3, runtime_state=$4::jsonb, last_pulse_at=$2
+			SET status='completed', ended_at=$2, last_tick=$3, runtime_state=$4::jsonb, last_pulse_at=$2,
+			    completion_reason=CASE WHEN forfeit_requested_by IS NOT NULL THEN 'forfeit' ELSE completion_reason END
 			WHERE id=$1
 		`, state.MatchID, now.UTC(), state.Tick, string(raw)); err != nil {
+			return err
+		}
+		if err := persistPvPCombatMetricsTx(tx, state.MatchID, runtime.Metrics); err != nil {
+			return err
+		}
+		if err := finalizePvPParticipantDisconnectsTx(tx, state.MatchID, now); err != nil {
 			return err
 		}
 		// Match e atividade do herói encerram na MESMA transação. Assim uma queda
@@ -822,11 +834,12 @@ func GetPublicPlayerProfile(characterID string) (game.PublicPlayerProfile, error
 	var profile game.PublicPlayerProfile
 	err := DB.QueryRow(`
 		SELECT c.id, c.name, c.level, COALESCE(c.active_region, ''),
-		       COALESCE(p.rating, 1000), COALESCE(p.wins, 0), COALESCE(p.losses, 0)
+		       COALESCE(p.rating, 1000), COALESCE(p.wins, 0), COALESCE(p.losses, 0),
+		       COALESCE(p.equipped_title_key,''), COALESCE(p.equipped_banner_key,'')
 		FROM characters c
 		LEFT JOIN pvp_profiles p ON p.character_id = c.id
 		WHERE c.id = $1
-	`, characterID).Scan(&profile.CharacterID, &profile.Name, &profile.Level, &profile.Region, &profile.Rating, &profile.Wins, &profile.Losses)
+	`, characterID).Scan(&profile.CharacterID, &profile.Name, &profile.Level, &profile.Region, &profile.Rating, &profile.Wins, &profile.Losses, &profile.TitleKey, &profile.BannerKey)
 	return profile, err
 }
 
@@ -1066,6 +1079,9 @@ func ListPvPMatchHistory(characterID string, limit int) ([]game.PvPMatchHistoryE
 			COALESCE(mine.season_rating_before,mine.rating_before),
 			COALESCE(mine.season_rating_after,mine.rating_after,mine.season_rating_before,mine.rating_before),
 			mine.combat_power,opp.combat_power,m.ranked,COALESCE(s.season_number,0),mine.honor_awarded,m.repeat_multiplier,
+			m.completion_reason,
+			GREATEST(0,FLOOR(EXTRACT(EPOCH FROM (COALESCE(m.ended_at,m.created_at)-COALESCE(m.started_at,m.created_at)))))::int,
+			mine.disconnect_count,mine.disconnected_seconds,mine.combat_metrics,
 			COALESCE(m.started_at,m.created_at),COALESCE(m.ended_at,m.created_at),
 			COALESCE(m.runtime_state->'snapshot'->>'winner_id','')
 		FROM pvp_matches m
@@ -1083,10 +1099,12 @@ func ListPvPMatchHistory(characterID string, limit int) ([]game.PvPMatchHistoryE
 	for rows.Next() {
 		var e game.PvPMatchHistoryEntry
 		var winner string
-		if err := rows.Scan(&e.MatchID, &e.Origin, &e.OpponentID, &e.OpponentName, &e.RatingBefore, &e.RatingAfter, &e.CombatPower, &e.OpponentPower, &e.Ranked, &e.SeasonNumber, &e.HonorAwarded, &e.RepeatMultiplier, &e.StartedAt, &e.EndedAt, &winner); err != nil {
+		var metricsRaw []byte
+		if err := rows.Scan(&e.MatchID, &e.Origin, &e.OpponentID, &e.OpponentName, &e.RatingBefore, &e.RatingAfter, &e.CombatPower, &e.OpponentPower, &e.Ranked, &e.SeasonNumber, &e.HonorAwarded, &e.RepeatMultiplier, &e.CompletionReason, &e.DurationSeconds, &e.DisconnectCount, &e.DisconnectedSeconds, &metricsRaw, &e.StartedAt, &e.EndedAt, &winner); err != nil {
 			return nil, err
 		}
 		e.RatingDelta = e.RatingAfter - e.RatingBefore
+		_ = json.Unmarshal(metricsRaw, &e.Metrics)
 		if winner == "" {
 			e.Result = "draw"
 		} else if winner == characterID {

@@ -53,6 +53,7 @@ type CreateCharacterRequest struct {
 
 type DeveloperPresetRequest struct {
 	CharacterID string `json:"character_id"`
+	Mode        string `json:"mode,omitempty"`
 }
 
 func main() {
@@ -103,6 +104,13 @@ func main() {
 		if err := bootstrapDeveloperAdmin(cfg.DevAdminEmail, cfg.DevAdminPassword); err != nil {
 			log.Fatalf("Erro fatal ao preparar administrador de testes: %v", err)
 		}
+		if err := bootstrapDeveloperPvPQAProfiles(
+			developerPvPQAProfile{Email: cfg.DevPvPQAEmailA, Password: cfg.DevPvPQAPasswordA, Name: "QA Arco"},
+			developerPvPQAProfile{Email: cfg.DevPvPQAEmailB, Password: cfg.DevPvPQAPasswordB, Name: "QA Espada"},
+			developerPvPQAProfile{Email: cfg.DevPvPQAEmailC, Password: cfg.DevPvPQAPasswordC, Name: "QA Mago"},
+		); err != nil {
+			log.Fatalf("Erro fatal ao preparar perfis PvP de QA: %v", err)
+		}
 		log.Printf("🧪 Ferramentas de QA habilitadas para %s", cfg.DevAdminEmail)
 	}
 
@@ -139,6 +147,8 @@ func main() {
 		r.Post("/api/v1/auth/ws-ticket", HandleWSTicket)
 		r.Post("/api/v1/expedition/claim", HandleClaimOfflineProgress)
 		r.Get("/api/v1/admin/telemetry", AdminMiddleware(HandleAdminTelemetry))
+		r.Get("/api/v1/admin/pvp-telemetry", AdminMiddleware(HandleAdminPvPTelemetry))
+		r.Get("/api/v1/admin/pvp-telemetry/{matchID}", AdminMiddleware(HandleAdminPvPMatchDetail))
 		if cfg.DevToolsEnabled {
 			r.Post("/api/v1/admin/test-preset", AdminMiddleware(HandleDeveloperPreset))
 		}
@@ -427,6 +437,30 @@ func HandleAdminTelemetry(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, telemetry)
 }
 
+// HandleAdminPvPTelemetry expõe observabilidade operacional apenas para
+// administradores. É somente leitura: a simulação PvP continua autoritativa e
+// nenhuma métrica desta rota pode alterar uma partida ou um rating.
+func HandleAdminPvPTelemetry(w http.ResponseWriter, r *http.Request) {
+	telemetry, err := db.GetPvPAdminTelemetry(time.Now().UTC())
+	if err != nil {
+		log.Printf("erro ao montar telemetria administrativa PvP: %v", err)
+		jsonError(w, http.StatusInternalServerError, "não foi possível carregar a telemetria PvP")
+		return
+	}
+	jsonResponse(w, http.StatusOK, telemetry)
+}
+
+func HandleAdminPvPMatchDetail(w http.ResponseWriter, r *http.Request) {
+	matchID := strings.TrimSpace(chi.URLParam(r, "matchID"))
+	detail, err := db.GetPvPAdminMatchDetail(matchID, time.Now().UTC())
+	if err != nil {
+		log.Printf("erro ao montar detalhe administrativo PvP %s: %v", matchID, err)
+		jsonError(w, http.StatusNotFound, "não foi possível carregar os detalhes da partida PvP")
+		return
+	}
+	jsonResponse(w, http.StatusOK, detail)
+}
+
 func bootstrapDeveloperAdmin(email, password string) error {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -528,6 +562,49 @@ func bootstrapDeveloperAdmin(email, password string) error {
 	return nil
 }
 
+// bootstrapDeveloperPvPQAProfiles cria contas comuns, exclusivamente em
+// development, para testar matchmaking com identidades independentes. Elas não
+// recebem privilégios administrativos e portanto exercitam o mesmo fluxo dos
+// jogadores reais. Cada conta recebe um personagem base somente na primeira
+// criação; reinicializações não restauram atributos, rating ou histórico.
+type developerPvPQAProfile struct {
+	Email    string
+	Password string
+	Name     string
+}
+
+func bootstrapDeveloperPvPQAProfiles(profiles ...developerPvPQAProfile) error {
+	for _, profile := range profiles {
+		hash, err := bcrypt.GenerateFromPassword([]byte(profile.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return err
+		}
+		var accountID string
+		if err := db.DB.QueryRow(`
+			INSERT INTO accounts(email,password_hash,role)
+			VALUES($1,$2,'player')
+			ON CONFLICT(email) DO UPDATE SET password_hash=EXCLUDED.password_hash,role='player'
+			RETURNING id`, profile.Email, string(hash)).Scan(&accountID); err != nil {
+			return err
+		}
+		var exists bool
+		if err := db.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM characters WHERE account_id=$1)`, accountID).Scan(&exists); err != nil {
+			return err
+		}
+		if exists {
+			continue
+		}
+		character, err := db.CreateCharacter(accountID, profile.Name, "Aprendiz", "wanderer")
+		if err != nil {
+			return fmt.Errorf("criar personagem PvP QA %s: %w", profile.Email, err)
+		}
+		if _, err := db.ApplyDeveloperPreset(character.ID, time.Now().UTC()); err != nil {
+			return fmt.Errorf("preparar personagem PvP QA %s: %w", profile.Email, err)
+		}
+	}
+	return nil
+}
+
 func HandleDeveloperPreset(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req DeveloperPresetRequest
@@ -550,7 +627,7 @@ func HandleDeveloperPreset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := db.ApplyDeveloperPreset(req.CharacterID, time.Now().UTC())
+	result, err := db.ApplyDeveloperPresetMode(req.CharacterID, time.Now().UTC(), req.Mode)
 	if err != nil {
 		log.Printf("erro ao aplicar preset de QA em %s: %v", req.CharacterID, err)
 		jsonError(w, http.StatusInternalServerError, "não foi possível preparar o personagem de testes")

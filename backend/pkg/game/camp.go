@@ -54,15 +54,22 @@ type BuildingRequirement struct {
 
 // BuildingLevelDefinition especifica os requisitos e benefícios de um nível de construção.
 type BuildingLevelDefinition struct {
-	Level                int                   `json:"level"`
-	GoldCost             int64                 `json:"gold_cost"`
-	Costs                []ResourceAmount      `json:"costs"`
-	BuildDuration        time.Duration         `json:"build_duration"`
-	BuildDurationSeconds int64                 `json:"build_duration_seconds"`
-	Effects              []BuildingEffect      `json:"effects"`
-	RequiredTrophies     []ResourceAmount      `json:"required_trophies,omitempty"`
-	RequiredBuildings    []BuildingRequirement `json:"required_buildings,omitempty"`
+	Level                   int                   `json:"level"`
+	RequiredSettlementStage string                `json:"required_settlement_stage,omitempty"`
+	GoldCost                int64                 `json:"gold_cost"`
+	Costs                   []ResourceAmount      `json:"costs"`
+	BuildDuration           time.Duration         `json:"build_duration"`
+	BuildDurationSeconds    int64                 `json:"build_duration_seconds"`
+	Effects                 []BuildingEffect      `json:"effects"`
+	RequiredTrophies        []ResourceAmount      `json:"required_trophies,omitempty"`
+	RequiredBuildings       []BuildingRequirement `json:"required_buildings,omitempty"`
 }
+
+// BuildingDefinition define os metadados de um tipo de construção.
+const (
+	BuildingPlacementFree      = "free"
+	BuildingPlacementPerimeter = "perimeter"
+)
 
 // BuildingDefinition define os metadados de um tipo de construção.
 type BuildingDefinition struct {
@@ -73,6 +80,8 @@ type BuildingDefinition struct {
 	// SlotType é mantido no catálogo para compatibilidade com clientes antigos.
 	// No layout V2 a posição física vem de BuildingSlot.TileX/TileY.
 	SlotType        string                    `json:"slot_type"`
+	PlacementMode   string                    `json:"placement_mode,omitempty"`
+	UnlockStage     string                    `json:"unlock_stage,omitempty"`
 	DefaultUnlocked bool                      `json:"default_unlocked"`
 	MaxLevel        int                       `json:"max_level"`
 	Levels          []BuildingLevelDefinition `json:"levels"`

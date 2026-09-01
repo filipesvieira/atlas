@@ -5,6 +5,7 @@ import { PixelItemSprite } from '../../game/registries/PixelArtItemRegistry';
 import { BuildingCard } from './BuildingCard';
 import { BuildingUpgradeModal } from './BuildingUpgradeModal';
 import { SalvageModal } from './SalvageModal';
+import { isDefenseBuilding } from '../../game/camp/BuildingDefensePresentation';
 
 export interface CampManagementModalProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ export interface CampManagementModalProps {
   onSalvageItem: (itemId: string) => void;
   onSalvageBatch?: (itemIds: string[], safeMode?: boolean) => void;
   onClearSalvagePreview: () => void;
+  settlementStageKey?: string;
 }
 
 export const CampManagementModal: React.FC<CampManagementModalProps> = ({
@@ -38,6 +40,7 @@ export const CampManagementModal: React.FC<CampManagementModalProps> = ({
   onSalvageItem,
   onSalvageBatch,
   onClearSalvagePreview,
+  settlementStageKey = 'camp',
 }) => {
   const [selectedUpgrade, setSelectedUpgrade] = useState<{
     buildingDef: BuildingDefinition;
@@ -80,6 +83,33 @@ export const CampManagementModal: React.FC<CampManagementModalProps> = ({
     if (slot && slot.level > 0) return true;
     return false;
   });
+
+  const infrastructureBuildings = discoveredBuildings.filter((definition) => !isDefenseBuilding(definition.key));
+  const defenseBuildings = discoveredBuildings.filter((definition) => isDefenseBuilding(definition.key));
+
+  const renderBuildingCards = (definitionsToRender: BuildingDefinition[]) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+      {definitionsToRender.map((bDef) => {
+        const slot = findBuildingSlot(bDef.key, bDef.slot_type) || {
+          slot_key: bDef.key,
+          building_key: bDef.key,
+          level: 0,
+          tile_x: 0,
+          tile_y: 0,
+          rotation: 0,
+          updated_at: new Date().toISOString(),
+        };
+        return (
+          <BuildingCard
+            key={bDef.key}
+            buildingDef={bDef}
+            slot={slot}
+            onOpenUpgradeModal={(def, s) => setSelectedUpgrade({ buildingDef: def, slot: s })}
+          />
+        );
+      })}
+    </div>
+  );
 
   // Verifica se a bancada está construída (Nv >= 1)
   const workbenchSlot = findBuildingSlot('workbench', 'south');
@@ -171,30 +201,25 @@ export const CampManagementModal: React.FC<CampManagementModalProps> = ({
         {/* Corpo do Modal com as Construções Descobertas */}
         <div className="p-4 overflow-y-auto space-y-4 flex-1">
           <div className="rounded-xl border border-sky-500/30 bg-sky-950/20 px-3 py-2 text-[11px] leading-relaxed text-sky-100">
-            🗺️ <strong>Layout livre:</strong> no cenário do acampamento, arraste uma construção descoberta para escolher sua posição. O projeto já ocupa terreno no nível 0, então você pode decidir o local <strong>antes de iniciar a obra</strong> e reorganizá-lo novamente depois de pronto. Obras em andamento ficam travadas até concluir.
+            🗺️ <strong>Layout territorial:</strong> construções internas podem ser arrastadas e reorganizadas antes ou depois da obra. <strong>Muralha e Portão</strong> são diferentes: acompanham automaticamente o perímetro do estágio atual e não ocupam um lote arrastável no centro da cidade.
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {discoveredBuildings.map((bDef) => {
-              const slot = findBuildingSlot(bDef.key, bDef.slot_type) || {
-                slot_key: bDef.key,
-                building_key: bDef.key,
-                level: 0,
-                tile_x: 0,
-                tile_y: 0,
-                rotation: 0,
-                updated_at: new Date().toISOString(),
-              };
 
-              return (
-                <BuildingCard
-                  key={bDef.key}
-                  buildingDef={bDef}
-                  slot={slot}
-                  onOpenUpgradeModal={(def, s) => setSelectedUpgrade({ buildingDef: def, slot: s })}
-                />
-              );
-            })}
-          </div>
+          {infrastructureBuildings.length > 0 && (
+            <section className="space-y-2">
+              <div className="flex items-center gap-2 text-[10px] font-pixel-heading uppercase tracking-wider text-amber-300"><span>🏕️</span> Infraestrutura e Produção</div>
+              {renderBuildingCards(infrastructureBuildings)}
+            </section>
+          )}
+
+          {defenseBuildings.length > 0 && (
+            <section className="space-y-2 pt-1">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-[10px] font-pixel-heading uppercase tracking-wider text-rose-300"><span>🛡️</span> Fortificações e Defesa</div>
+                <span className="text-[9px] text-slate-500">Raids continuam desativadas na M5-B</span>
+              </div>
+              {renderBuildingCards(defenseBuildings)}
+            </section>
+          )}
 
           {discoveredBuildings.length < buildingDefinitions.length && (
             <div className="p-3 pixel-slot rounded-xl flex items-center gap-3 text-xs text-slate-400 bg-slate-950/80">
@@ -230,6 +255,7 @@ export const CampManagementModal: React.FC<CampManagementModalProps> = ({
           characterGold={characterGold}
           resources={resources}
           definitions={resourceDefinitions}
+          settlementStageKey={settlementStageKey}
           onConfirmUpgrade={onStartUpgrade}
         />
       )}

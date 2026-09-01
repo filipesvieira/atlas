@@ -276,6 +276,108 @@ func ensureSettlementRows(charID string) error {
 	return tx.Commit()
 }
 
+func settlementBuildingLevelsTx(tx *sql.Tx, charID string) (map[string]int, error) {
+	rows, err := tx.Query(`SELECT building_key,level FROM character_camp_buildings WHERE character_id=$1`, charID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	levels := map[string]int{}
+	for rows.Next() {
+		var key string
+		var level int
+		if err := rows.Scan(&key, &level); err != nil {
+			return nil, err
+		}
+		levels[key] = level
+	}
+	return levels, rows.Err()
+}
+
+func settlementBuildingLevels(charID string) (map[string]int, error) {
+	rows, err := DB.Query(`SELECT building_key,level FROM character_camp_buildings WHERE character_id=$1`, charID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	levels := map[string]int{}
+	for rows.Next() {
+		var key string
+		var level int
+		if err := rows.Scan(&key, &level); err != nil {
+			return nil, err
+		}
+		levels[key] = level
+	}
+	return levels, rows.Err()
+}
+
+// reconcileSettlementStage promove de forma monotônica. Downgrade nunca ocorre
+// quando o jogador move/desmonta alguma estrutura: o estágio representa um
+// marco histórico da comunidade, enquanto a defesa atual será calculada em
+// snapshots separados nas próximas fatias da M5.
+func reconcileSettlementStage(charID string, now time.Time) error {
+	tx, err := DB.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var settlementID, currentStage string
+	var prosperity int64
+	if err := tx.QueryRow(`SELECT id,stage_key,prosperity FROM settlements WHERE character_id=$1 FOR UPDATE`, charID).Scan(&settlementID, &currentStage, &prosperity); err != nil {
+		return err
+	}
+	var population int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM settlement_residents WHERE settlement_id=$1`, settlementID).Scan(&population); err != nil {
+		return err
+	}
+	levels, err := settlementBuildingLevelsTx(tx, charID)
+	if err != nil {
+		return err
+	}
+	target := game.SettlementHighestEligibleStage(prosperity, population, levels)
+	if game.SettlementStageIndex(target.Key) > game.SettlementStageIndex(currentStage) {
+		requirementsRaw, _ := json.Marshal(target)
+		if _, err := tx.Exec(`
+			UPDATE settlements SET stage_key=$2,stage_updated_at=$3,revision=revision+1,updated_at=$3
+			WHERE id=$1`, settlementID, target.Key, now.UTC()); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`
+			INSERT INTO settlement_stage_history(settlement_id,from_stage,to_stage,prosperity,population,requirements_snapshot,promoted_at)
+			VALUES($1,$2,$3,$4,$5,$6::jsonb,$7)
+			ON CONFLICT(settlement_id,to_stage) DO NOTHING`, settlementID, currentStage, target.Key, prosperity, population, string(requirementsRaw), now.UTC()); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO settlement_pvp_settings(settlement_id) VALUES($1) ON CONFLICT(settlement_id) DO NOTHING`, settlementID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func invalidateSettlementDefenseSnapshotTx(tx *sql.Tx, charID string, now time.Time) error {
+	if charID == "" {
+		return nil
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if _, err := tx.Exec(`
+		UPDATE settlement_defense_snapshots snapshot
+		SET invalidated_at=COALESCE(snapshot.invalidated_at,$2)
+		FROM settlements settlement
+		WHERE snapshot.settlement_id=settlement.id AND settlement.character_id=$1 AND snapshot.invalidated_at IS NULL`, charID, now.UTC()); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`
+		UPDATE settlement_pvp_settings settings
+		SET revision=settings.revision+1,updated_at=$2
+		FROM settlements settlement
+		WHERE settings.settlement_id=settlement.id AND settlement.character_id=$1`, charID, now.UTC())
+	return err
+}
+
 func settlementHousingCapacityForLevel(level int) int {
 	if level < 0 {
 		level = 0
@@ -300,6 +402,9 @@ func GetSettlementState(charID string) (*game.SettlementState, error) {
 		return nil, err
 	}
 	if err := ensureSettlementRows(charID); err != nil {
+		return nil, err
+	}
+	if err := reconcileSettlementStage(charID, time.Now().UTC()); err != nil {
 		return nil, err
 	}
 	state := &game.SettlementState{Residents: []game.SettlementResident{}, Desires: []game.HeroDesire{}, Armory: []game.SettlementArmoryItem{}}
@@ -348,6 +453,24 @@ func GetSettlementState(charID string) (*game.SettlementState, error) {
 	}
 	state.Population = len(state.Residents)
 	state.ProsperityPermanent = true
+	buildingLevels, err := settlementBuildingLevels(charID)
+	if err != nil {
+		return nil, err
+	}
+	state.StageProgress = game.SettlementStageProgressFor(state.StageKey, state.Prosperity, state.Population, buildingLevels)
+	state.Territory = game.SettlementBuildBounds(state.StageKey)
+	var shieldUntil sql.NullTime
+	if err := DB.QueryRow(`
+		SELECT raids_enabled,defense_strategy,shield_until,revision,
+		       EXISTS(SELECT 1 FROM settlement_defense_snapshots snapshot WHERE snapshot.settlement_id=$1 AND snapshot.invalidated_at IS NULL)
+		FROM settlement_pvp_settings WHERE settlement_id=$1`, state.ID).Scan(
+		&state.Defense.RaidsEnabled, &state.Defense.Strategy, &shieldUntil, &state.Defense.Revision, &state.Defense.SnapshotReady); err != nil {
+		return nil, err
+	}
+	if shieldUntil.Valid {
+		value := shieldUntil.Time.UTC()
+		state.Defense.ShieldUntil = &value
+	}
 	if state.Population >= state.PopulationCapacity {
 		state.GrowthBlockedReason = "Moradia lotada: melhore a Cabana do Aventureiro para abrir novas vagas"
 	} else if nextMilestone, exists := game.NextSettlementResidentMilestone(state.Population); exists {

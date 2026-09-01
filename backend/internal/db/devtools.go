@@ -15,19 +15,45 @@ import (
 // estão habilitados e o JWT pertence a um administrador.
 type DeveloperPresetResult struct {
 	CharacterID       string    `json:"character_id"`
-	ResourcesGranted int       `json:"resources_granted"`
-	RecipesUnlocked  int       `json:"recipes_unlocked"`
-	Blueprints       int       `json:"blueprints_unlocked"`
-	ProfessionLevel  int       `json:"profession_level"`
-	TimersFinished   int64     `json:"timers_finished"`
-	AppliedAt        time.Time `json:"applied_at"`
+	PresetMode        string    `json:"preset_mode"`
+	SettlementStage   string    `json:"settlement_stage"`
+	ResidentsPrepared int       `json:"residents_prepared"`
+	ResourcesGranted  int       `json:"resources_granted"`
+	RecipesUnlocked   int       `json:"recipes_unlocked"`
+	Blueprints        int       `json:"blueprints_unlocked"`
+	ProfessionLevel   int       `json:"profession_level"`
+	TimersFinished    int64     `json:"timers_finished"`
+	AppliedAt         time.Time `json:"applied_at"`
 }
 
-// ApplyDeveloperPreset prepara um personagem para QA sem criar regras
+const (
+	DeveloperPresetProgress      = "progress"
+	DeveloperPresetCity          = "city"
+	DeveloperPresetKingdom       = "kingdom"
+	DeveloperPresetKingdomStress = "kingdom_stress"
+)
+
+func normalizeDeveloperPresetMode(mode string) string {
+	switch mode {
+	case DeveloperPresetCity, DeveloperPresetKingdom, DeveloperPresetKingdomStress:
+		return mode
+	default:
+		return DeveloperPresetProgress
+	}
+}
+
+// ApplyDeveloperPreset preserva o contrato anterior e usa o cenário de
+// progressão. O endpoint administrativo pode selecionar cenários territoriais.
+func ApplyDeveloperPreset(charID string, now time.Time) (*DeveloperPresetResult, error) {
+	return ApplyDeveloperPresetMode(charID, now, DeveloperPresetProgress)
+}
+
+// ApplyDeveloperPresetMode prepara um personagem para QA sem criar regras
 // especiais dentro do motor de jogo. Recursos, receitas, profissões e estado
 // continuam usando as tabelas normais; por isso o mesmo personagem exercita os
 // fluxos reais de craft, coleta, construção e combate.
-func ApplyDeveloperPreset(charID string, now time.Time) (*DeveloperPresetResult, error) {
+func ApplyDeveloperPresetMode(charID string, now time.Time, mode string) (*DeveloperPresetResult, error) {
+	mode = normalizeDeveloperPresetMode(mode)
 	if charID == "" {
 		return nil, fmt.Errorf("character_id obrigatório")
 	}
@@ -129,6 +155,20 @@ func ApplyDeveloperPreset(charID string, now time.Time) (*DeveloperPresetResult,
 		blueprintCount++
 	}
 
+	settlementStage := settlementStageKeyTx(tx, charID)
+	residentTarget := game.SettlementPioneerCount
+	_ = tx.QueryRow(`SELECT COUNT(*) FROM settlement_residents resident JOIN settlements settlement ON settlement.id=resident.settlement_id WHERE settlement.character_id=$1`, charID).Scan(&residentTarget)
+	if residentTarget < game.SettlementPioneerCount {
+		residentTarget = game.SettlementPioneerCount
+	}
+	if mode != DeveloperPresetProgress {
+		var err error
+		settlementStage, residentTarget, err = applyDeveloperTerritoryScenarioTx(tx, charID, mode, now)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Povoa todos os 7 pioneiros no assentamento do personagem de teste
 	var settlementID string
 	if err := tx.QueryRow(`SELECT id FROM settlements WHERE character_id=$1`, charID).Scan(&settlementID); err == nil {
@@ -187,11 +227,130 @@ func ApplyDeveloperPreset(charID string, now time.Time) (*DeveloperPresetResult,
 	}
 	return &DeveloperPresetResult{
 		CharacterID:       charID,
-		ResourcesGranted: resourceCount,
-		RecipesUnlocked:  recipeCount,
-		Blueprints:       blueprintCount,
-		ProfessionLevel:  professionLevel,
-		TimersFinished:   timersFinished,
-		AppliedAt:        now,
+		PresetMode:        mode,
+		SettlementStage:   settlementStage,
+		ResidentsPrepared: residentTarget,
+		ResourcesGranted:  resourceCount,
+		RecipesUnlocked:   recipeCount,
+		Blueprints:        blueprintCount,
+		ProfessionLevel:   professionLevel,
+		TimersFinished:    timersFinished,
+		AppliedAt:         now,
 	}, nil
+}
+
+func applyDeveloperTerritoryScenarioTx(tx *sql.Tx, charID, mode string, now time.Time) (string, int, error) {
+	stage := game.SettlementStageCity
+	prosperity := int64(1800)
+	residentTarget := 18
+	if mode == DeveloperPresetKingdom || mode == DeveloperPresetKingdomStress {
+		stage = game.SettlementStageKingdom
+		prosperity = 5000
+		residentTarget = 30
+	}
+	if mode == DeveloperPresetKingdomStress {
+		prosperity = 9000
+		residentTarget = 40
+	}
+
+	var settlementID string
+	if err := tx.QueryRow(`
+		UPDATE settlements
+		SET stage_key=$2,prosperity=GREATEST(prosperity,$3),stage_updated_at=$4,revision=revision+1,updated_at=$4
+		WHERE character_id=$1
+		RETURNING id`, charID, stage, prosperity, now).Scan(&settlementID); err != nil {
+		return "", 0, fmt.Errorf("preparar estágio territorial QA: %w", err)
+	}
+
+	// Garante que todo prédio registrado no catálogo exista e esteja no nível
+	// máximo dentro da área do cenário. Quando M5-B registrar novas estruturas,
+	// os mesmos presets passam a incluí-las automaticamente.
+	rows, err := tx.Query(`SELECT slot_key,building_key,level,COALESCE(upgrade_target_level,0),tile_x,tile_y,rotation FROM character_camp_buildings WHERE character_id=$1 FOR UPDATE`, charID)
+	if err != nil {
+		return "", 0, err
+	}
+	occupied := []game.BuildingSlot{}
+	byBuilding := map[string]int{}
+	for rows.Next() {
+		var slot game.BuildingSlot
+		if err := rows.Scan(&slot.SlotKey, &slot.BuildingKey, &slot.Level, &slot.UpgradeTargetLevel, &slot.TileX, &slot.TileY, &slot.Rotation); err != nil {
+			rows.Close()
+			return "", 0, err
+		}
+		slot.Discovered = true
+		byBuilding[slot.BuildingKey] = len(occupied)
+		occupied = append(occupied, slot)
+	}
+	if err := rows.Close(); err != nil {
+		return "", 0, err
+	}
+
+	for _, definition := range game.ListBuildingDefinitions() {
+		if !game.BuildingUnlocksAtStage(definition, stage) && !definition.DefaultUnlocked {
+			continue
+		}
+		targetLevel := game.BuildingMaxLevelForStage(definition, stage)
+		if targetLevel <= 0 {
+			continue
+		}
+		if index, ok := byBuilding[definition.Key]; ok {
+			// Trocar entre presets QA também precisa ser seguro. Um prédio salvo em
+			// uma área exclusiva do Reino não pode permanecer fora dos limites se
+			// o administrador voltar o mesmo personagem para o cenário Cidade.
+			others := make([]game.BuildingSlot, 0, len(occupied)-1)
+			for otherIndex, other := range occupied {
+				if otherIndex != index {
+					others = append(others, other)
+				}
+			}
+			x, y := occupied[index].TileX, occupied[index].TileY
+			if err := game.ValidateCampPlacementForStage(stage, definition.Key, x, y, occupied[index].Rotation, others, ""); err != nil {
+				var found bool
+				x, y, found = game.FindFirstFreeCampPlacementForStage(stage, definition.Key, occupied[index].Rotation, others)
+				if !found {
+					return "", 0, fmt.Errorf("cenário QA %s não encontrou espaço para realocar %s", mode, definition.Name)
+				}
+			}
+			occupied[index].Level = targetLevel
+			occupied[index].TileX = x
+			occupied[index].TileY = y
+			if _, err := tx.Exec(`UPDATE character_camp_buildings SET level=$3,tile_x=$4,tile_y=$5,upgrade_target_level=NULL,upgrade_started_at=NULL,upgrade_ends_at=NULL,updated_at=$6 WHERE character_id=$1 AND building_key=$2`, charID, definition.Key, targetLevel, x, y, now); err != nil {
+				return "", 0, err
+			}
+			continue
+		}
+		x, y, ok := game.FindFirstFreeCampPlacementForStage(stage, definition.Key, 0, occupied)
+		if !ok {
+			return "", 0, fmt.Errorf("cenário QA %s não encontrou espaço para %s", mode, definition.Name)
+		}
+		slot := game.BuildingSlot{SlotKey: game.CampBuildingInstanceKey(definition.Key), BuildingKey: definition.Key, Level: targetLevel, TileX: x, TileY: y, Discovered: true}
+		if _, err := tx.Exec(`INSERT INTO character_camp_buildings(character_id,slot_key,building_key,level,tile_x,tile_y,rotation,updated_at) VALUES($1,$2,$3,$4,$5,$6,0,$7) ON CONFLICT(character_id,building_key) DO UPDATE SET level=EXCLUDED.level,updated_at=EXCLUDED.updated_at`, charID, slot.SlotKey, slot.BuildingKey, slot.Level, slot.TileX, slot.TileY, now); err != nil {
+			return "", 0, err
+		}
+		byBuilding[definition.Key] = len(occupied)
+		occupied = append(occupied, slot)
+	}
+
+	qaSkills := []string{"lumberjack", "miner", "fisher", "blacksmith", "cook", "alchemist", "woodworker", "jeweler"}
+	for index := game.SettlementPioneerCount + 1; index <= residentTarget; index++ {
+		residentKey := fmt.Sprintf("qa_resident_%02d", index)
+		residentName := fmt.Sprintf("Morador QA %02d", index)
+		var residentID string
+		if err := tx.QueryRow(`
+			INSERT INTO settlement_residents(settlement_id,resident_key,name,icon,title,traits,happiness,state,updated_at)
+			VALUES($1,$2,$3,'🧑','Morador de Teste','["QA territorial"]'::jsonb,85,'idle',$4)
+			ON CONFLICT(settlement_id,resident_key) DO UPDATE SET name=EXCLUDED.name,happiness=EXCLUDED.happiness,state='idle',updated_at=EXCLUDED.updated_at
+			RETURNING id`, settlementID, residentKey, residentName, now).Scan(&residentID); err != nil {
+			return "", 0, err
+		}
+		skillKey := qaSkills[(index-game.SettlementPioneerCount-1)%len(qaSkills)]
+		if _, err := tx.Exec(`INSERT INTO settlement_resident_skills(resident_id,skill_key,level,experience,lifetime_experience,updated_at) VALUES($1,$2,60,0,100000,$3) ON CONFLICT(resident_id,skill_key) DO UPDATE SET level=60,lifetime_experience=GREATEST(settlement_resident_skills.lifetime_experience,100000),updated_at=EXCLUDED.updated_at`, residentID, skillKey, now); err != nil {
+			return "", 0, err
+		}
+	}
+
+	if _, err := tx.Exec(`UPDATE character_camps SET layout_version=4,state_revision=state_revision+1,updated_at=$2 WHERE character_id=$1`, charID, now); err != nil {
+		return "", 0, err
+	}
+	return stage, residentTarget, nil
 }

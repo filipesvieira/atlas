@@ -7,6 +7,8 @@ import type {
   PvPMatchReplay,
   PvPMatchmakingStatus,
   PvPCombatSnapshot,
+  PvPCompetitiveOverview,
+  PvPCosmeticCollection,
   PvPSeasonStatus,
   PvPTacticalStrategy,
 } from '../../hooks/useGameSocket';
@@ -18,6 +20,8 @@ interface Props {
   matchmaking: PvPMatchmakingStatus;
   season: PvPSeasonStatus | null;
   ladder: PvPLadderEntry[];
+  competitive: PvPCompetitiveOverview | null;
+  cosmetics: PvPCosmeticCollection | null;
   history: PvPMatchHistoryEntry[];
   replay: PvPMatchReplay | null;
   onRespondDuelChallenge: (id: string, accept: boolean) => void;
@@ -29,6 +33,10 @@ interface Props {
   onRequestSeason: () => void;
   onRequestLadder: () => void;
   onClaimSeasonRewards: () => void;
+  onForfeitMatch: (matchId: string) => void;
+  onRequestCompetitive: () => void;
+  onRequestCosmetics: () => void;
+  onSetCosmetic: (type: 'title' | 'banner' | 'cosmetic', key: string) => void;
   onRequestHistory: () => void;
   onRequestReplay: (matchId: string) => void;
   onClearReplay: () => void;
@@ -90,6 +98,7 @@ export function PlayerInteractionLayer(props: Props) {
   const [strategy, setStrategy] = useState<PvPTacticalStrategy>('balanced');
   const [arenaHubOpen, setArenaHubOpen] = useState(false);
   const [arenaTab, setArenaTab] = useState<ArenaTab>('ranked');
+  const [confirmForfeit, setConfirmForfeit] = useState(false);
   const challenge = props.pendingDuelChallenges[0];
   const extraChallenges = Math.max(0, props.pendingDuelChallenges.length - 1);
   const queuedCasual = props.matchmaking.queued && props.matchmaking.queue_mode !== 'ranked';
@@ -105,6 +114,8 @@ export function PlayerInteractionLayer(props: Props) {
     props.onRequestHistory();
     props.onRequestSeason();
     props.onRequestLadder();
+    props.onRequestCompetitive();
+    props.onRequestCosmetics();
   }, [arenaHubOpen]);
 
   useEffect(() => {
@@ -161,14 +172,23 @@ export function PlayerInteractionLayer(props: Props) {
               </div>
             )}
             <div className="mt-4"><StrategySelector strategy={strategy} disabled={props.pvpArenaWaiting} onChange={setStrategy} /></div>
-            <button
-              type="button"
-              disabled={props.pvpArenaWaiting}
-              onClick={() => props.onConfirmPvPMatch(props.pvpMatchNotice!.id, strategy)}
-              className={`${props.pvpMatchNotice.ranked ? 'pixel-btn pixel-btn-gold' : 'pixel-btn pixel-btn-purple'} mt-4 w-full py-2 text-xs disabled:opacity-50`}
-            >
-              {props.pvpArenaWaiting ? '⏳ Aguardando oponente' : '⚔️ Confirmar entrada'}
-            </button>
+            <div className="mt-4 grid grid-cols-[auto_1fr] gap-2">
+              <button
+                type="button"
+                onClick={() => props.onForfeitMatch(props.pvpMatchNotice!.id)}
+                className="pixel-btn pixel-btn-dark px-4 py-2 text-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={props.pvpArenaWaiting}
+                onClick={() => props.onConfirmPvPMatch(props.pvpMatchNotice!.id, strategy)}
+                className={`${props.pvpMatchNotice.ranked ? 'pixel-btn pixel-btn-gold' : 'pixel-btn pixel-btn-purple'} py-2 text-xs disabled:opacity-50`}
+              >
+                {props.pvpArenaWaiting ? '⏳ Aguardando oponente' : '⚔️ Confirmar entrada'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -273,6 +293,48 @@ export function PlayerInteractionLayer(props: Props) {
                     ))}
                   </div>
                 </div>
+
+                {props.competitive && (
+                  <div className="rounded-lg border border-cyan-900/60 bg-cyan-950/10 p-4">
+                    <div className="font-pixel-heading text-[10px] text-cyan-300">📊 Saúde competitiva</div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-[9px] text-slate-500 sm:grid-cols-4">
+                      <span>{props.competitive.positioned_players} posicionados</span>
+                      <span>{props.competitive.ranked_matches} partidas</span>
+                      <span>média {props.competitive.average_duration_seconds}s</span>
+                      <span>{props.competitive.repeat_limited_matches} retorno limitado</span>
+                    </div>
+                    <div className="mt-3 grid gap-1 sm:grid-cols-3">
+                      {props.competitive.tier_distribution.map((entry) => (
+                        <div key={entry.tier.key} className="flex items-center justify-between rounded bg-slate-950/50 px-2 py-1 text-[9px]">
+                          <span className="text-slate-300">{entry.tier.icon} {entry.tier.name}</span>
+                          <span className="text-slate-500">{entry.players} · {entry.percent}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {props.cosmetics && (
+                  <div className="rounded-lg border border-violet-900/60 bg-violet-950/10 p-4">
+                    <div className="font-pixel-heading text-[10px] text-violet-300">🎖️ Identidade competitiva</div>
+                    <div className="mt-1 text-[9px] text-slate-500">Seleção funcional; a apresentação visual final será refinada depois.</div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                      {(['title', 'banner', 'cosmetic'] as const).map((type) => {
+                        const unlocked = props.cosmetics!.unlocks.filter((entry) => entry.type === type);
+                        const selected = type === 'title' ? props.cosmetics!.equipped_title : type === 'banner' ? props.cosmetics!.equipped_banner : props.cosmetics!.equipped_cosmetic;
+                        return (
+                          <label key={type} className="text-[9px] text-slate-400">
+                            <span className="mb-1 block capitalize">{type === 'title' ? 'Título' : type === 'banner' ? 'Banner' : 'Cosmético'}</span>
+                            <select value={selected ?? ''} onChange={(event) => props.onSetCosmetic(type, event.target.value)} className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-[9px] text-slate-200">
+                              <option value="">Nenhum</option>
+                              {unlocked.map((entry) => <option key={entry.key} value={entry.key}>{entry.key}</option>)}
+                            </select>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -297,12 +359,32 @@ export function PlayerInteractionLayer(props: Props) {
                       <span className="shrink-0 text-right text-slate-500">
                         <span>{entry.rating_delta >= 0 ? '+' : ''}{entry.rating_delta} · CP {entry.combat_power}/{entry.opponent_power}</span>
                         {entry.ranked && <span className="block text-[9px] text-amber-500/80">H +{entry.honor_awarded ?? 0}{(entry.repeat_multiplier ?? 1) < 1 ? ` · retorno ${Math.round((entry.repeat_multiplier ?? 1) * 100)}%` : ''}</span>}
+                        <span className="block text-[8px] text-slate-600">{entry.duration_seconds ?? 0}s{entry.completion_reason === 'forfeit' ? ' · desistência' : ''}{(entry.disconnect_count ?? 0) > 0 ? ` · ${entry.disconnect_count} queda(s)` : ''}</span>
                       </span>
                     </button>
                   ))}
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {props.pvpCombat?.status === 'active' && (
+        <div className="fixed right-3 top-20 z-[65]">
+          <button type="button" onClick={() => setConfirmForfeit(true)} className="pixel-btn pixel-btn-dark px-3 py-1.5 text-[9px] text-rose-200">🏳️ Desistir</button>
+        </div>
+      )}
+
+      {confirmForfeit && props.pvpCombat?.status === 'active' && (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-xl border border-rose-700/70 bg-slate-950 p-5 shadow-2xl">
+            <div className="font-pixel-heading text-xs text-rose-300">🏳️ Confirmar desistência</div>
+            <p className="mt-3 text-[10px] leading-relaxed text-slate-400">A conexão pode ser fechada sem abandonar a luta. Use desistir somente se quiser conceder a vitória ao adversário. Em partida ranqueada, a derrota e o rating serão aplicados normalmente.</p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setConfirmForfeit(false)} className="pixel-btn pixel-btn-dark py-2 text-[10px]">Continuar lutando</button>
+              <button type="button" onClick={() => { props.onForfeitMatch(props.pvpCombat!.match_id); setConfirmForfeit(false); }} className="pixel-btn pixel-btn-crimson py-2 text-[10px]">Desistir</button>
+            </div>
           </div>
         </div>
       )}

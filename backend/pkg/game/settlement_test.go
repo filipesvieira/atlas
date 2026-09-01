@@ -81,3 +81,17 @@ func TestGatheringProsperityGainIsBounded(t *testing.T) {
 		}
 	}
 }
+func TestSettlementStageTerritoryGrowthMatchesBuildBounds(t *testing.T) {
+	lastArea := 0
+	for _, definition := range SettlementStageDefinitions() {
+		bounds := SettlementBuildBounds(definition.Key)
+		if definition.TerritoryWidth != bounds.Width() || definition.TerritoryHeight != bounds.Height() {
+			t.Fatalf("%s metadata=%dx%d bounds=%dx%d", definition.Key, definition.TerritoryWidth, definition.TerritoryHeight, bounds.Width(), bounds.Height())
+		}
+		area := bounds.Width() * bounds.Height()
+		if area <= lastArea {
+			t.Fatalf("território de %s não cresceu: %d <= %d", definition.Key, area, lastArea)
+		}
+		lastArea = area
+	}
+}

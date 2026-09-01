@@ -3,6 +3,7 @@ import {
   drawIsoBox,
   drawIsoFootprint,
   drawIsoPanel,
+  drawIsoPanelApron,
   drawIsoPanelGrid,
   drawIsoRoof,
   drawIsoShadow,
@@ -31,11 +32,11 @@ export function renderHut(ctx: CanvasRenderingContext2D, renderCtx: BuildingRend
     const width = 62;
     const depth = 46;
     drawIsoShadow(ctx, width + 8, depth + 8);
-    drawIsoFootprint(ctx, width, depth, '#3f2b1d', '#1c1917');
-    drawIsoWalls(ctx, width - 8, depth - 8, 7, '#78350f', '#92400e', '#b45309');
-    drawIsoRoof(ctx, width - 10, depth - 10, 7, 27, '#92400e', '#78350f', '#713f12', '#5c2d11');
-    drawIsoGroundPost(ctx, -24, -8, 22, 3);
-    drawIsoGroundPost(ctx, 24, -8, 22, 3);
+    drawIsoFootprint(ctx, width, depth, '#6b4f35', '#292018');
+    drawIsoWalls(ctx, width - 8, depth - 8, 13, '#8b5a2b', '#6b3f22', '#a16207');
+    drawIsoRoof(ctx, width - 10, depth - 10, 13, 28, '#9a3412', '#7c2d12', '#b45309', '#78350f');
+    const door = drawIsoPanel(ctx, { width: width - 8, depth: depth - 8, wallHeight: 13, side: 'right', position: 0.52, size: 13, height: 15, fill: '#292524', stroke: '#0f172a' });
+    drawIsoPanelApron(ctx, door, 'right', 13, '#a16207', '#451a03', 3);
     const lamp = Math.sin(time / 150) * 0.15 + 0.85;
     ctx.fillStyle = `rgba(251, 191, 36, ${lamp})`;
     ctx.fillRect(8, -22, 6, 7);
@@ -48,9 +49,9 @@ export function renderHut(ctx: CanvasRenderingContext2D, renderCtx: BuildingRend
     const depth = 78;
     const wallHeight = 43;
     drawIsoShadow(ctx, width + 10, depth + 10);
-    drawIsoFootprint(ctx, width, depth, '#475569', '#1e293b');
-    drawIsoWalls(ctx, width, depth, wallHeight, '#5c2d11', '#451a03', '#713f12');
-    drawIsoRoof(ctx, width, depth, wallHeight, 31, '#92400e', '#78350f', '#713f12', '#5c2d11');
+    drawIsoFootprint(ctx, width, depth, '#78716c', '#292524');
+    drawIsoWalls(ctx, width, depth, wallHeight, '#8b5a2b', '#6b3f22', '#a16207');
+    drawIsoRoof(ctx, width, depth, wallHeight, 34, '#9a3412', '#7c2d12', '#b45309', '#78350f');
 
     const door = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'right', position: 0.52, size: 19, height: 29, fill: '#1c1917', stroke: '#0f172a' });
     drawIsoPanelGrid(ctx, door, '#451a03');
@@ -62,8 +63,9 @@ export function renderHut(ctx: CanvasRenderingContext2D, renderCtx: BuildingRend
     const windowRight = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'right', position: 0.8, size: 15, height: 15, bottomOffset: 11, fill: `rgba(251, 191, 36, ${0.82 + Math.sin(time / 260) * 0.08})`, stroke: '#78350f' });
     drawIsoPanelGrid(ctx, windowRight);
 
-    drawIsoBox(ctx, { x: -width / 2 - 9, y: -2, width: 12, depth: 12, height: 21, top: '#92400e', left: '#78350f', right: '#451a03' });
-    drawIsoBox(ctx, { x: width / 2 + 7, y: 1, width: 12, depth: 12, height: 18, top: '#92400e', left: '#78350f', right: '#451a03' });
+    // Patamar e banco acompanham exatamente a diagonal da parede frontal.
+    drawIsoPanelApron(ctx, door, 'right', 19, '#a16207', '#451a03', 4);
+    drawIsoBox(ctx, { x: 30, y: 18, width: 15, depth: 7, height: 7, top: '#b45309', left: '#78350f', right: '#5c2d11' });
     ctx.restore();
     return;
   }
@@ -73,9 +75,9 @@ export function renderHut(ctx: CanvasRenderingContext2D, renderCtx: BuildingRend
   const depth = 90;
   const wallHeight = 52;
   drawIsoShadow(ctx, width + 12, depth + 12);
-  drawIsoFootprint(ctx, width, depth, '#64748b', '#1e293b');
-  drawIsoWalls(ctx, width, depth, wallHeight, '#5c2d11', '#3b1d11', '#713f12');
-  drawIsoRoof(ctx, width, depth, wallHeight, 38, '#9f1239', '#7f1d1d', '#7c2d12', '#5c1f16');
+  drawIsoFootprint(ctx, width, depth, '#78716c', '#292524');
+  drawIsoWalls(ctx, width, depth, wallHeight, '#8b5a2b', '#5c351d', '#a16207');
+  drawIsoRoof(ctx, width, depth, wallHeight, 42, '#9f1239', '#7f1d1d', '#9a3412', '#7c2d12');
 
   const door = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'right', position: 0.5, size: 22, height: 37, fill: '#1c1917', stroke: '#0f172a' });
   drawIsoPanelGrid(ctx, door, '#451a03');
@@ -86,6 +88,9 @@ export function renderHut(ctx: CanvasRenderingContext2D, renderCtx: BuildingRend
   drawIsoPanelGrid(ctx, upperWindow);
   const sideWindow = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'right', position: 0.82, size: 19, height: 18, bottomOffset: 16, fill: `rgba(251, 191, 36, ${0.88 + Math.sin(time / 200) * 0.06})`, stroke: '#5c2d11' });
   drawIsoPanelGrid(ctx, sideWindow);
+
+  drawIsoPanelApron(ctx, door, 'right', 23, '#a16207', '#451a03', 4);
+  drawIsoBox(ctx, { x: 35, y: 22, width: 18, depth: 8, height: 8, top: '#b45309', left: '#78350f', right: '#5c2d11' });
 
   const chimneyX = 35;
   const chimneyY = -wallHeight - 24;

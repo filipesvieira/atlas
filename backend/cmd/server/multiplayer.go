@@ -306,6 +306,9 @@ func (h *worldChatHub) Register(session *game.GameSession, characterID string) e
 	if err != nil {
 		return err
 	}
+	if pendingArena != nil && pendingArena.Status == game.PvPMatchActive {
+		_ = db.RecordPvPParticipantConnection(characterID, true, time.Now().UTC())
+	}
 	presenceToken, err := newPresenceToken()
 	if err != nil {
 		return err
@@ -342,6 +345,9 @@ func (h *worldChatHub) Unregister(characterID string, session *game.GameSession)
 	}
 	h.mu.Unlock()
 	if ok && client.Session == session {
+		if client.Session.IsPvPActive() {
+			_ = db.RecordPvPParticipantConnection(characterID, false, time.Now().UTC())
+		}
 		if count, err := h.presence.Unregister(characterID, client.PresenceToken, time.Now().UTC()); err == nil {
 			_ = h.publishPresence(count)
 		}

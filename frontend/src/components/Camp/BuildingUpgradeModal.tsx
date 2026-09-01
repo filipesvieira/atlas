@@ -3,6 +3,8 @@ import { BuildingDefinition, ResourceDefinition } from '../../game/GameCatalog';
 import { BuildingSlot, ResourceAmount } from '../../hooks/useGameSocket';
 import { PixelResourceSprite } from '../../game/registries/PixelResourceRegistry';
 import { BuildingScenePreview } from './BuildingScenePreview';
+import { formatBuildingEffect } from '../../game/camp/BuildingDefensePresentation';
+import { SettlementStageLabels, settlementStageAtLeast } from '../../game/camp/CampLayoutRegistry';
 
 interface BuildingUpgradeModalProps {
   isOpen: boolean;
@@ -14,6 +16,7 @@ interface BuildingUpgradeModalProps {
   characterGold: number;
   resources: ResourceAmount[];
   definitions?: ResourceDefinition[];
+  settlementStageKey?: string;
   onConfirmUpgrade: (slotKey: string, buildingKey: string) => void;
 }
 
@@ -27,6 +30,7 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
   characterGold,
   resources,
   definitions = [],
+  settlementStageKey = 'camp',
   onConfirmUpgrade,
 }) => {
   if (!isOpen || !buildingDef || !slot) return null;
@@ -95,12 +99,16 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
         })
       : [];
 
+  const requiredStage = nextLvlDef?.required_settlement_stage || buildingDef.unlock_stage || '';
+  const hasSettlementStage = settlementStageAtLeast(settlementStageKey, requiredStage);
+
   const canUpgrade =
     !isMaxLevel &&
     hasEnoughGold &&
     costChecks.every((c) => c.hasEnough) &&
     trophyChecks.every((t) => t.hasEnough) &&
-    buildingChecks.every((b) => b.hasEnough);
+    buildingChecks.every((b) => b.hasEnough) &&
+    hasSettlementStage;
 
   const formatDuration = (secondsVal?: number, nanoseconds?: number) => {
     let seconds = secondsVal || 0;
@@ -109,33 +117,10 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
     }
     if (seconds <= 0) return 'Imediato';
     if (seconds < 60) return `${seconds}s`;
-    const mins = Math.floor(seconds / 60);
-    return `${mins}m`;
-  };
-
-  const formatEffect = (key: string, val: number) => {
-    switch (key) {
-      case 'camp_hp_regen_percent':
-        return `+${val}% Regen HP no Acampamento`;
-      case 'camp_mana_regen_percent':
-        return `+${val}% Regen Mana no Acampamento`;
-      case 'camp_all_regen_percent':
-        return `+${val}% Regen HP/MP no Acampamento`;
-      case 'resource_storage':
-        return `Armazém aumentado para ${val.toLocaleString()} unidades`;
-      case 'salvage_unlock':
-        return `Reciclagem liberada na Bancada`;
-      case 'salvage_efficiency_percent':
-        return `+${val}% Rendimento de materiais`;
-      case 'salvage_batch_size':
-        return `Lote: até ${val} itens por vez`;
-      case 'salvage_success_chance':
-        return `+${val}% Taxa de Sucesso no Desmonte`;
-      case 'salvage_safe_mode':
-        return `Modo Seguro de Desmonte Liberado`;
-      default:
-        return `${key}: +${val}`;
-    }
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   };
 
   return (
@@ -177,7 +162,7 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
               {nextLvlDef.effects.map((eff) => (
                 <li key={eff.key} className="flex items-center gap-1.5">
                   <span className="text-emerald-500">▶</span>
-                  <span>{formatEffect(eff.key, eff.value)}</span>
+                  <span>{formatBuildingEffect(eff.key, eff.value)}</span>
                 </li>
               ))}
             </ul>
@@ -194,6 +179,16 @@ export const BuildingUpgradeModal: React.FC<BuildingUpgradeModalProps> = ({
         {!isMaxLevel && nextLvlDef && (
           <div className="space-y-2">
             <h4 className="text-xs font-pixel-heading text-slate-300">Requisitos de Construção:</h4>
+
+            {requiredStage && (
+              <div className={`flex items-center justify-between p-2 rounded pixel-slot text-xs ${hasSettlementStage ? 'border-emerald-500/40 text-emerald-300 bg-emerald-950/30' : 'border-rose-500/40 text-rose-300 bg-rose-950/40'}`}>
+                <div className="flex items-center gap-2">
+                  <span>{hasSettlementStage ? '✅' : '🏰'}</span>
+                  <span className="font-medium">Requer estágio {SettlementStageLabels[requiredStage] || requiredStage}</span>
+                </div>
+                <span className="text-[10px] text-slate-400">Atual: {SettlementStageLabels[settlementStageKey] || settlementStageKey}</span>
+              </div>
+            )}
 
             {/* Pré-requisitos de Construções */}
             {buildingChecks.length > 0 && (

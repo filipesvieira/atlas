@@ -4,9 +4,28 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/atlas/backend/pkg/game"
 )
+
+func settlementStageKeyTx(tx *sql.Tx, charID string) string {
+	var stage string
+	err := tx.QueryRow(`SELECT COALESCE(stage_key,'camp') FROM settlements WHERE character_id=$1`, charID).Scan(&stage)
+	if err != nil || stage == "" {
+		return game.SettlementStageCamp
+	}
+	return stage
+}
+
+func settlementStageKey(charID string) string {
+	var stage string
+	err := DB.QueryRow(`SELECT COALESCE(stage_key,'camp') FROM settlements WHERE character_id=$1`, charID).Scan(&stage)
+	if err != nil || stage == "" {
+		return game.SettlementStageCamp
+	}
+	return stage
+}
 
 // MoveCampBuilding reposiciona uma construção sem alterar nível, recursos ou tempo de obra.
 // O servidor é autoritativo para limites, colisões e revisão do layout.
@@ -68,6 +87,9 @@ func MoveCampBuilding(accountID, charID, slotKey string, tileX, tileY, rotation 
 	if target == nil {
 		return nil, fmt.Errorf("construção não encontrada")
 	}
+	if game.IsPerimeterBuilding(target.BuildingKey) {
+		return nil, fmt.Errorf("%s acompanha o perímetro do assentamento e não pode ser reposicionada", target.BuildingKey)
+	}
 
 	discovered := map[string]bool{"campfire": true}
 	bpRows, err := tx.Query(`SELECT building_key FROM character_building_blueprints WHERE character_id=$1`, charID)
@@ -114,14 +136,18 @@ func MoveCampBuilding(accountID, charID, slotKey string, tileX, tileY, rotation 
 		}
 	}
 
-	if err := game.ValidateCampPlacement(target.BuildingKey, tileX, tileY, rotation, buildings, slotKey); err != nil {
+	stageKey := settlementStageKeyTx(tx, charID)
+	if err := game.ValidateCampPlacementForStage(stageKey, target.BuildingKey, tileX, tileY, rotation, buildings, slotKey); err != nil {
 		return nil, err
 	}
 
 	if _, err := tx.Exec(`UPDATE character_camp_buildings SET tile_x=$3,tile_y=$4,rotation=$5,updated_at=NOW() WHERE character_id=$1 AND slot_key=$2`, charID, slotKey, tileX, tileY, rotation); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(`UPDATE character_camps SET layout_version=GREATEST(layout_version,3),state_revision=state_revision+1,updated_at=NOW() WHERE character_id=$1`, charID); err != nil {
+	if _, err := tx.Exec(`UPDATE character_camps SET layout_version=GREATEST(layout_version,4),state_revision=state_revision+1,updated_at=NOW() WHERE character_id=$1`, charID); err != nil {
+		return nil, err
+	}
+	if err := invalidateSettlementDefenseSnapshotTx(tx, charID, time.Now().UTC()); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {

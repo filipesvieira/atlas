@@ -6,6 +6,18 @@ import { renderWarehouse } from './renderers/WarehouseRenderer';
 import { renderWorkbench } from './renderers/WorkbenchRenderer';
 import { renderKitchen } from './renderers/KitchenRenderer';
 import { renderAlchemyBench } from './renderers/AlchemyBenchRenderer';
+import {
+  renderWallPreview,
+  renderGatePreview,
+  renderWatchtower,
+  renderBarracks,
+  renderVault,
+  renderInfirmary,
+  renderPrison,
+  renderEngineerWorkshop,
+  renderWarRoom,
+  renderResonator,
+} from './renderers/DefenseBuildingRenderers';
 
 type BuildingRenderer = (ctx: CanvasRenderingContext2D, renderCtx: BuildingRenderContext) => void;
 
@@ -20,6 +32,16 @@ class CampBuildingRegistryClass {
     this.register('workbench', renderWorkbench);
     this.register('kitchen', renderKitchen);
     this.register('alchemy_bench', renderAlchemyBench);
+    this.register('wall', renderWallPreview);
+    this.register('gate', renderGatePreview);
+    this.register('watchtower', renderWatchtower);
+    this.register('barracks', renderBarracks);
+    this.register('vault', renderVault);
+    this.register('infirmary', renderInfirmary);
+    this.register('prison', renderPrison);
+    this.register('engineer_workshop', renderEngineerWorkshop);
+    this.register('war_room', renderWarRoom);
+    this.register('resonator', renderResonator);
   }
 
   public register(buildingKey: string, renderer: BuildingRenderer) {

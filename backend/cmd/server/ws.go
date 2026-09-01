@@ -90,6 +90,8 @@ type ClientAction struct {
 	PvPMatchID          string                   `json:"pvp_match_id"`
 	PvPTacticalStrategy string                   `json:"pvp_tactical_strategy"`
 	PvPStrategyVersion  int                      `json:"pvp_strategy_version"`
+	PvPCosmeticType     string                   `json:"pvp_cosmetic_type"`
+	PvPCosmeticKey      string                   `json:"pvp_cosmetic_key"`
 	SkinKey             string                   `json:"skin_key"`
 }
 

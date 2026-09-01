@@ -1,15 +1,20 @@
 import type { CampState, SettlementResident } from '../../hooks/useGameSocket';
 import { CampBuildingRegistry } from './CampBuildingRegistry';
 import {
-  CAMP_GRID_HEIGHT,
-  CAMP_GRID_WIDTH,
   LegacySlotDefaults,
   getBuildingVisualProfile,
   getGridFootprint,
+  isPerimeterBuilding,
+  getSettlementStageBounds,
+  SettlementBuildBounds,
+  getCampGridHeight,
+  getCampGridWidth,
   tileToScreen,
 } from './CampLayoutRegistry';
 import { BuildingRenderContext, CampPlacementPreview } from './types';
 import { constructionOverlayRenderer } from './renderers/ConstructionOverlayRenderer';
+import { buildFortificationRenderEntries } from './renderers/FortificationPerimeterRenderer';
+import { SETTLEMENT_WORLD_PIXEL_HEIGHT, SETTLEMENT_WORLD_PIXEL_WIDTH } from '../IsoWorldGeometry';
 import {
   buildCampScreenRoute,
   CampObstacle,
@@ -47,38 +52,58 @@ export interface CampHeroSceneState {
   facing: number;
 }
 
-const MAX_VISIBLE_RESIDENTS = 10;
+const VISIBLE_RESIDENTS_BY_STAGE: Record<string, number> = {
+  camp: 10,
+  outpost: 12,
+  hamlet: 14,
+  village: 16,
+  city: 18,
+  kingdom: 20,
+};
 
 export class CampSceneRenderer {
-  private hitRegions = new Map<string, { x: number; y: number; width: number; height: number }>();
+  private hitRegions: Array<{ slotKey: string; rect: { x: number; y: number; width: number; height: number } }> = [];
   private placementPreview: CampPlacementPreview | null = null;
   private collisionObstacles: CampObstacle[] = [];
   private collisionSignature = '';
   private collisionRoutes = new Map<string, CampRoute>();
+  private territoryLayerCache = new Map<string, HTMLCanvasElement>();
 
-  private refreshCollision(camp: CampState | null) {
+  private refreshCollision(camp: CampState | null, stageKey = 'camp') {
     const obstacles = getCampObstacles(camp);
-    const signature = obstacles
-      .map((obstacle) => `${obstacle.slotKey}:${obstacle.tileX},${obstacle.tileY},${obstacle.width},${obstacle.height}`)
-      .sort()
-      .join('|');
+    const bounds = getSettlementStageBounds(stageKey);
+    const signature = [
+      stageKey,
+      `${bounds.minX},${bounds.minY},${bounds.maxX},${bounds.maxY}`,
+      ...obstacles
+        .map((obstacle) => `${obstacle.slotKey}:${obstacle.tileX},${obstacle.tileY},${obstacle.width},${obstacle.height}`)
+        .sort(),
+    ].join('|');
     if (signature === this.collisionSignature) return;
     this.collisionSignature = signature;
     this.collisionObstacles = obstacles;
     this.collisionRoutes.clear();
   }
 
-  private getCollisionRoute(startX: number, startY: number, endX: number, endY: number) {
-    const key = `${startX},${startY}->${endX},${endY}`;
+  private getCollisionRoute(startX: number, startY: number, endX: number, endY: number, bounds: SettlementBuildBounds) {
+    const key = `${bounds.minX},${bounds.minY},${bounds.maxX},${bounds.maxY}:${startX},${startY}->${endX},${endY}`;
     const cached = this.collisionRoutes.get(key);
     if (cached) return cached;
     const route = buildCampScreenRoute(
       { x: startX, y: startY },
       { x: endX, y: endY },
       this.collisionObstacles,
+      bounds,
     );
     this.collisionRoutes.set(key, route);
     return route;
+  }
+
+  private routeTile(bounds: SettlementBuildBounds, rx: number, ry: number) {
+    return {
+      x: Math.round(bounds.minX + Math.max(0, Math.min(1, rx)) * Math.max(0, bounds.maxX - bounds.minX - 1)),
+      y: Math.round(bounds.minY + Math.max(0, Math.min(1, ry)) * Math.max(0, bounds.maxY - bounds.minY - 1)),
+    };
   }
 
   public setPlacementPreview(preview: CampPlacementPreview | null) {
@@ -86,18 +111,19 @@ export class CampSceneRenderer {
   }
 
   public hitTest(x: number, y: number): string | null {
-    const regions = Array.from(this.hitRegions.entries()).reverse();
-    for (const [slotKey, rect] of regions) {
+    for (let index = this.hitRegions.length - 1; index >= 0; index--) {
+      const { slotKey, rect } = this.hitRegions[index];
       if (x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height) return slotKey;
     }
     return null;
   }
 
-  public isPlacementValid(camp: CampState | null, slotKey: string, tileX: number, tileY: number, rotation = 0): boolean {
+  public isPlacementValid(camp: CampState | null, slotKey: string, tileX: number, tileY: number, rotation = 0, stageKey = 'camp'): boolean {
     const moving = camp?.buildings?.[slotKey];
-    if (!moving) return false;
+    if (!moving || isPerimeterBuilding(moving.building_key)) return false;
     const fp = getGridFootprint(moving.building_key, rotation);
-    if (tileX < 0 || tileY < 0 || tileX + fp.width > CAMP_GRID_WIDTH || tileY + fp.height > CAMP_GRID_HEIGHT) return false;
+    const bounds = getSettlementStageBounds(stageKey);
+    if (tileX < bounds.minX || tileY < bounds.minY || tileX + fp.width > bounds.maxX || tileY + fp.height > bounds.maxY) return false;
     for (const [otherKey, other] of Object.entries(camp?.buildings || {})) {
       const otherDiscovered = other.building_key === 'campfire' || Boolean(camp?.blueprints?.[other.building_key]) || other.level > 0;
       if (otherKey === slotKey || (!otherDiscovered && other.level <= 0 && !other.upgrade_target_level)) continue;
@@ -108,9 +134,12 @@ export class CampSceneRenderer {
   }
 
   /** Posição visual do herói no acampamento, compartilhando a malha dos moradores. */
-  public getHeroSceneState(time: number, camp: CampState | null = null): CampHeroSceneState {
-    this.refreshCollision(camp);
-    const route = this.getCollisionRoute(8, 14, 15, 9);
+  public getHeroSceneState(time: number, camp: CampState | null = null, stageKey = 'camp'): CampHeroSceneState {
+    this.refreshCollision(camp, stageKey);
+    const bounds = getSettlementStageBounds(stageKey);
+    const startTile = this.routeTile(bounds, 0.34, 0.76);
+    const endTile = this.routeTile(bounds, 0.66, 0.43);
+    const route = this.getCollisionRoute(startTile.x, startTile.y, endTile.x, endTile.y, bounds);
     const start = sampleCampScreenRoute(route, 0);
     const end = sampleCampScreenRoute(route, 1);
     const cycle = 18000;
@@ -150,18 +179,27 @@ export class CampSceneRenderer {
     camp: CampState | null,
     time: number,
     residents: SettlementResident[] = [],
-    heroRenderer?: (state: CampHeroSceneState) => void
+    heroRenderer?: (state: CampHeroSceneState) => void,
+    stageKey = 'camp',
   ) {
     const slotsMap = camp?.buildings || {};
     const blueprintsMap = camp?.blueprints || {};
-    this.refreshCollision(camp);
-    this.hitRegions.clear();
+    this.refreshCollision(camp, stageKey);
+    this.hitRegions = [];
+    this.renderTerritoryLayer(ctx, stageKey, time);
 
     const renderQueue: SceneRenderEntry[] = [];
     let stableOrder = 0;
 
+    const fortificationEntries = buildFortificationRenderEntries(ctx, camp, stageKey, time, stableOrder);
+    for (const entry of fortificationEntries) {
+      renderQueue.push({ ...entry, slotKey: entry.slotKey, hitRegion: entry.hitRegion });
+      stableOrder = Math.max(stableOrder, entry.stableOrder + 1);
+    }
+
     for (const slotData of Object.values(slotsMap)) {
       const buildingKey = slotData.building_key;
+      if (isPerimeterBuilding(buildingKey)) continue;
       const isDiscovered = buildingKey === 'campfire' || Boolean(blueprintsMap[buildingKey]) || slotData.level > 0;
       if (!isDiscovered) continue;
 
@@ -240,7 +278,7 @@ export class CampSceneRenderer {
     }
 
     if (heroRenderer) {
-      const heroState = this.getHeroSceneState(time, camp);
+      const heroState = this.getHeroSceneState(time, camp, stageKey);
       renderQueue.push({
         depth: heroState.groundY,
         stableOrder: stableOrder++,
@@ -248,7 +286,7 @@ export class CampSceneRenderer {
       });
     }
 
-    const residentStates = this.calculateResidentStates(camp, residents, time);
+    const residentStates = this.calculateResidentStates(camp, residents, time, stageKey);
     for (const state of residentStates) {
       renderQueue.push({
         depth: state.y,
@@ -260,13 +298,124 @@ export class CampSceneRenderer {
     renderQueue
       .sort((a, b) => a.depth - b.depth || a.stableOrder - b.stableOrder)
       .forEach((entry) => {
-        if (entry.slotKey && entry.hitRegion) this.hitRegions.set(entry.slotKey, entry.hitRegion);
+        if (entry.slotKey && entry.hitRegion) this.hitRegions.push({ slotKey: entry.slotKey, rect: entry.hitRegion });
         entry.render();
       });
 
     if (this.placementPreview && camp?.buildings?.[this.placementPreview.slotKey]) {
-      this.renderPlacementPreview(ctx, camp, this.placementPreview);
+      const previewBuilding = camp.buildings[this.placementPreview.slotKey];
+      if (!isPerimeterBuilding(previewBuilding.building_key)) {
+        this.renderPlacementPreview(ctx, camp, this.placementPreview);
+      }
     }
+  }
+
+  private getTerritoryLayer(stageKey: string) {
+    const cached = this.territoryLayerCache.get(stageKey);
+    if (cached) return cached;
+    const canvas = document.createElement('canvas');
+    canvas.width = SETTLEMENT_WORLD_PIXEL_WIDTH;
+    canvas.height = SETTLEMENT_WORLD_PIXEL_HEIGHT;
+    const layer = canvas.getContext('2d');
+    if (!layer) return canvas;
+    layer.imageSmoothingEnabled = false;
+    const bounds = getSettlementStageBounds(stageKey);
+
+    for (let tileX = 0; tileX < getCampGridWidth(); tileX++) {
+      for (let tileY = 0; tileY < getCampGridHeight(); tileY++) {
+        const unlocked = tileX >= bounds.minX && tileX < bounds.maxX && tileY >= bounds.minY && tileY < bounds.maxY;
+        if (unlocked) continue;
+        const point = tileToScreen(tileX, tileY);
+        layer.fillStyle = 'rgba(2, 6, 23, 0.46)';
+        layer.beginPath();
+        layer.moveTo(point.x, point.y - 8);
+        layer.lineTo(point.x + 16, point.y);
+        layer.lineTo(point.x, point.y + 8);
+        layer.lineTo(point.x - 16, point.y);
+        layer.closePath();
+        layer.fill();
+      }
+    }
+
+    const midX = Math.floor((bounds.minX + bounds.maxX - 1) / 2);
+    const midY = Math.floor((bounds.minY + bounds.maxY - 1) / 2);
+    layer.globalAlpha = 0.22;
+    layer.fillStyle = '#b08962';
+    const drawRoadTile = (x: number, y: number) => {
+      const point = tileToScreen(x, y);
+      layer.beginPath();
+      layer.moveTo(point.x, point.y - 8); layer.lineTo(point.x + 16, point.y);
+      layer.lineTo(point.x, point.y + 8); layer.lineTo(point.x - 16, point.y); layer.closePath(); layer.fill();
+    };
+    for (let x = bounds.minX + 2; x < bounds.maxX - 2; x++) drawRoadTile(x, midY);
+    for (let y = bounds.minY + 2; y < bounds.maxY - 2; y++) drawRoadTile(midX, y);
+
+    if (stageKey === 'kingdom') {
+      // Reino V5: anel viário exterior + pátio militar dão uma identidade
+      // territorial que não é apenas "mais grama".
+      layer.globalAlpha = 0.18;
+      layer.fillStyle = '#a16207';
+      const inset = 4;
+      for (let x = bounds.minX + inset; x < bounds.maxX - inset; x++) {
+        drawRoadTile(x, bounds.minY + inset);
+        drawRoadTile(x, bounds.maxY - inset - 1);
+      }
+      for (let y = bounds.minY + inset; y < bounds.maxY - inset; y++) {
+        drawRoadTile(bounds.minX + inset, y);
+        drawRoadTile(bounds.maxX - inset - 1, y);
+      }
+      layer.globalAlpha = 0.16;
+      layer.fillStyle = '#7f1d1d';
+      for (let x = bounds.maxX - 13; x < bounds.maxX - 6; x++) {
+        for (let y = bounds.maxY - 11; y < bounds.maxY - 5; y++) drawRoadTile(x, y);
+      }
+    }
+    layer.globalAlpha = 1;
+    this.territoryLayerCache.set(stageKey, canvas);
+    return canvas;
+  }
+
+  private renderTerritoryLayer(ctx: CanvasRenderingContext2D, stageKey: string, time: number) {
+    const bounds = getSettlementStageBounds(stageKey);
+    ctx.drawImage(this.getTerritoryLayer(stageKey), 0, 0);
+
+    ctx.save();
+    const pulse = 0.35 + (Math.sin(time * 0.0015) + 1) * 0.08;
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 1.5;
+    const polygon = [
+      tileToScreen(bounds.minX, bounds.minY),
+      tileToScreen(bounds.maxX - 1, bounds.minY),
+      tileToScreen(bounds.maxX - 1, bounds.maxY - 1),
+      tileToScreen(bounds.minX, bounds.maxY - 1),
+    ];
+    ctx.beginPath();
+    polygon.forEach((point, index) => index === 0 ? ctx.moveTo(point.x, point.y - 8) : ctx.lineTo(point.x, point.y));
+    ctx.closePath();
+    ctx.stroke();
+
+    if (stageKey === 'kingdom') {
+      const gateX = Math.floor((bounds.minX + bounds.maxX - 1) / 2);
+      for (const offset of [-4, 4]) {
+        const point = tileToScreen(gateX + offset, bounds.maxY - 1);
+        ctx.globalAlpha = 0.92;
+        ctx.strokeStyle = '#78350f';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y - 8);
+        ctx.lineTo(point.x, point.y - 34);
+        ctx.stroke();
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.moveTo(point.x + 1, point.y - 33);
+        ctx.lineTo(point.x + 15, point.y - 28);
+        ctx.lineTo(point.x + 1, point.y - 23);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.restore();
   }
 
   private renderPlacementPreview(ctx: CanvasRenderingContext2D, camp: CampState, preview: CampPlacementPreview) {
@@ -293,13 +442,14 @@ export class CampSceneRenderer {
     ctx.restore();
   }
 
-  private calculateResidentStates(camp: CampState | null, residents: SettlementResident[], time: number): ResidentSceneState[] {
+  private calculateResidentStates(camp: CampState | null, residents: SettlementResident[], time: number, stageKey = 'camp'): ResidentSceneState[] {
     const presentResidents = residents
       .filter((resident) => resident.status !== 'collecting')
       .sort((a, b) => a.name.localeCompare(b.name));
     const craftingResidents = presentResidents.filter((resident) => resident.status === 'crafting');
     const idleResidents = presentResidents.filter((resident) => resident.status !== 'crafting');
-    const idleCapacity = Math.max(0, MAX_VISIBLE_RESIDENTS - craftingResidents.length);
+    const maxVisibleResidents = VISIBLE_RESIDENTS_BY_STAGE[stageKey] || VISIBLE_RESIDENTS_BY_STAGE.camp;
+    const idleCapacity = Math.max(0, maxVisibleResidents - craftingResidents.length);
     const visibleIdle: SettlementResident[] = [];
     if (idleCapacity > 0 && idleResidents.length > 0) {
       const rotationOffset = Math.floor(time / 30000) % idleResidents.length;
@@ -307,28 +457,30 @@ export class CampSceneRenderer {
         visibleIdle.push(idleResidents[(rotationOffset + i) % idleResidents.length]);
       }
     }
-    const visibleResidents = [...craftingResidents.slice(0, MAX_VISIBLE_RESIDENTS), ...visibleIdle]
-      .slice(0, MAX_VISIBLE_RESIDENTS);
+    const visibleResidents = [...craftingResidents.slice(0, maxVisibleResidents), ...visibleIdle]
+      .slice(0, maxVisibleResidents);
 
-    this.refreshCollision(camp);
-    const route = (sx: number, sy: number, ex: number, ey: number) => (
-      this.getCollisionRoute(sx, sy, ex, ey)
-    );
+    this.refreshCollision(camp, stageKey);
+    const bounds = getSettlementStageBounds(stageKey);
+    const route = (aX: number, aY: number, bX: number, bY: number) => {
+      const start = this.routeTile(bounds, aX, aY);
+      const end = this.routeTile(bounds, bX, bY);
+      return this.getCollisionRoute(start.x, start.y, end.x, end.y, bounds);
+    };
 
-    // Rotas longas e espalhadas pelo terreno V3. Com 20+ moradores o sistema
-    // simula a população inteira, mas somente um subconjunto representativo é
-    // desenhado simultaneamente para preservar leitura visual e FPS.
+    // Rotas relativas crescem junto com o território. O mesmo comportamento
+    // visual funciona do Acampamento 24x18 ao Reino 52x38.
     const traversalRoutes = [
-      route(3, 14, 20, 14),
-      route(4, 11, 19, 7),
-      route(5, 15, 18, 5),
-      route(3, 8, 20, 10),
-      route(7, 16, 17, 4),
-      route(2, 12, 21, 8),
-      route(5, 6, 19, 15),
-      route(8, 4, 20, 13),
-      route(3, 5, 15, 16),
-      route(9, 16, 21, 6),
+      route(0.12, 0.78, 0.86, 0.78),
+      route(0.16, 0.58, 0.82, 0.32),
+      route(0.20, 0.84, 0.76, 0.18),
+      route(0.12, 0.35, 0.86, 0.52),
+      route(0.28, 0.90, 0.72, 0.12),
+      route(0.08, 0.67, 0.92, 0.40),
+      route(0.22, 0.20, 0.80, 0.84),
+      route(0.35, 0.12, 0.88, 0.70),
+      route(0.12, 0.18, 0.62, 0.88),
+      route(0.38, 0.88, 0.92, 0.22),
     ];
 
     return visibleResidents.map((resident, index) => {
@@ -355,7 +507,7 @@ export class CampSceneRenderer {
       const end = sampleCampScreenRoute(selectedRoute, 1);
 
       if (isCrafting) {
-        const target = this.resolveWorkPoint(camp, skills, index);
+        const target = this.resolveWorkPoint(camp, skills, index, stageKey);
         currentX = target.x;
         currentY = target.y;
       } else if (cycleProgress < 0.43) {
@@ -402,16 +554,18 @@ export class CampSceneRenderer {
     });
   }
 
-  private resolveWorkPoint(camp: CampState | null, skills: Set<string>, index: number) {
+  private resolveWorkPoint(camp: CampState | null, skills: Set<string>, index: number, stageKey = 'camp') {
     let preferredBuilding = 'workbench';
     if (skills.has('cook')) preferredBuilding = 'kitchen';
     else if (skills.has('alchemist')) preferredBuilding = 'alchemy_bench';
 
     const building = Object.values(camp?.buildings || {}).find((slot) => slot.building_key === preferredBuilding && slot.level > 0);
-    this.refreshCollision(camp);
+    this.refreshCollision(camp, stageKey);
     const obstacles = this.collisionObstacles;
+    const bounds = getSettlementStageBounds(stageKey);
     if (!building) {
-      const fallbackTile = findNearestCampWalkableTile({ x: 12 + (index % 3), y: 10 + (index % 2) }, obstacles);
+      const preferred = this.routeTile(bounds, 0.5 + ((index % 3) - 1) * 0.05, 0.55 + (index % 2) * 0.04);
+      const fallbackTile = findNearestCampWalkableTile(preferred, obstacles, bounds);
       const fallback = tileToScreen(fallbackTile.x, fallbackTile.y);
       return { x: fallback.x + (index % 2 === 0 ? -7 : 7), y: fallback.y };
     }
@@ -420,7 +574,7 @@ export class CampSceneRenderer {
     const accessTile = findNearestCampWalkableTile({
       x: building.tile_x + Math.floor(fp.width / 2),
       y: building.tile_y + fp.height,
-    }, obstacles);
+    }, obstacles, bounds);
     const center = tileToScreen(accessTile.x, accessTile.y);
     const lane = index % 3;
     return {

@@ -66,36 +66,88 @@ Em desenvolvimento há fallback local quando Redis não responde. Em `staging` e
 
 O duelo já começa automaticamente depois da confirmação dos dois participantes. Enquanto a partida estiver `active`, a atividade do herói é exclusiva da arena: a expedição fica congelada e é retomada no encerramento quando aplicável; atividades independentes do assentamento continuam. A M3 está funcionalmente fechada: desafio direto, runtime autoritativo, skills, tática CHASE/KITE, histórico/replay e matchmaking casual por Rating + Combat Power já existem. A evolução competitiva segue na M4.
 
-## Etapa M4 — Arena ranqueada (M4-A implementada; M4-B pendente)
+## Etapa M4 — Arena ranqueada (concluída: M4-A + M4-B)
 
 - M4-A concluída: fila Casual e Ranqueada são separadas; somente `ranked_matchmaking` altera a temporada;
 - M4-A concluída: temporadas de 28 dias, 5 placements, soft reset, tiers Bronze/Prata/Ouro/Platina/Diamante/Mestre e ladder server-authoritative;
 - M4-A concluída: honra sazonal e bundles persistentes de título/banner/cosmético por tier, com claim idempotente em `pvp_cosmetic_unlocks`;
 - M4-A concluída: proteção inicial anti-win-trading impede pareamento entre personagens da mesma conta e aplica retorno decrescente por dupla em 24h até zerar rating/honra;
 - M4-A concluída: histórico identifica partidas ranqueadas, honra e multiplicador de repetição;
-- M4-B pendente: snapshot defensivo assíncrono opcional para partidas quando o oponente estiver offline;
-- M4-B pendente: política ranqueada de abandono/desconexão, telemetria competitiva e equip/render final dos cosméticos sazonais.
+- M4-B concluída: desconexão do cliente não concede derrota automática porque a simulação autoritativa continua no servidor; desistência explícita vira `forfeit` persistido e é materializada pela líder da arena no mesmo pipeline de resultado/rating;
+- M4-B concluída: confirmação `ready` expirada ou recusada cancela sem rating; falha de processo continua coberta pelo restore do último runtime persistido;
+- M4-B concluída: runtime persiste telemetria de dano, cura, básicos, skills, críticos, CHASE/KITE, primeiro contato melee e dano pré-contato para balanceamento e failover;
+- M4-B concluída: desconexões, duração, motivo de término e flags de integridade (`repeat_opponent`, `zero_return_pair`, `repeat_forfeit_pair`) são auditáveis sem ban automático;
+- M4-B concluída: a Central da Arena expõe distribuição por tier/saúde competitiva e permite equipar os entitlements de título/banner/cosmético; a apresentação artística final continua reservada ao refinamento visual;
+- M4-B decisão de escopo: o snapshot defensivo assíncrono offline permanece opcional e foi adiado. Ele é um modo de jogo distinto do PvP síncrono já fechado e deve ser retomado apenas se houver necessidade de produto antes de Reino vs Reino.
 
-## Etapa M5 — Acampamento -> Reino defensável
+## Gate de balanceamento PvP antes da M5 (concluído)
 
-Progressão sugerida:
+- novos duelos usam `rules_version = 4`, preservando partidas históricas nas regras anteriores;
+- matriz QA determinística de 100 seeds usa CP idêntico e falha se matchup recorrente ultrapassar aproximadamente 60/40;
+- starter loadouts são relatórios diagnósticos separados e não são confundidos com gate mecânico quando o gap de Combat Power ultrapassa 2%;
+- telemetria separa dano básico/skills, dano/cura por habilidade, HP/MP final e passos/distância reais de CHASE/KITE;
+- `Sniper Shot` deixa de ter crítico 100% garantido na rotação automática;
+- mago recebe identidade PvP isolada: `Ice Shard` aplica slow autoritativo, `Fireball` assume burst e `Arcane Nova` aplica knockback;
+- mitigação PvP v4 usa curva percentual para impedir builds defensivas de reduzirem quase todo dano para 1;
+- partidas por forfeit, sem `ended_at` válido ou com gap de CP >2% são excluídas do conjunto QA;
+- migration `000032_pvp_balance_qa.sql` corrige terminais históricos sem `ended_at` e impede nova regressão.
 
-`Acampamento -> Posto -> Vilarejo -> Vila -> Cidade -> Reino`
+## Etapa M5 — Acampamento -> Reino defensável (M5-B concluída; M5-C próxima)
 
-Novas estruturas:
+### M5-A — Progressão territorial e fundação defensiva (concluída)
 
-- Muralha;
-- Portão;
-- Torre de Vigia;
-- Quartel;
-- Cofre;
-- Enfermaria;
-- Cárcere;
-- Oficina do Engenheiro;
-- Sala de Guerra;
-- Ressonador.
+- progressão formalizada como `Acampamento -> Posto -> Vilarejo -> Vila -> Cidade -> Reino`;
+- estágio é marco permanente e monotônico, conciliado pelo backend a partir de Prosperidade, população e construções;
+- promoções ficam auditadas em `settlement_stage_history`;
+- Posto/Vilarejo/Vila usam a infraestrutura já existente; Cidade/Reino exigem as fortificações da M5-B, impedindo salto prematuro;
+- `settlement_pvp_settings` nasce com raids desabilitadas e estratégia defensiva versionável;
+- `settlement_defense_snapshots` prepara snapshots autoritativos para M6/M7 sem habilitar ataque ou saque;
+- a UI do assentamento mostra estágio atual, próxima etapa e requisitos faltantes.
 
-O Engenheiro passa a cuidar de fortificações, reparos, armadilhas, cerco e infraestrutura avançada; nunca é barreira para Fogueira/Cabana/Cozinha de onboarding.
+### M5-A.1 — Expansão Territorial V4 (concluída)
+
+- arena PvE/PvP permanece em `24x18`; o assentamento ganha geometria própria e independente;
+- mundo territorial máximo passa a `44x32`, com área construtiva central desbloqueada por estágio: `24x18 -> 28x20 -> 32x22 -> 36x24 -> 40x28 -> 44x32`;
+- layouts V3 existentes migram uma única vez por `+10 X / +7 Y`, preservando todas as relações espaciais do jogador;
+- placement/drag-and-drop continuam server-authoritative, agora validados contra os limites do estágio atual;
+- câmera do assentamento ganha `fit`, zoom até `0.65x` e pan por botão do meio ou `Alt+arrastar`, sem alterar a câmera das arenas;
+- moradores visíveis são limitados e distribuídos por rotas territoriais para impedir poluição visual conforme a população cresce;
+- QA ganha presets `progress`, `city`, `kingdom` e `kingdom_stress`; os três últimos constroem automaticamente o catálogo disponível e escalam a população para avaliação visual;
+- auditoria do acampamento valida simultaneamente arena `24x18`, território `44x32`, Layout V4 e os seis estágios.
+
+### CFF-A — Combat Feel Presentation Foundation (concluída antes da M5-B)
+
+- `CombatPresentationSystem` centraliza hit stop visual, sparks/bursts, screen shake, critical/death impact e reações visuais;
+- hit stop congela apenas o relógio de apresentação local, nunca backend, WebSocket, cooldown autoritativo ou posição em grid;
+- visual stagger/knockback usa deslocamento temporário em pixels e nunca altera tiles;
+- PvE e PvP compartilham a fundação, preservando `CombatEffectRegistry` para VFX especializados;
+- profiles de impacto distinguem light/medium/heavy/finisher e flavors de arma/magia sem alterar dano;
+- tremor possui `normal`, `low` e `off`, respeitando `prefers-reduced-motion`;
+- a implementação completa e as decisões de escopo estão em `COMBAT_FEEL_MASTER_PLAN.md`;
+- CFF-B/C permanecem depois de M7 porque status/CC autoritativos exigirão nova `rules_version` e novo balance gate.
+
+### M5-B — Fortificações e defesa ativa (concluída)
+
+- catálogo ampliado de 7 para 17 construções com Muralha, Portão, Torre de Vigia, Quartel, Cofre, Enfermaria, Cárcere, Oficina do Engenheiro, Sala de Guerra e Ressonador;
+- Muralha e Portão usam `placement_mode=perimeter`: possuem custo, nível e timer autoritativos, mas o renderer materializa o cinturão no limite territorial em vez de ocupar um lote arrastável;
+- Torre/Quartel/Cofre/Enfermaria/Cárcere/Oficina/Sala de Guerra/Ressonador usam footprints reais e continuam no drag-and-drop server-authoritative;
+- desbloqueio territorial evita circularidade: Vila libera Muralha/Torre para alcançar Cidade; Cidade libera Portão/Quartel/Cofre/Sala de Guerra e as demais estruturas para alcançar Reino;
+- cada nível também possui `required_settlement_stage`, impedindo maximizar fortificações de Reino ainda na Cidade;
+- upgrades e movimentações invalidam qualquer snapshot defensivo ativo e incrementam a revisão defensiva, sem criar snapshot novo e sem habilitar raids;
+- efeitos defensivos já possuem metadados (`wall_integrity`, capacidade de guardas, proteção de estoque, reparo, scouting, escudo arcano etc.), mas o cálculo agregado de `Defense Power` pertence à M5-C;
+- `city`, `kingdom` e `kingdom_stress` passam a materializar automaticamente o catálogo M5-B; o preset Cidade respeita o maior nível permitido pelo estágio;
+- renderer do perímetro cresce junto com o território atual; a expansão do cinturão na promoção representa a reconfiguração abstrata da fortificação, enquanto o nível representa sua qualidade/resistência;
+- raids continuam `FALSE` durante toda a M5-B.
+
+### M5-C — Engenheiro, Defense Power e snapshot defensivo (próxima)
+
+- consolidar efeitos das fortificações em `Defense Power` explicável e auditável;
+- especialização/atribuição do Engenheiro para reparos, armadilhas e infraestrutura militar;
+- guarnição derivada do Quartel e moradores mobilizados;
+- cálculo de proteção de Armazém/Tesouraria, recuperação, integridade e barreira;
+- gerar `settlement_defense_snapshots` versionados e imutáveis para consumo de M6/M7;
+- qualquer mutação relevante invalida o snapshot anterior;
+- preparar UI de prontidão defensiva sem ativar raids antes da etapa apropriada.
 
 ## Etapa M6 — Scouting
 
@@ -123,6 +175,28 @@ Objetivos possíveis:
 - sabotar temporariamente uma estrutura.
 
 Construções nunca perdem níveis permanentemente por ataque. Danos geram debuff/reparo temporário.
+
+## Pós-M7 — Combat Feel Mechanics
+
+### CFF-B — Authoritative Combat Mechanics
+
+- Status Registry robusto;
+- Slow/Root/Bleed/Burn/Poison;
+- knockback/stagger autoritativos;
+- Super Armor;
+- Cast/Channel/Interrupt;
+- Barrier/Vulnerability/Armor Break/Mark/Execute;
+- nova `rules_version` PvP, diminishing returns de hard CC e balance gate obrigatório.
+
+### CFF-C — Advanced Combat Identity
+
+- status stacks;
+- Freeze/Hemorrhage/Intoxication e identidades derivadas;
+- reações elementais selecionadas;
+- Overkill/Boss Finisher/death reactions especiais;
+- telegraphs avançados sem transformar o loop principal em combate frame-perfect.
+
+Sistemas como parry frame-perfect, dodge manual com i-frames obrigatório, headshot por mira, physics engine de wall/ground bounce e slow motion real do servidor não pertencem à fundação do design atual. Consulte `COMBAT_FEEL_MASTER_PLAN.md`.
 
 ## Regras de saque propostas
 

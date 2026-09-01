@@ -6,6 +6,7 @@ import { OfflineSummaryModal } from './components/Modal/OfflineSummaryModal';
 import { GameTutorialModal } from './components/Modal/GameTutorialModal';
 import { NotificationBell } from './components/Notifications/NotificationBell';
 import { PrologueOverlay } from './components/Prologue/PrologueOverlay';
+import { PvPObservabilityModal } from './components/Admin/PvPObservabilityModal';
 import { PROLOGUE_VERSION } from './components/Prologue/PrologueData';
 import type { ImportantNotification } from './types/notifications';
 import { API_BASE_URL, CLIENT_CONFIG_ERROR } from './config';
@@ -74,6 +75,7 @@ export function App() {
   const [isPrologueOpen, setIsPrologueOpen] = useState(false);
   const [ownProfileRequest, setOwnProfileRequest] = useState(0);
   const [arenaRequest, setArenaRequest] = useState(0);
+  const [isPvPObservabilityOpen, setIsPvPObservabilityOpen] = useState(false);
   const [selectingCharacterId, setSelectingCharacterId] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
 
@@ -293,7 +295,16 @@ export function App() {
                 ⚔️ Arena
               </button>
 
-              {account?.role === 'admin' && <span className="rounded border border-fuchsia-500/60 bg-fuchsia-950/80 px-2 py-0.5 text-[9px] font-pixel-heading text-fuchsia-300">QA ADMIN</span>}
+              {account?.role === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => setIsPvPObservabilityOpen(true)}
+                  className="rounded border border-fuchsia-500/60 bg-fuchsia-950/80 px-2 py-1 text-[9px] font-pixel-heading text-fuchsia-300 hover:border-fuchsia-300 hover:text-fuchsia-100"
+                  title="Abrir observabilidade PvP de QA"
+                >
+                  📡 QA PvP
+                </button>
+              )}
 
               <NotificationBell
                 notifications={notifications}
@@ -345,6 +356,13 @@ export function App() {
             onClose={() => setIsTutorialOpen(false)}
           />
           <PrologueOverlay isOpen={isPrologueOpen} onFinish={finishPrologue} />
+          {account?.role === 'admin' && (
+            <PvPObservabilityModal
+              isOpen={isPvPObservabilityOpen}
+              token={token}
+              onClose={() => setIsPvPObservabilityOpen(false)}
+            />
+          )}
         </>
       )}
     </div>

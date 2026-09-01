@@ -7,6 +7,11 @@ import (
 
 const (
 	SettlementStageCamp       = "camp"
+	SettlementStageOutpost    = "outpost"
+	SettlementStageHamlet     = "hamlet"
+	SettlementStageVillage    = "village"
+	SettlementStageCity       = "city"
+	SettlementStageKingdom    = "kingdom"
 	SettlementDesireQueued    = "queued"
 	SettlementDesireBlocked   = "blocked"
 	SettlementDesireCrafting  = "crafting"
@@ -15,6 +20,147 @@ const (
 	SettlementDesireCancelled = "cancelled"
 	SettlementPioneerCount    = 7
 )
+
+// SettlementStageDefinition versiona a expansão territorial. As três primeiras
+// promoções dependem apenas da infraestrutura já existente; Cidade/Reino já
+// declaram as fortificações da M5-B para que a progressão não salte a camada
+// defensiva antes dela existir.
+type SettlementStageDefinition struct {
+	Key               string         `json:"key"`
+	Name              string         `json:"name"`
+	Icon              string         `json:"icon"`
+	MinProsperity     int64          `json:"min_prosperity"`
+	MinPopulation     int            `json:"min_population"`
+	RequiredBuildings map[string]int `json:"required_buildings"`
+	TerritoryWidth    int            `json:"territory_width"`
+	TerritoryHeight   int            `json:"territory_height"`
+}
+
+type SettlementStageRequirementProgress struct {
+	Kind     string `json:"kind"`
+	Key      string `json:"key"`
+	Required int64  `json:"required"`
+	Current  int64  `json:"current"`
+	Met      bool   `json:"met"`
+}
+
+type SettlementStageProgress struct {
+	Current      SettlementStageDefinition            `json:"current"`
+	Next         *SettlementStageDefinition           `json:"next,omitempty"`
+	Requirements []SettlementStageRequirementProgress `json:"requirements"`
+	Ready        bool                                 `json:"ready"`
+}
+
+type SettlementDefenseFoundation struct {
+	RaidsEnabled  bool       `json:"raids_enabled"`
+	Strategy      string     `json:"strategy"`
+	ShieldUntil   *time.Time `json:"shield_until,omitempty"`
+	Revision      int64      `json:"revision"`
+	SnapshotReady bool       `json:"snapshot_ready"`
+}
+
+var settlementStageDefinitions = []SettlementStageDefinition{
+	{Key: SettlementStageCamp, Name: "Acampamento", Icon: "🏕️", RequiredBuildings: map[string]int{}, TerritoryWidth: 24, TerritoryHeight: 18},
+	{Key: SettlementStageOutpost, Name: "Posto", Icon: "⛺", MinProsperity: 75, MinPopulation: 9, RequiredBuildings: map[string]int{"campfire": 2, "adventurer_hut": 1, "warehouse": 1}, TerritoryWidth: 28, TerritoryHeight: 20},
+	{Key: SettlementStageHamlet, Name: "Vilarejo", Icon: "🛖", MinProsperity: 250, MinPopulation: 11, RequiredBuildings: map[string]int{"campfire": 2, "adventurer_hut": 2, "warehouse": 2}, TerritoryWidth: 32, TerritoryHeight: 22},
+	{Key: SettlementStageVillage, Name: "Vila", Icon: "🏘️", MinProsperity: 600, MinPopulation: 13, RequiredBuildings: map[string]int{"campfire": 3, "adventurer_hut": 2, "warehouse": 2, "workbench": 1}, TerritoryWidth: 36, TerritoryHeight: 24},
+	{Key: SettlementStageCity, Name: "Cidade", Icon: "🏙️", MinProsperity: 1150, MinPopulation: 15, RequiredBuildings: map[string]int{"adventurer_hut": 3, "warehouse": 3, "wall": 1, "watchtower": 1}, TerritoryWidth: 40, TerritoryHeight: 28},
+	{Key: SettlementStageKingdom, Name: "Reino", Icon: "🏰", MinProsperity: 1500, MinPopulation: 16, RequiredBuildings: map[string]int{"wall": 2, "gate": 2, "barracks": 2, "vault": 1, "war_room": 1}, TerritoryWidth: 52, TerritoryHeight: 38},
+}
+
+func SettlementStageDefinitions() []SettlementStageDefinition {
+	out := make([]SettlementStageDefinition, len(settlementStageDefinitions))
+	for i, definition := range settlementStageDefinitions {
+		out[i] = definition
+		out[i].RequiredBuildings = map[string]int{}
+		for key, level := range definition.RequiredBuildings {
+			out[i].RequiredBuildings[key] = level
+		}
+	}
+	return out
+}
+
+func SettlementStageKnown(key string) bool {
+	for _, definition := range settlementStageDefinitions {
+		if definition.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+func SettlementStageAtLeast(currentKey, requiredKey string) bool {
+	if requiredKey == "" {
+		return true
+	}
+	if !SettlementStageKnown(currentKey) || !SettlementStageKnown(requiredKey) {
+		return false
+	}
+	return SettlementStageIndex(currentKey) >= SettlementStageIndex(requiredKey)
+}
+
+func SettlementStageIndex(key string) int {
+	for index, definition := range settlementStageDefinitions {
+		if definition.Key == key {
+			return index
+		}
+	}
+	return 0
+}
+
+func settlementStageRequirementsMet(definition SettlementStageDefinition, prosperity int64, population int, buildingLevels map[string]int) bool {
+	if prosperity < definition.MinProsperity || population < definition.MinPopulation {
+		return false
+	}
+	for key, required := range definition.RequiredBuildings {
+		if buildingLevels[key] < required {
+			return false
+		}
+	}
+	return true
+}
+
+// SettlementHighestEligibleStage é sequencial: não há salto direto de
+// Acampamento para Reino mesmo se um save de desenvolvimento possuir recursos.
+func SettlementHighestEligibleStage(prosperity int64, population int, buildingLevels map[string]int) SettlementStageDefinition {
+	current := settlementStageDefinitions[0]
+	for index := 1; index < len(settlementStageDefinitions); index++ {
+		candidate := settlementStageDefinitions[index]
+		if !settlementStageRequirementsMet(candidate, prosperity, population, buildingLevels) {
+			break
+		}
+		current = candidate
+	}
+	return current
+}
+
+func SettlementStageProgressFor(currentKey string, prosperity int64, population int, buildingLevels map[string]int) SettlementStageProgress {
+	index := SettlementStageIndex(currentKey)
+	current := settlementStageDefinitions[index]
+	progress := SettlementStageProgress{Current: current, Requirements: []SettlementStageRequirementProgress{}}
+	if index+1 >= len(settlementStageDefinitions) {
+		progress.Ready = true
+		return progress
+	}
+	next := settlementStageDefinitions[index+1]
+	progress.Next = &next
+	progress.Requirements = append(progress.Requirements,
+		SettlementStageRequirementProgress{Kind: "prosperity", Key: "prosperity", Required: next.MinProsperity, Current: prosperity, Met: prosperity >= next.MinProsperity},
+		SettlementStageRequirementProgress{Kind: "population", Key: "population", Required: int64(next.MinPopulation), Current: int64(population), Met: population >= next.MinPopulation},
+	)
+	ready := true
+	for _, requirement := range progress.Requirements {
+		ready = ready && requirement.Met
+	}
+	for key, required := range next.RequiredBuildings {
+		currentLevel := buildingLevels[key]
+		met := currentLevel >= required
+		progress.Requirements = append(progress.Requirements, SettlementStageRequirementProgress{Kind: "building", Key: key, Required: int64(required), Current: int64(currentLevel), Met: met})
+		ready = ready && met
+	}
+	progress.Ready = ready
+	return progress
+}
 
 // SettlementProsperityMilestones define quando a comunidade atrai um novo
 // morador. Prosperidade é reputação produtiva permanente, não uma moeda: ela
@@ -76,21 +222,24 @@ type SettlementArmoryItem struct {
 }
 
 type SettlementState struct {
-	ID                     string                  `json:"id"`
-	Name                   string                  `json:"name"`
-	StageKey               string                  `json:"stage_key"`
-	Population             int                     `json:"population"`
-	PopulationCapacity     int                     `json:"population_capacity"`
-	Reputation             int64                   `json:"reputation"`
-	Prosperity             int64                   `json:"prosperity"`
-	NextResidentProsperity int64                   `json:"next_resident_prosperity,omitempty"`
-	GrowthBlockedReason    string                  `json:"growth_blocked_reason,omitempty"`
-	ProsperityPermanent    bool                    `json:"prosperity_permanent"`
-	Revision               int64                   `json:"revision"`
-	Residents              []SettlementResident    `json:"residents"`
-	Desires                []HeroDesire            `json:"hero_desires"`
-	Armory                 []SettlementArmoryItem  `json:"armory"`
-	Treasury               SettlementTreasuryState `json:"treasury"`
+	ID                     string                      `json:"id"`
+	Name                   string                      `json:"name"`
+	StageKey               string                      `json:"stage_key"`
+	StageProgress          SettlementStageProgress     `json:"stage_progress"`
+	Territory              CampBuildBounds             `json:"territory"`
+	Defense                SettlementDefenseFoundation `json:"defense"`
+	Population             int                         `json:"population"`
+	PopulationCapacity     int                         `json:"population_capacity"`
+	Reputation             int64                       `json:"reputation"`
+	Prosperity             int64                       `json:"prosperity"`
+	NextResidentProsperity int64                       `json:"next_resident_prosperity,omitempty"`
+	GrowthBlockedReason    string                      `json:"growth_blocked_reason,omitempty"`
+	ProsperityPermanent    bool                        `json:"prosperity_permanent"`
+	Revision               int64                       `json:"revision"`
+	Residents              []SettlementResident        `json:"residents"`
+	Desires                []HeroDesire                `json:"hero_desires"`
+	Armory                 []SettlementArmoryItem      `json:"armory"`
+	Treasury               SettlementTreasuryState     `json:"treasury"`
 }
 
 // SettlementPopulationTarget combina os dois bloqueios de crescimento: espaço

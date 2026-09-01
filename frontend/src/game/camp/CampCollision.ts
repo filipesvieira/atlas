@@ -1,5 +1,11 @@
 import type { CampState } from '../../hooks/useGameSocket';
-import { CAMP_GRID_HEIGHT, CAMP_GRID_WIDTH, getGridFootprint, tileToScreen } from './CampLayoutRegistry';
+import {
+  getGridFootprint,
+  isPerimeterBuilding,
+  getSettlementStageBounds,
+  SettlementBuildBounds,
+  tileToScreen,
+} from './CampLayoutRegistry';
 
 export interface CampObstacle {
   slotKey: string;
@@ -24,6 +30,7 @@ export function getCampObstacles(camp: CampState | null): CampObstacle[] {
   if (!camp) return [];
   return Object.values(camp.buildings || {})
     .filter((building) => {
+      if (isPerimeterBuilding(building.building_key)) return false;
       const discovered = building.building_key === 'campfire'
         || Boolean(camp.blueprints?.[building.building_key])
         || building.level > 0
@@ -42,8 +49,13 @@ export function getCampObstacles(camp: CampState | null): CampObstacle[] {
     });
 }
 
-export function isCampTileBlocked(tileX: number, tileY: number, obstacles: CampObstacle[]): boolean {
-  if (tileX < 0 || tileY < 0 || tileX >= CAMP_GRID_WIDTH || tileY >= CAMP_GRID_HEIGHT) return true;
+export function isCampTileBlocked(
+  tileX: number,
+  tileY: number,
+  obstacles: CampObstacle[],
+  bounds: SettlementBuildBounds = getSettlementStageBounds('kingdom'),
+): boolean {
+  if (tileX < bounds.minX || tileY < bounds.minY || tileX >= bounds.maxX || tileY >= bounds.maxY) return true;
   return obstacles.some((obstacle) => (
     tileX >= obstacle.tileX
     && tileX < obstacle.tileX + obstacle.width
@@ -62,39 +74,42 @@ function tileKey(tile: CampTile) {
   return `${tile.x},${tile.y}`;
 }
 
-function clampTile(tile: CampTile): CampTile {
+function clampTile(tile: CampTile, bounds: SettlementBuildBounds): CampTile {
   return {
-    x: Math.max(0, Math.min(CAMP_GRID_WIDTH - 1, tile.x)),
-    y: Math.max(0, Math.min(CAMP_GRID_HEIGHT - 1, tile.y)),
+    x: Math.max(bounds.minX, Math.min(bounds.maxX - 1, tile.x)),
+    y: Math.max(bounds.minY, Math.min(bounds.maxY - 1, tile.y)),
   };
 }
 
-function canTraverse(from: CampTile, to: CampTile, obstacles: CampObstacle[]) {
-  if (isCampTileBlocked(to.x, to.y, obstacles)) return false;
+function canTraverse(from: CampTile, to: CampTile, obstacles: CampObstacle[], bounds: SettlementBuildBounds) {
+  if (isCampTileBlocked(to.x, to.y, obstacles, bounds)) return false;
   const dx = to.x - from.x;
   const dy = to.y - from.y;
-  // Não cortar a quina de duas construções adjacentes durante uma diagonal.
   if (dx !== 0 && dy !== 0) {
-    if (isCampTileBlocked(from.x + dx, from.y, obstacles)) return false;
-    if (isCampTileBlocked(from.x, from.y + dy, obstacles)) return false;
+    if (isCampTileBlocked(from.x + dx, from.y, obstacles, bounds)) return false;
+    if (isCampTileBlocked(from.x, from.y + dy, obstacles, bounds)) return false;
   }
   return true;
 }
 
-export function findNearestCampWalkableTile(preferred: CampTile, obstacles: CampObstacle[]): CampTile {
-  const start = clampTile(preferred);
-  if (!isCampTileBlocked(start.x, start.y, obstacles)) return start;
+export function findNearestCampWalkableTile(
+  preferred: CampTile,
+  obstacles: CampObstacle[],
+  bounds: SettlementBuildBounds = getSettlementStageBounds('kingdom'),
+): CampTile {
+  const start = clampTile(preferred, bounds);
+  if (!isCampTileBlocked(start.x, start.y, obstacles, bounds)) return start;
 
   const queue: CampTile[] = [start];
   const visited = new Set([tileKey(start)]);
   while (queue.length > 0) {
     const current = queue.shift()!;
     for (const direction of NEIGHBORS) {
-      const next = clampTile({ x: current.x + direction.x, y: current.y + direction.y });
+      const next = clampTile({ x: current.x + direction.x, y: current.y + direction.y }, bounds);
       const key = tileKey(next);
       if (visited.has(key)) continue;
       visited.add(key);
-      if (!isCampTileBlocked(next.x, next.y, obstacles)) return next;
+      if (!isCampTileBlocked(next.x, next.y, obstacles, bounds)) return next;
       queue.push(next);
     }
   }
@@ -115,10 +130,14 @@ function reconstructPath(cameFrom: Map<string, CampTile>, current: CampTile): Ca
   return path;
 }
 
-/** A* pequeno e determinístico, suficiente para as rotas visuais do vilarejo. */
-export function buildCampTileRoute(start: CampTile, end: CampTile, obstacles: CampObstacle[]): CampTile[] {
-  const first = findNearestCampWalkableTile(start, obstacles);
-  const goal = findNearestCampWalkableTile(end, obstacles);
+export function buildCampTileRoute(
+  start: CampTile,
+  end: CampTile,
+  obstacles: CampObstacle[],
+  bounds: SettlementBuildBounds = getSettlementStageBounds('kingdom'),
+): CampTile[] {
+  const first = findNearestCampWalkableTile(start, obstacles, bounds);
+  const goal = findNearestCampWalkableTile(end, obstacles, bounds);
   const open: CampTile[] = [first];
   const cameFrom = new Map<string, CampTile>();
   const gScore = new Map<string, number>([[tileKey(first), 0]]);
@@ -136,7 +155,7 @@ export function buildCampTileRoute(start: CampTile, end: CampTile, obstacles: Ca
 
     for (const direction of NEIGHBORS) {
       const next = { x: current.x + direction.x, y: current.y + direction.y };
-      if (!canTraverse(current, next, obstacles)) continue;
+      if (!canTraverse(current, next, obstacles, bounds)) continue;
       const nextKey = tileKey(next);
       const tentative = (gScore.get(tileKey(current)) ?? Infinity) + Math.hypot(direction.x, direction.y);
       if (tentative >= (gScore.get(nextKey) ?? Infinity)) continue;
@@ -147,14 +166,16 @@ export function buildCampTileRoute(start: CampTile, end: CampTile, obstacles: Ca
     }
   }
 
-  // Uma rota sempre deve existir em um acampamento válido. Se um save legado
-  // estiver completamente cercado, estacionar no tile acessível é seguro e
-  // evita atravessar uma construção para tentar corrigir a cena.
   return [first];
 }
 
-export function buildCampScreenRoute(start: CampTile, end: CampTile, obstacles: CampObstacle[]): CampRoute {
-  const tiles = buildCampTileRoute(start, end, obstacles);
+export function buildCampScreenRoute(
+  start: CampTile,
+  end: CampTile,
+  obstacles: CampObstacle[],
+  bounds: SettlementBuildBounds = getSettlementStageBounds('kingdom'),
+): CampRoute {
+  const tiles = buildCampTileRoute(start, end, obstacles, bounds);
   const points = tiles.map((tile) => tileToScreen(tile.x, tile.y));
   const lengths: number[] = [];
   let totalLength = 0;

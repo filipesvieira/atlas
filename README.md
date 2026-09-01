@@ -5,6 +5,8 @@ Estado atual: catálogo `2026.08-performance-v2-equipment-identity-v1`, com 9 re
 O índice de divergências, documentos históricos e fontes canônicas está em
 [`docs/DOCUMENTATION_STATUS.md`](docs/DOCUMENTATION_STATUS.md).
 
+O roadmap ativo está em `docs/MULTIPLAYER_PVP_MASTER_PLAN_V1.md`. A etapa **CFF-A — Combat Feel Presentation Foundation** foi concluída antes da M5-B e está documentada em `docs/COMBAT_FEEL_MASTER_PLAN.md`; ela melhora impacto visual sem alterar matemática autoritativa. A **M5-B — Fortificações e defesa ativa** está concluída; a próxima etapa é **M5-C — Engenheiro, Defense Power e Snapshot defensivo**.
+
 No jogo, abra **🏘️ Assentamento, Trabalhos & Oficina**. Em **Ordens de Trabalho**, envie um morador habilitado sem pausar a caçada; ao concluir, ele volta sozinho e deposita o que couber. Em **Ambições & Arsenal**, escolha uma receita descoberta, a raridade desejada e o limite de tentativas; os moradores reservam os custos e produzem automaticamente. Construções continuam no modal do Acampamento e nunca são iniciadas pelos trabalhadores.
 
 A **🍳 Cozinha** transforma recursos de coleta em seis refeições iniciais. Refeições usam tempo real (20 min, 5 h ou 24 h), persistem ao fechar o executável e são aplicadas também na simulação offline apenas durante o intervalo em que estavam ativas. Uma refeição substitui a anterior da categoria `meal`.
@@ -29,7 +31,7 @@ acima.
 
 No backend de produção, inclua as origens nativas do Tauri na allowlist usada por `ALLOWED_ORIGINS` (`http://tauri.localhost` para Windows e `tauri://localhost` para o protocolo nativo), além de qualquer origem web oficial.
 
-No acampamento, o layout V3 é persistido em grid isométrico 24x18. Construções descobertas podem ser posicionadas antes do primeiro nível e reorganizadas depois de prontas por drag-and-drop; durante o arraste, pressione **R** para girar em 90°. O backend valida limites, footprint, rotação e colisões antes de salvar.
+No assentamento, o **Layout V4** separa o terreno urbano das arenas de combate. O mundo territorial máximo é `44x32`, mas a área construtiva cresce com o estágio: Acampamento `24x18`, Posto `28x20`, Vilarejo `32x22`, Vila `36x24`, Cidade `40x28` e Reino `44x32`. Construções descobertas podem ser posicionadas antes do primeiro nível e reorganizadas depois de prontas por drag-and-drop; durante o arraste, pressione **R** para girar em 90°. O backend valida estágio, limites, footprint, rotação e colisões antes de salvar. A câmera do assentamento aceita roda do mouse para zoom, botão do meio ou `Alt+arrastar` para pan e **fit** para reenquadrar a área liberada.
 
 ## Executar com Docker
 
@@ -45,7 +47,7 @@ docker compose up --build
 - PostgreSQL: `localhost:5432` (`atlas` / `atlas_password`)
 
 O backend aplica as migrations embutidas no startup e encerra imediatamente se o schema ou o catálogo estiver inconsistente. Em banco existente, faça backup antes do primeiro start.
-O `bootstrap.sql` não é uma segunda fonte de schema: ele apenas documenta que a autoridade está nas migrations embutidas de `backend/migrations/000001` até `000026`.
+O `bootstrap.sql` não é uma segunda fonte de schema: ele apenas documenta que a autoridade está nas migrations embutidas de `backend/migrations/`, atualmente até `000035_settlement_stage_foundation.sql` (incluindo a reconciliação `000032_pvp_balance_qa.sql`).
 
 ### Conta local de QA
 
@@ -54,9 +56,24 @@ O `docker-compose.yml` de desenvolvimento habilita uma conta administrativa excl
 - E-mail: `atlas-admin@local.test`
 - Senha: `AtlasTest!2026`
 
-Crie um personagem normalmente e, na tela de personagens, use **🧪 Preparar QA** antes de entrar no mundo. O preset concede recursos de teste, ouro, receitas, projetos e profissões Nv. 60, libera as regiões e conclui temporizadores que já estavam em andamento. O Armazém é colocado no Nv. 3 para receber o kit; as demais construções continuam testáveis.
+Crie um personagem normalmente e, na tela de personagens, escolha um dos presets administrativos:
+
+- **🧪 QA** (`progress`): preserva a progressão de construções para testar o loop normal, mas concede recursos, ouro, receitas, projetos, skills e profissões Nv. 60;
+- **🏙️ Cidade** (`city`): promove o assentamento para Cidade, prepara aproximadamente 18 moradores e coloca no nível máximo todas as construções atualmente registradas no catálogo;
+- **🏰 Reino** (`kingdom`): promove para Reino, prepara aproximadamente 30 moradores e monta o catálogo completo para revisão visual;
+- **🔥 Stress** (`kingdom_stress`): Reino com aproximadamente 40 moradores e catálogo completo, destinado a detectar sobreposição, pathfinding, câmera e queda de FPS.
+
+Os presets de Cidade/Reino/Stress são orientados pelo `BuildingRegistry`: novas estruturas adicionadas na M5-B entram automaticamente no cenário QA quando forem registradas, sem uma lista paralela hardcoded.
 
 Essa superfície exige simultaneamente `ENVIRONMENT=development`, `ATLAS_DEV_TOOLS_ENABLED=true` e JWT com papel `admin`. O backend recusa a inicialização se as ferramentas forem habilitadas em `staging` ou `production`. Fora do Docker, defina também `ATLAS_DEV_ADMIN_EMAIL` e `ATLAS_DEV_ADMIN_PASSWORD` (mínimo de 12 caracteres).
+
+Para validar duelo, matchmaking casual e ranqueado em dois navegadores/perfis separados, o Compose também cria dois jogadores comuns já preparados para QA PvP. Eles não são administradores e são criados uma única vez — reiniciar o servidor não apaga rating, histórico ou itens ganhos nas partidas:
+
+- `pvp-qa-a@local.test` / `PvPQAAlpha!2026` (`QA Arco`)
+- `pvp-qa-b@local.test` / `PvPQABravo!2026` (`QA Espada`)
+- `pvp-qa-c@local.test` / `PvPQAMage!2026` (`QA Mago`)
+
+As credenciais podem ser substituídas por `ATLAS_DEV_PVP_QA_A_*`, `ATLAS_DEV_PVP_QA_B_*` e `ATLAS_DEV_PVP_QA_C_*`. Elas só são aceitas com as ferramentas de desenvolvimento habilitadas.
 
 ```bash
 docker compose exec postgres pg_dump -U atlas -d atlas_db -Fc -f /tmp/atlas_before_economy_v2.dump
@@ -116,3 +133,12 @@ O estado padrão já é `crafting-first`. As variáveis abaixo permitem rollback
 | `ATLAS_BOSS_ARTIFACT_DROP_MULTIPLIER` | `0.02` | chance pequena de artefato pronto de chefe |
 
 Consulte [docs/IMPLEMENTATION_REPORT_GAMEPLAY_P1_2026-08-15.md](docs/IMPLEMENTATION_REPORT_GAMEPLAY_P1_2026-08-15.md), [docs/IMPLEMENTATION_REPORT_SETTLEMENT_V1.md](docs/IMPLEMENTATION_REPORT_SETTLEMENT_V1.md), [docs/IMPLEMENTATION_REPORT_ECONOMY_V2.md](docs/IMPLEMENTATION_REPORT_ECONOMY_V2.md) e [docs/MIGRATION_RUNBOOK_ECONOMY_V2.md](docs/MIGRATION_RUNBOOK_ECONOMY_V2.md).
+## Estado atual — M5-B.1 (2026-08-30)
+
+- Settlement Layout V5: Reino 52x38, Cidade 40x28.
+- Migration: `000036_settlement_territory_v5.sql`.
+- Contrato territorial backend-authoritative via GameCatalog.
+- Construções: hover explica, click usa, drag move.
+- Centro de Comando do Reino criado como shell de navegação.
+- Plano canônico de RvR: `docs/KINGDOM_VS_KINGDOM_MASTER_PLAN.md`.
+- Próximo passo: M5-C (Defense Power / Readiness / Snapshot defensivo).

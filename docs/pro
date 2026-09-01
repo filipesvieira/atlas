@@ -1,0 +1,219 @@
+# Reino do Avesso — Combat Feel Master Plan
+
+Status canônico: **ativo**  
+Última revisão: **2026-08-30**
+
+Este documento registra as decisões de produto e arquitetura para evolução do combate do Reino do Avesso. Ele existe para preservar contexto entre chats/branches e deve ser lido junto de `MULTIPLAYER_PVP_MASTER_PLAN_V1.md` e `KNOWLEDGE_BASE.md`.
+
+## 1. Princípios que não podem ser quebrados
+
+1. **Servidor autoritativo.** Cliente nunca decide dano, crítico, morte, posição em grid, cooldown, vitória ou loot.
+2. **Presentation não é gameplay.** Hit stop, screen shake, flashes, sparks, trails e reações visuais podem parar/alterar apenas o relógio visual local.
+3. **Idle-first.** Reino do Avesso não será convertido silenciosamente em ARPG de reflexo/frame-perfect. Combate manual pode existir em ações pontuais futuras, mas o loop principal precisa continuar funcional sem 60 inputs/s.
+4. **PvE e PvP podem compartilhar identidade visual, mas não regras numéricas.** Efeitos autoritativos PvP continuam versionados.
+5. **Legibilidade antes de espetáculo.** Feedback não pode esconder HP, telegraphs, alvo, terreno ou UI.
+6. **Acessibilidade.** Tremor e efeitos de movimento precisam ter redução/desativação.
+7. **Determinismo onde importa.** RNG visual pode variar por cliente; RNG que altera resultado pertence ao servidor e precisa sobreviver a restore/replay quando aplicável.
+
+## 2. Sequência oficial do roadmap
+
+```text
+✅ M5-A      Progressão territorial
+✅ M5-A.1    Expansão Territorial V4
+
+✅ CFF-A     Combat Feel Presentation Foundation
+
+➡️ M5-B      Fortificações e defesa ativa
+⬜ M5-C      Engenheiro / Defense Power / Snapshot defensivo
+⬜ M6        Scouting
+⬜ M7        Raid assíncrona Reino vs Reino
+
+⬜ CFF-B      Authoritative Combat Mechanics
+⬜ CFF-C      Advanced Combat Identity
+⬜ Refinamento geral UI/UX/áudio/arte
+```
+
+CFF-A foi antecipada porque possui alto ganho de percepção e baixo risco de regressão matemática. CFF-B/C permanecem depois de M7 porque mudam regras de combate e exigem nova rodada formal de balanceamento.
+
+## 3. CFF-A — Combat Feel Presentation Foundation
+
+Objetivo: fazer golpes existentes parecerem distintos e fortes sem alterar resultado da simulação.
+
+### Entregas
+
+- `CombatPresentationSystem` compartilhado por PvE e PvP;
+- hit stop exclusivamente visual;
+- hit sparks/bursts genéricos por flavor;
+- screen shake com `off | low | normal`;
+- respeito a `prefers-reduced-motion`;
+- critical feedback reforçado;
+- death/finisher impact visual;
+- visual stagger e visual knockback em pixels, nunca em tiles;
+- impact profiles por arma/arquétipo/skill;
+- timings de animação com mais anticipation/follow-through;
+- integração sobre o `CombatEffectRegistry` existente, sem criar um segundo sistema concorrente de VFX;
+- PvE e PvP usam a mesma fundação de presentation.
+
+### Impact profiles iniciais
+
+Perfis não alteram dano. Eles definem apenas linguagem visual:
+
+- `light`: arcos/impactos leves;
+- `medium`: espada/magia comum;
+- `heavy`: machado/clava/Golpe Brutal/Fireball/Sniper;
+- `finisher`: impacto letal.
+
+Flavors iniciais:
+
+- `slash`;
+- `blunt`;
+- `pierce`;
+- `arcane`;
+- `fire`;
+- `ice`;
+- `holy`;
+- `generic`.
+
+### Regra de hit stop
+
+O cliente pode retornar delta visual zero por dezenas de milissegundos, mas:
+
+- WebSocket continua recebendo mensagens;
+- scheduler continua rodando;
+- cooldown autoritativo não pausa;
+- posição em grid não muda;
+- backend não dorme/bloqueia;
+- PvP continua simulando a cada 250 ms.
+
+### Visual knockback / stagger
+
+CFF-A usa deslocamento temporário do sprite em pixels e easing de retorno. Ele é proibido de escrever `GridX/GridY` ou qualquer posição persistida.
+
+## 4. CFF-B — Authoritative Combat Mechanics (futuro)
+
+Só iniciar depois de M7 e após nova versão de regras PvP.
+
+### Primitivas aprovadas
+
+- Status Registry robusto;
+- Slow;
+- Root;
+- Bleed;
+- Burn;
+- Poison;
+- knockback autoritativo;
+- stagger autoritativo;
+- Super Armor;
+- Cast Time;
+- Channeling;
+- Interrupt;
+- Guard/Block como regras automáticas/build-based;
+- Barrier/Shield;
+- Vulnerability/Armor Break/Mark;
+- Execute como regra explícita de skill/build.
+
+### Requisitos antes de liberar
+
+- `rules_version` nova no PvP;
+- persistência de status/CC no runtime PvP;
+- restore determinístico;
+- telemetria por efeito;
+- diminishing returns para hard CC;
+- testes de stunlock;
+- matriz de balanceamento CP-normalizada;
+- testes PvE offline/online de paridade quando o efeito puder existir nos dois modos.
+
+## 5. CFF-C — Advanced Combat Identity (futuro)
+
+Somente após CFF-B estar estável.
+
+### Sistemas aprovados
+
+- status por stacks;
+- Frost -> Freeze;
+- Bleed -> Hemorrhage;
+- Poison -> Intoxication;
+- Shock -> efeito derivado selecionado;
+- identidade elemental por equipamentos/skills;
+- reações elementais selecionadas e explícitas;
+- Overkill visual;
+- Boss Finisher;
+- death reactions temáticas;
+- telegraphs avançados;
+- counters automáticos/build-based;
+- summons/transformações somente quando houver design de conteúdo específico.
+
+## 6. Sistemas condicionais / baixa prioridade
+
+Podem existir em conteúdo específico, mas não fazem parte da fundação:
+
+- Stun;
+- Silence;
+- Disarm;
+- Fear;
+- Taunt;
+- Stealth/Camouflage;
+- Pull/Vacuum;
+- Charge/Dash Attack;
+- Teleport Strike;
+- Thorns;
+- Mana Drain;
+- Chain/Piercing/Ricochet;
+- Resurrection/Second Wind;
+- Summon/Clone/Transformation.
+
+Hard CC precisa de duração curta, telemetria e proteção contra chain-lock, principalmente no PvP automático.
+
+## 7. Sistemas que NÃO serão fundação do jogo atual
+
+Enquanto o produto permanecer idle/server-authoritative, não transformar em mecânica principal:
+
+- Perfect Block baseado em timing;
+- Parry frame-perfect;
+- dodge manual com i-frames como requisito de sobrevivência;
+- Headshot/Weak Point por mira manual;
+- physics engine para wall bounce/ground bounce;
+- combo meter dependente de reflexo do jogador;
+- Confusion no PvP;
+- Charm no PvP;
+- slow motion real do relógio do servidor.
+
+Versões automáticas/build-based podem ser avaliadas separadamente sem transformar o gênero.
+
+## 8. Relação com bosses e telegraphs
+
+Telegraph visual é aprovado porque melhora leitura. Entretanto, bosses não devem presumir que o jogador está permanentemente controlando manualmente o herói.
+
+Primeira implementação futura deve suportar:
+
+```text
+cast anunciado -> área/ícone visível -> resolução autoritativa
+```
+
+antes de qualquer design que exija dodge frame-perfect.
+
+## 9. PvP Balance Gate
+
+O PvP v4 é a baseline antes de CFF-B:
+
+- matchmaking/teste de balanceamento considera CP;
+- QA mecânico usa CP equivalente;
+- confrontos recorrentes devem permanecer aproximadamente dentro de 60/40;
+- forfeit não conta para balanceamento;
+- CFF-A não pode modificar esse gate porque é visual;
+- qualquer CFF-B/C que alterar controle/dano exige nova versão de regra e nova calibração.
+
+## 10. Definição de pronto do CFF-A
+
+CFF-A pode ser considerado concluído quando:
+
+- PvE e PvP usam `CombatPresentationSystem`;
+- hit stop não pausa backend/rede;
+- critical/finisher possuem feedback mais forte;
+- screen shake pode ser reduzido/desativado;
+- impactos possuem sparks/burst temáticos;
+- knockback/stagger desta etapa são somente visuais;
+- `go test -race ./pkg/game` continua verde;
+- balance gate PvP continua dentro de 60/40;
+- frontend alterado transpila sem erros;
+- documentação canônica aponta M5-B como próxima etapa.

@@ -1,3 +1,4 @@
+import { configureSettlementTerritoryContract, type SettlementTerritoryContract } from './camp/CampLayoutRegistry';
 import { API_BASE_URL } from '../config';
 
 export interface SkillCatalogEntry {
@@ -82,6 +83,7 @@ export interface BuildingLevelDefinition {
   effects: BuildingEffect[];
   required_trophies?: ResourceAmount[];
   required_buildings?: BuildingRequirement[];
+  required_settlement_stage?: string;
 }
 
 export interface BuildingDefinition {
@@ -91,6 +93,8 @@ export interface BuildingDefinition {
   description: string;
   slot_type: string;
   default_unlocked?: boolean;
+  placement_mode?: 'free' | 'perimeter' | string;
+  unlock_stage?: string;
   max_level: number;
   levels: BuildingLevelDefinition[];
 }
@@ -236,6 +240,7 @@ interface GameCatalogResponse {
   consumables?: ConsumableDefinition[];
   equipment_sets?: EquipmentSetDefinition[];
   economy_policy?: EconomyPolicy;
+  settlement_territory?: SettlementTerritoryContract;
 }
 
 export interface RegionData {
@@ -283,11 +288,13 @@ export interface GameCatalogData {
   consumables: ConsumableDefinition[];
   equipmentSets?: EquipmentSetDefinition[];
   economyPolicy?: EconomyPolicy;
+  settlementTerritory?: SettlementTerritoryContract;
 }
 
 let catalogPromise: Promise<GameCatalogData> | null = null;
 
 function mapCatalog(response: GameCatalogResponse): GameCatalogData {
+  configureSettlementTerritoryContract(response.settlement_territory);
   return {
     version: response.version,
     regions: (response.regions || [])
@@ -320,6 +327,7 @@ function mapCatalog(response: GameCatalogResponse): GameCatalogData {
     consumables: response.consumables || [],
     equipmentSets: response.equipment_sets || [],
     economyPolicy: response.economy_policy,
+    settlementTerritory: response.settlement_territory,
   };
 }
 

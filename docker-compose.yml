@@ -49,6 +49,12 @@ services:
       - ATLAS_DEV_TOOLS_ENABLED=true
       - ATLAS_DEV_ADMIN_EMAIL=atlas-admin@local.test
       - ATLAS_DEV_ADMIN_PASSWORD=AtlasTest!2026
+      - ATLAS_DEV_PVP_QA_A_EMAIL=pvp-qa-a@local.test
+      - ATLAS_DEV_PVP_QA_A_PASSWORD=PvPQAAlpha!2026
+      - ATLAS_DEV_PVP_QA_B_EMAIL=pvp-qa-b@local.test
+      - ATLAS_DEV_PVP_QA_B_PASSWORD=PvPQABravo!2026
+      - ATLAS_DEV_PVP_QA_C_EMAIL=pvp-qa-c@local.test
+      - ATLAS_DEV_PVP_QA_C_PASSWORD=PvPQAMage!2026
     depends_on:
       postgres:
         condition: service_healthy

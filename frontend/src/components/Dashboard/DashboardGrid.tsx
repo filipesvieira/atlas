@@ -10,7 +10,9 @@ import { SkinRegistryService } from '../../game/registries/SkinRegistry';
 import { PixelItemSprite } from '../../game/registries/PixelArtItemRegistry';
 import { useGameSocket } from '../../hooks/useGameSocket';
 import { useGameCatalog } from '../../hooks/useGameCatalog';
-import { EconomyHubModal } from '../Economy/EconomyHubModal';
+import { EconomyHubModal, type EconomyHubTab } from '../Economy/EconomyHubModal';
+import { KingdomCommandCenterModal } from '../Camp/KingdomCommandCenterModal';
+import { getBuildingInteraction, type KingdomCommandSection } from '../../game/camp/BuildingInteractionRegistry';
 import type { ImportantNotification } from '../../types/notifications';
 import { CommunicationConsole } from '../Social/CommunicationConsole';
 import { PlayerInteractionLayer } from '../Social/PlayerInteractionLayer';
@@ -30,6 +32,9 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
   const [isCampModalOpen, setIsCampModalOpen] = useState(false);
   const [isSkinModalOpen, setIsSkinModalOpen] = useState(false);
   const [isEconomyOpen, setIsEconomyOpen] = useState(false);
+  const [economyInitialTab, setEconomyInitialTab] = useState<EconomyHubTab>('work');
+  const [isKingdomCommandOpen, setIsKingdomCommandOpen] = useState(false);
+  const [kingdomCommandSection, setKingdomCommandSection] = useState<KingdomCommandSection>('overview');
   const [showAdvancedStats, setShowAdvancedStats] = useState(false);
   const [isWorldFocusMode, setIsWorldFocusMode] = useState(false);
   const [backpackOpenRequest, setBackpackOpenRequest] = useState(0);
@@ -84,6 +89,8 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
         pvpMatchmaking,
         pvpSeason,
         pvpLadder,
+        pvpCompetitive,
+        pvpCosmetics,
 		createDuelChallenge,
 		respondDuelChallenge,
 		confirmPvPMatch,
@@ -97,6 +104,10 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
         requestPvPSeasonStatus,
         requestPvPLadder,
         claimPvPSeasonRewards,
+        forfeitPvPMatch,
+        requestPvPCompetitive,
+        requestPvPCosmetics,
+        setPvPCosmetic,
         clearPvPReplay,
 		setEquippedSkin,
     moveHero,
@@ -139,6 +150,27 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
   } = useGameSocket(token, initialChar.id, initialChar);
 
   const char = liveChar || initialChar;
+
+  const openBuildingInteraction = (buildingKey: string) => {
+    const action = getBuildingInteraction(buildingKey);
+    switch (action.kind) {
+      case 'depot':
+        setIsDepotOpen(true);
+        return;
+      case 'economy':
+        setEconomyInitialTab(action.tab);
+        setIsEconomyOpen(true);
+        return;
+      case 'kingdom':
+        setKingdomCommandSection(action.section);
+        setIsKingdomCommandOpen(true);
+        return;
+      case 'camp':
+      case 'info':
+      default:
+        setIsCampModalOpen(true);
+    }
+  };
 
   useEffect(() => {
     if (!connected) return;
@@ -392,6 +424,10 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
 			onUpdateAutoPotionSettings={updateAutoPotionSettings}
             onMoveHero={moveHero}
             onMoveCampBuilding={moveCampBuilding}
+            camp={camp}
+            settlement={economy?.settlement || null}
+            buildingDefinitions={catalog?.campBuildings || []}
+            onBuildingClick={openBuildingInteraction}
             isWorldFocusMode={isWorldFocusMode}
             onWorldFocusModeChange={setIsWorldFocusMode}
             onOpenBackpack={() => setBackpackOpenRequest((request) => request + 1)}
@@ -523,6 +559,7 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
           onSalvageItem={salvageItem}
           onSalvageBatch={salvageBatch}
           onClearSalvagePreview={clearSalvagePreview}
+          settlementStageKey={economy?.settlement?.stage_key || 'camp'}
         />
       )}
 
@@ -536,6 +573,7 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
 
 	  {catalog && <EconomyHubModal
 		isOpen={isEconomyOpen}
+        initialTab={economyInitialTab}
 		onClose={() => setIsEconomyOpen(false)}
 		catalog={catalog}
 		economy={economy}
@@ -558,6 +596,16 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
 		onTransferTreasuryGold={transferTreasuryGold}
 		onUpdateTreasuryPolicy={updateTreasuryPolicy}
 	  />}
+      {catalog && (
+        <KingdomCommandCenterModal
+          isOpen={isKingdomCommandOpen}
+          onClose={() => setIsKingdomCommandOpen(false)}
+          section={kingdomCommandSection}
+          camp={camp}
+          settlement={economy?.settlement || null}
+          buildingDefinitions={catalog.campBuildings || []}
+        />
+      )}
       <PlayerInteractionLayer
         pendingDuelChallenges={pendingDuelChallenges}
         pvpMatchNotice={pvpMatchNotice}
@@ -565,6 +613,8 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
         matchmaking={pvpMatchmaking}
         season={pvpSeason}
         ladder={pvpLadder}
+        competitive={pvpCompetitive}
+        cosmetics={pvpCosmetics}
         history={pvpHistory}
         arenaRequest={arenaRequest}
         pvpCombat={pvpCombat}
@@ -578,6 +628,10 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
         onRequestSeason={requestPvPSeasonStatus}
         onRequestLadder={requestPvPLadder}
         onClaimSeasonRewards={claimPvPSeasonRewards}
+        onForfeitMatch={forfeitPvPMatch}
+        onRequestCompetitive={requestPvPCompetitive}
+        onRequestCosmetics={requestPvPCosmetics}
+        onSetCosmetic={setPvPCosmetic}
         onRequestHistory={requestPvPHistory}
         onRequestReplay={requestPvPReplay}
         onClearReplay={clearPvPReplay}
@@ -587,6 +641,7 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
           <div className="flex items-start justify-between gap-2">
             <div>
               <div className="font-pixel-heading text-amber-300">⚔️ {lastPublicProfile.name}</div>
+              {lastPublicProfile.title_key && <div className="mt-1 text-[9px] text-violet-300">{lastPublicProfile.title_key}</div>}
               <div className="mt-1 text-slate-400">Nível {lastPublicProfile.level} · Rating PvP {lastPublicProfile.rating}</div>
               <div className="mt-1 text-slate-500">Vitórias {lastPublicProfile.wins} · Derrotas {lastPublicProfile.losses}</div>
               {lastPublicProfile.region && <div className="mt-1 text-slate-500">Região: {lastPublicProfile.region}</div>}

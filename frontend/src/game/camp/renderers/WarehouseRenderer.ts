@@ -3,6 +3,7 @@ import {
   drawIsoBox,
   drawIsoFootprint,
   drawIsoPanel,
+  drawIsoPanelApron,
   drawIsoPanelGrid,
   drawIsoRoof,
   drawIsoShadow,
@@ -11,7 +12,7 @@ import {
 
 /** Armazém de Recursos — níveis 0 a 3 em volume isométrico. */
 export function renderWarehouse(ctx: CanvasRenderingContext2D, renderCtx: BuildingRenderContext) {
-  const { level, x, y, scale } = renderCtx;
+  const { level, x, y, scale, time } = renderCtx;
 
   ctx.save();
   ctx.translate(x, y);
@@ -26,8 +27,8 @@ export function renderWarehouse(ctx: CanvasRenderingContext2D, renderCtx: Buildi
     const wallHeight = 17;
     drawIsoShadow(ctx, width + 12, depth + 12);
     drawIsoFootprint(ctx, width + 4, depth + 4, '#64748b', '#1e293b');
-    drawIsoWalls(ctx, width, depth, wallHeight, '#78350f', '#451a03', '#92400e');
-    drawIsoRoof(ctx, width, depth, wallHeight, 15, '#475569', '#1e293b', '#64748b', '#334155');
+    drawIsoWalls(ctx, width, depth, wallHeight, '#854d0e', '#713f12', '#a16207');
+    drawIsoRoof(ctx, width, depth, wallHeight, 12, '#57534e', '#44403c', '#78716c', '#57534e');
 
     // Porta frontal e ferrolho: elementos simples ajudam a comunicar que é
     // um edifício de armazenamento, mesmo antes do primeiro upgrade.
@@ -43,6 +44,7 @@ export function renderWarehouse(ctx: CanvasRenderingContext2D, renderCtx: Buildi
       stroke: '#0f172a',
     });
     drawIsoPanelGrid(ctx, gate, '#57534e');
+    drawIsoPanelApron(ctx, gate, 'right', 8, '#78716c', '#334155', 2);
     ctx.fillStyle = '#fbbf24';
     ctx.fillRect(gate[1].x - 2, gate[1].y - 8, 3, 3);
 
@@ -61,10 +63,11 @@ export function renderWarehouse(ctx: CanvasRenderingContext2D, renderCtx: Buildi
     const wallHeight = 33;
     drawIsoShadow(ctx, width + 8, depth + 8);
     drawIsoFootprint(ctx, width, depth, '#475569', '#1e293b');
-    drawIsoWalls(ctx, width, depth, wallHeight, '#5c2d11', '#451a03', '#78350f');
-    drawIsoRoof(ctx, width, depth, wallHeight, 20, '#78350f', '#5c2d11', '#713f12', '#451a03');
-    const gate = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'right', position: 0.52, size: 16, height: 23, fill: '#1c1917', stroke: '#0f172a' });
-    drawIsoPanelGrid(ctx, gate, '#475569');
+    drawIsoWalls(ctx, width, depth, wallHeight, '#854d0e', '#713f12', '#a16207');
+    drawIsoRoof(ctx, width, depth, wallHeight, 14, '#57534e', '#44403c', '#78716c', '#57534e');
+    const gate = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'right', position: 0.52, size: 23, height: 26, fill: '#3f2b1d', stroke: '#0f172a' });
+    drawIsoPanelGrid(ctx, gate, '#a8a29e');
+    drawIsoPanelApron(ctx, gate, 'right', 10, '#78716c', '#334155', 3);
     drawIsoBox(ctx, { x: -width / 2 - 8, y: 2, width: 12, depth: 12, height: 16, top: '#92400e', left: '#78350f', right: '#451a03' });
     ctx.restore();
     return;
@@ -76,10 +79,11 @@ export function renderWarehouse(ctx: CanvasRenderingContext2D, renderCtx: Buildi
     const wallHeight = 43;
     drawIsoShadow(ctx, width + 10, depth + 10);
     drawIsoFootprint(ctx, width, depth, '#64748b', '#1e293b');
-    drawIsoWalls(ctx, width, depth, wallHeight, '#451a03', '#3b1d11', '#78350f');
-    drawIsoRoof(ctx, width, depth, wallHeight, 25, '#92400e', '#78350f', '#713f12', '#5c2d11');
-    const gate = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'right', position: 0.5, size: 23, height: 30, fill: '#1c1917', stroke: '#0f172a' });
-    drawIsoPanelGrid(ctx, gate, '#64748b');
+    drawIsoWalls(ctx, width, depth, wallHeight, '#854d0e', '#713f12', '#a16207');
+    drawIsoRoof(ctx, width, depth, wallHeight, 16, '#57534e', '#44403c', '#78716c', '#57534e');
+    const gate = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'right', position: 0.5, size: 31, height: 34, fill: '#3f2b1d', stroke: '#0f172a' });
+    drawIsoPanelGrid(ctx, gate, '#a8a29e');
+    drawIsoPanelApron(ctx, gate, 'right', 16, '#78716c', '#334155', 4);
     drawIsoBox(ctx, { x: -width / 2 - 9, y: 1, width: 15, depth: 14, height: 21, top: '#92400e', left: '#78350f', right: '#451a03' });
     drawIsoBox(ctx, { x: width / 2 + 7, y: 3, width: 13, depth: 13, height: 18, top: '#64748b', left: '#475569', right: '#334155' });
     ctx.restore();
@@ -91,19 +95,22 @@ export function renderWarehouse(ctx: CanvasRenderingContext2D, renderCtx: Buildi
   const wallHeight = 53;
   drawIsoShadow(ctx, width + 12, depth + 12);
   drawIsoFootprint(ctx, width, depth, '#64748b', '#1e293b');
-  drawIsoWalls(ctx, width, depth, wallHeight, '#3b1d11', '#291807', '#7c2d12');
-  drawIsoRoof(ctx, width, depth, wallHeight, 30, '#9f1239', '#7f1d1d', '#7c2d12', '#5c1f16');
-  const gate = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'right', position: 0.5, size: 29, height: 37, fill: '#1c1917', stroke: '#0f172a' });
-  drawIsoPanelGrid(ctx, gate, '#64748b');
+  drawIsoWalls(ctx, width, depth, wallHeight, '#854d0e', '#713f12', '#a16207');
+  drawIsoRoof(ctx, width, depth, wallHeight, 18, '#57534e', '#44403c', '#78716c', '#57534e');
+  const gate = drawIsoPanel(ctx, { width, depth, wallHeight, side: 'right', position: 0.5, size: 38, height: 42, fill: '#292524', stroke: '#0f172a' });
+  drawIsoPanelGrid(ctx, gate, '#cbd5e1');
+
+  drawIsoPanelApron(ctx, gate, 'right', 21, '#78716c', '#334155', 5);
 
   // Guincho e fardo, com a caixa suspensa seguindo a mesma perspectiva.
   drawIsoBox(ctx, { x: 29, y: -wallHeight - 6, width: 13, depth: 12, height: 7, top: '#92400e', left: '#78350f', right: '#451a03' });
-  drawIsoBox(ctx, { x: 34, y: -wallHeight + 17, width: 12, depth: 10, height: 11, top: '#d97706', left: '#92400e', right: '#78350f' });
+  const hoist = Math.round((Math.sin(time * 0.0025) + 1) * 2);
+  drawIsoBox(ctx, { x: 34, y: -wallHeight + 17 + hoist, width: 12, depth: 10, height: 11, top: '#d97706', left: '#92400e', right: '#78350f' });
   ctx.strokeStyle = '#94a3b8';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(34, -wallHeight - 3);
-  ctx.lineTo(34, -wallHeight + 17);
+  ctx.lineTo(34, -wallHeight + 17 + hoist);
   ctx.stroke();
 
   ctx.fillStyle = '#fbbf24';

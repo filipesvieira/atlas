@@ -15,7 +15,7 @@ import {
   renderForestArenaDynamic,
   renderCampDynamic,
 } from '../renderers/biomes/BiomeRenderers';
-import { ISO_ARENA_GEOMETRY, IsoWorldGeometry } from '../IsoWorldGeometry';
+import { ISO_ARENA_GEOMETRY, SETTLEMENT_WORLD_GEOMETRY, IsoWorldGeometry } from '../IsoWorldGeometry';
 import { Registry } from './Registry';
 
 export type BiomeRenderer = (width: number, height: number, geometry?: IsoWorldGeometry) => HTMLCanvasElement;
@@ -57,10 +57,10 @@ class GameBiomeRegistry extends Registry<BiomeDefinition> {
     return this.get(biomeKey)?.isoGeometry;
   }
 
-  public render(biomeKey: string, width: number, height: number): HTMLCanvasElement {
+  public render(biomeKey: string, width: number, height: number, geometry?: IsoWorldGeometry): HTMLCanvasElement {
     const definition = this.get(biomeKey) ?? this.get('forest');
     if (!definition) throw new Error('BiomeRegistry: biome padrão forest não registrado');
-    return definition.render(width, height, definition.isoGeometry);
+    return definition.render(width, height, geometry ?? definition.isoGeometry);
   }
 
   public renderDynamic(
@@ -69,12 +69,13 @@ class GameBiomeRegistry extends Registry<BiomeDefinition> {
     width: number,
     height: number,
     time: number,
+    geometry?: IsoWorldGeometry,
   ): void {
     // O renderer estático usa floresta como fallback. A camada dinâmica precisa
     // seguir a mesma regra, senão uma região com alias desconhecido mostra o
     // mapa, mas perde água, fogueira e demais animações do bioma.
     const definition = this.get(biomeKey) ?? this.get('forest');
-    definition?.renderDynamic?.(ctx, width, height, time, definition.isoGeometry);
+    definition?.renderDynamic?.(ctx, width, height, time, geometry ?? definition.isoGeometry);
   }
 
   public getDepthObjects(
@@ -83,9 +84,10 @@ class GameBiomeRegistry extends Registry<BiomeDefinition> {
     width: number,
     height: number,
     time: number,
+    geometry?: IsoWorldGeometry,
   ): BiomeDepthObject[] {
     const definition = this.get(biomeKey) ?? this.get('forest');
-    return definition?.renderDepthObjects?.(ctx, width, height, time, definition.isoGeometry) || [];
+    return definition?.renderDepthObjects?.(ctx, width, height, time, geometry ?? definition.isoGeometry) || [];
   }
 }
 
@@ -94,7 +96,7 @@ class GameBiomeRegistry extends Registry<BiomeDefinition> {
  * regiões concretas; novos biomas são conectados apenas neste registry.
  */
 export const biomeRegistry = new GameBiomeRegistry().registerAll([
-  { key: 'camp', aliases: ['campamento', 'acampamento'], render: getCampBackground, renderDynamic: renderCampDynamic, isoGeometry: ISO_ARENA_GEOMETRY },
+  { key: 'camp', aliases: ['campamento', 'acampamento'], render: getCampBackground, renderDynamic: renderCampDynamic, isoGeometry: SETTLEMENT_WORLD_GEOMETRY },
   { key: 'forest', render: getForestArenaBackground, renderDynamic: renderForestArenaDynamic, renderDepthObjects: getForestDepthObjects, isoGeometry: ISO_ARENA_GEOMETRY },
   { key: 'shereque', render: getSherequeArenaBackground, renderDynamic: renderSherequeDynamic, renderDepthObjects: getSherequeDepthObjects, isoGeometry: ISO_ARENA_GEOMETRY },
   { key: 'chapolin', render: getChapolinBackground },

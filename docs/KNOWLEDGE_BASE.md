@@ -1,6 +1,25 @@
+## 🏰 M5-B — Fortificações do Reino
+
+- O catálogo possui 17 construções. Muralha e Portão são controles autoritativos de nível/custo/timer renderizados como perímetro territorial; não são arrastáveis.
+- Vila desbloqueia Muralha/Torre; Cidade desbloqueia o conjunto avançado. Níveis também têm estágio mínimo próprio.
+- Torre, Quartel, Cofre, Enfermaria, Cárcere, Oficina do Engenheiro, Sala de Guerra e Ressonador são estruturas internas posicionáveis.
+- Efeitos defensivos ainda são metadados; a agregação em `Defense Power`, Engenheiro e snapshot imutável pertencem à M5-C.
+- Toda alteração de obra/layout invalida snapshot defensivo vigente. Raids continuam desativadas até o roadmap de Reino vs Reino.
+- QA `city`, `kingdom` e `kingdom_stress` absorvem automaticamente novas definições do registry.
+
 # Reino do Avesso — Base de Conhecimento & Arquitetura Técnica
 
 Este documento serve como a **Fonte da Verdade (Single Source of Truth)** do projeto **Reino do Avesso**. `Atlas` permanece em nomes internos e contratos de compatibilidade. As regras abaixo refletem o checkout atual; números e decisões históricas devem ser conferidos em [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md).
+
+## ⚔️ Combat Feel CFF-A — Presentation sem alterar autoridade
+
+- `CombatPresentationSystem` é a camada compartilhada de hit stop visual, sparks/bursts, screen shake, critical/death impact e reação visual em PvE/PvP.
+- Hit stop nunca pausa backend, WebSocket, cooldown ou scheduler; apenas o delta de animação local pode virar zero por alguns milissegundos.
+- Knockback/stagger da CFF-A são deslocamentos temporários do sprite em pixels. Mudança real de tile pertence a regra autoritativa versionada.
+- Tremor possui `normal | low | off` e respeita preferência de movimento reduzido.
+- CFF-B/C estão planejadas somente após M7. Slow/Root/DoTs/CC autoritativos exigirão nova versão PvP e novo balance gate.
+- O plano completo e a lista explícita do que não pertence ao gênero atual estão em [`COMBAT_FEEL_MASTER_PLAN.md`](COMBAT_FEEL_MASTER_PLAN.md).
+
 
 ## 🌎 Multiplayer M2 — Redis compartilhado, PostgreSQL autoritativo e scheduler global
 
@@ -14,6 +33,7 @@ Este documento serve como a **Fonte da Verdade (Single Source of Truth)** do pro
 - Ao reconectar durante `ready`, o gateway consulta a confirmação individual persistida e recompõe o card correto: entrar na arena ou aguardar o oponente. Arenas sem ambas as confirmações expiram de forma autoritativa e registram `MATCH_TIMEOUT`.
 - A M3D conecta esse contrato seguro a `PvPArenaViewport`, um canvas isométrico sobreposto ao `GameCanvas`. O renderer usa a grade 24×18, terreno de runas, tochas e avatares genéricos de guerreiro/arqueiro/mago conforme o arquétipo público. O viewport de expedição não é destruído, e o Canvas PvP não recebe detalhes privados do build adversário.
 - A M3E-A versiona habilidades de duelo sem reutilizar a execução do PvE: `PvPCombatRulesVersion = 2` sela a rotação das até duas skills ativas no instante do aceite. A tabela PvP possui custo, recarga, dano e cura próprios; seus cooldowns e posição de rotação estão no `runtime_state` para recuperação determinística. A rede recebe somente `skill_key` e `is_healing` no evento já resolvido.
+- A baseline competitiva atual para novos duelos é `PvPCombatRulesVersion = 4`: preserva v2/v3 históricas, aplica o balance hardening, slow de Ice Shard, knockback de Arcane Nova e gate QA CP-normalizado.
 - Em `development`, indisponibilidade de Redis reduz social/tickets/scheduler ao adapter local e emite aviso. Em `staging` e `production`, Redis é obrigatório no startup para impedir visão fragmentada do mundo.
 - O lease de personagem permanece no PostgreSQL e impede duas sessões ativas para o mesmo herói. O scheduler usa uma única liderança global por `pg_try_advisory_lock(hashtext('atlas_settlement_scheduler_v1'))`; se a conexão líder cair, o PostgreSQL libera o lock e outra réplica pode assumir. A líder persiste a mutação normalmente e publica um evento leve; a réplica dona do WebSocket consulta PostgreSQL e aplica snapshots por revisão, sem receber estado de combate por Redis.
 
@@ -142,7 +162,7 @@ atlas/
 ### Grid de Combate (24x18)
 - A arena autoritativa usa uma grade regional de **24 colunas por 18 linhas**; o frontend converte as coordenadas para a projeção isométrica e interpola o deslocamento.
 - A posição do herói, os pontos de spawn e as rotas não são mais fixos em uma única coluna. Os spawns são distribuídos pela definição da arena, incluindo os quatro cantos quando aplicável.
-- Floresta e Vila do Shereque possuem terreno, obstáculos e colisão próprios; o acampamento usa a mesma geometria isométrica para sua cena.
+- Floresta e Vila do Shereque possuem terreno, obstáculos e colisão próprios; arenas continuam 24x18, enquanto o assentamento usa a geometria territorial V4 independente até 44x32.
 - Regiões ainda não convertidas preservam o renderer legado até receberem geometria e terreno equivalentes.
 
 ### Máquina de Estados dos Monstros (`State`)
@@ -714,3 +734,12 @@ Todos os itens iniciais vêm devidamente identificados com a propriedade `Specia
 - O backend decide ocupação; o frontend apenas projeta, interpola e desenha.
 
 Documento completo: [`docs/ARENA_TERRAIN_SYSTEM.md`](ARENA_TERRAIN_SYSTEM.md).
+## M5-B.1 — Territory V5 e interação com construções (2026-08-30)
+
+- O assentamento usa Layout V5, mundo máximo 52x38; arenas PvE/PvP continuam independentes.
+- Dimensões por estágio: 24x18, 28x20, 32x22, 36x24, 40x28 e Reino 52x38.
+- O backend envia `SettlementTerritoryContract` no GameCatalog; o frontend calcula bounds centralizados e não mantém uma tabela paralela.
+- Migration 000036 desloca saves V4 por +4/+3 e invalida snapshots defensivos antigos.
+- Interação canônica de prédio: hover=explica, clique=usa, drag >=6px=move. Muralha/Portão são clicáveis e não arrastáveis.
+- Sala de Guerra é o hub conceitual do Centro de Comando. M5-C implementa Defense Power/Readiness/Snapshot; M6 scouting; M7 raid.
+- Ver `docs/KINGDOM_VS_KINGDOM_MASTER_PLAN.md`.

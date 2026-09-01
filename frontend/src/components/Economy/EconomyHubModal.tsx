@@ -9,6 +9,7 @@ import { getBagSlotBonus, getBagSlotRange } from '../../game/bagCapacity';
 
 interface Props {
   isOpen: boolean;
+  initialTab?: EconomyHubTab;
   onClose: () => void;
   catalog: GameCatalogData;
   economy: EconomyState | null;
@@ -32,7 +33,8 @@ interface Props {
   onUpdateTreasuryPolicy: (enabled: boolean, personalReserve: number) => void;
 }
 
-type Tab = 'work' | 'treasury' | 'ambitions' | 'kitchen' | 'alchemy' | 'crafting' | 'residents';
+export type EconomyHubTab = 'work' | 'treasury' | 'ambitions' | 'kitchen' | 'alchemy' | 'crafting' | 'residents';
+type Tab = EconomyHubTab;
 const rarityLabel: Record<string, string> = { common: 'Comum', uncommon: 'Incomum', rare: 'Raro', epic: 'Épico', legendary: 'Lendário', Comum: 'Comum', Incomum: 'Incomum', Raro: 'Raro', 'Épico': 'Épico', 'Lendário': 'Lendário' };
 const rarityClass: Record<string, string> = { common: 'text-slate-300', uncommon: 'text-emerald-300', rare: 'text-sky-300', epic: 'text-fuchsia-300', legendary: 'text-amber-300', Comum: 'text-slate-300', Incomum: 'text-emerald-300', Raro: 'text-sky-300', 'Épico': 'text-fuchsia-300', 'Lendário': 'text-amber-300' };
 const rarityKeys = ['common', 'uncommon', 'rare', 'epic', 'legendary'] as const;
@@ -739,7 +741,7 @@ function pendingSourceLabel(sourceKind: string) {
 }
 
 export function EconomyHubModal(props: Props) {
-  const [tab, setTab] = useState<Tab>('work');
+  const [tab, setTab] = useState<Tab>(props.initialTab || 'work');
   const [now, setNow] = useState(Date.now());
   const [search, setSearch] = useState('');
   const [craftCategory, setCraftCategory] = useState('all');
@@ -761,6 +763,7 @@ export function EconomyHubModal(props: Props) {
 
   useEffect(() => {
     if (!props.isOpen) return;
+    if (props.initialTab) setTab(props.initialTab);
     props.onSync();
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     const syncTimer = window.setInterval(() => props.onSync(), 5000);
@@ -768,9 +771,14 @@ export function EconomyHubModal(props: Props) {
       window.clearInterval(timer);
       window.clearInterval(syncTimer);
     };
-  }, [props.isOpen]);
+  }, [props.isOpen, props.initialTab]);
 
   const settlement = props.economy?.settlement;
+  const stageProgress = settlement?.stage_progress;
+  const stageBuildingLabels: Record<string, string> = {
+    campfire: 'Fogueira', adventurer_hut: 'Cabana', warehouse: 'Armazém', workbench: 'Bancada',
+    wall: 'Muralha', watchtower: 'Torre de Vigia', gate: 'Portão', barracks: 'Quartel', vault: 'Cofre', war_room: 'Sala de Guerra',
+  };
   const residents = settlement?.residents || [];
   const activities = props.economy?.active_gatherings || (props.economy?.active_gathering ? [props.economy.active_gathering] : []);
   const professionByKey = useMemo(() => Object.fromEntries((props.economy?.professions || []).map((p) => [p.profession_key, p])), [props.economy]);
@@ -893,6 +901,18 @@ export function EconomyHubModal(props: Props) {
           {settlement && (
             <div className="flex flex-wrap items-center justify-end gap-1.5 font-pixel-body">
               <span
+                className="settlement-choice cursor-help px-2.5 py-1.5 text-[10px] text-violet-300 border-violet-500/40 bg-violet-950/40 sm:text-xs"
+                title={stageProgress?.next ? `Próxima etapa: ${stageProgress.next.name}` : 'Estágio máximo da progressão territorial'}
+              >
+                {stageProgress?.current.icon || '🏕️'} {stageProgress?.current.name || settlement.stage_key}
+              </span>
+              <span
+                className="settlement-choice cursor-help px-2.5 py-1.5 text-[10px] text-cyan-300 border-cyan-500/40 bg-cyan-950/40 sm:text-xs"
+                title="Área física atualmente liberada para construções."
+              >
+                🗺️ {stageProgress?.current.territory_width || 24}×{stageProgress?.current.territory_height || 18}
+              </span>
+              <span
                 className="settlement-choice cursor-help px-2.5 py-1.5 text-[10px] text-sky-300 border-sky-500/40 bg-sky-950/40 sm:text-xs"
                 title={`👥 População: ${settlement.population} moradores de ${effectiveCapacity} vagas.`}
               >
@@ -933,6 +953,28 @@ export function EconomyHubModal(props: Props) {
       </nav>
       <main className="space-y-5 overflow-y-auto p-3 sm:p-5">
         {!props.economy && <section className="settlement-panel pixel-alert-frame pixel-alert-info text-xs text-sky-200">Sincronizando assentamento… <button onClick={props.onSync} className="pixel-btn pixel-btn-dark ml-2 px-2 py-1 text-[10px]">Tentar novamente</button></section>}
+
+        {settlement && stageProgress?.next && (
+          <section className="settlement-panel border-violet-800/50 bg-violet-950/15">
+            <div className="settlement-panel-header">
+              <div>
+                <h3 className="settlement-panel-title text-violet-300">{stageProgress.current.icon} {stageProgress.current.name} → {stageProgress.next.icon} {stageProgress.next.name}</h3>
+                <p className="settlement-panel-subtitle">A expansão territorial é permanente. Cidade e Reino exigirão a infraestrutura defensiva da M5.</p>
+              </div>
+              <span className={`rounded border px-2 py-1 text-[9px] font-pixel-heading ${stageProgress.ready ? 'border-emerald-600/50 bg-emerald-950/40 text-emerald-300' : 'border-violet-700/50 bg-slate-950/50 text-violet-200'}`}>
+                {stageProgress.ready ? 'PRONTO PARA PROMOVER' : 'PROGRESSÃO'}
+              </span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {stageProgress.requirements.map((requirement) => (
+                <div key={`${requirement.kind}:${requirement.key}`} className={`settlement-choice px-2.5 py-2 text-[10px] ${requirement.met ? 'border-emerald-800/50 bg-emerald-950/20 text-emerald-200' : 'border-slate-800 bg-slate-950/35 text-slate-400'}`}>
+                  <span className="mr-1">{requirement.met ? '✓' : '○'}</span>
+                  {requirement.kind === 'prosperity' ? 'Prosperidade' : requirement.kind === 'population' ? 'População' : stageBuildingLabels[requirement.key] || requirement.key}: {requirement.current}/{requirement.required}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {tab === 'work' && props.economy && <WorkOrders
           {...props} activities={activities} residents={residents} now={now}

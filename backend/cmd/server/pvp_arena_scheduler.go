@@ -125,7 +125,10 @@ func refreshPvPArenaInstances(instances map[string]*game.PvPCombatInstance) bool
 	activeIDs := make(map[string]struct{}, len(matches))
 	for _, match := range matches {
 		activeIDs[match.ID] = struct{}{}
-		if _, exists := instances[match.ID]; exists {
+		if existing, exists := instances[match.ID]; exists {
+			if match.ForfeitRequestedBy != "" {
+				existing.RequestForfeit(match.ForfeitRequestedBy)
+			}
 			continue
 		}
 		var instance *game.PvPCombatInstance
@@ -137,6 +140,9 @@ func refreshPvPArenaInstances(instances map[string]*game.PvPCombatInstance) bool
 		if err != nil {
 			log.Printf("arena PvP: partida %s inválida e não foi iniciada: %v", match.ID, err)
 			continue
+		}
+		if match.ForfeitRequestedBy != "" {
+			instance.RequestForfeit(match.ForfeitRequestedBy)
 		}
 		instances[match.ID] = instance
 	}

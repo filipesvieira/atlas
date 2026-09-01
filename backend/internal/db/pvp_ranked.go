@@ -515,5 +515,8 @@ func applyPvPRankedResultTx(tx *sql.Tx, matchID, winnerID string, now time.Time)
 	if _, err := tx.Exec(`UPDATE pvp_matches SET competitive_applied_at=$2,repeat_multiplier=$3 WHERE id=$1 AND competitive_applied_at IS NULL`, matchID, now.UTC(), multiplier); err != nil {
 		return err
 	}
+	if err := recordPvPIntegrityFlagsTx(tx, matchID, seasonID, players[0].id, players[1].id, recent, multiplier, now); err != nil {
+		return err
+	}
 	return appendPvPMatchEventTx(tx, matchID, "RANKED_RESULT_APPLIED", map[string]any{"winner_id": winnerID, "season": seasonNumber, "repeat_multiplier": multiplier, "a_delta": deltaA, "b_delta": deltaB}, now)
 }

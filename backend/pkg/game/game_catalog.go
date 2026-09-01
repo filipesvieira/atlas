@@ -1,6 +1,6 @@
 package game
 
-const GameCatalogVersion = "2026.08-performance-v2-equipment-identity-v1"
+const GameCatalogVersion = "2026.08-m5b1-territory-v5"
 
 type ExpeditionCatalogEntry struct {
 	ID                   string   `json:"id"`
@@ -34,6 +34,7 @@ type GameCatalog struct {
 	Consumables          []ConsumableDefinition          `json:"consumables"`
 	EquipmentSets        []EquipmentSetDefinition        `json:"equipment_sets"`
 	EconomyPolicy        EconomyPolicy                   `json:"economy_policy"`
+	SettlementTerritory  SettlementTerritoryContract     `json:"settlement_territory"`
 }
 
 func BuildGameCatalog() GameCatalog {
@@ -66,5 +67,6 @@ func BuildGameCatalog() GameCatalog {
 		Consumables:          ListConsumableDefinitions(),
 		EquipmentSets:        ListReleasedEquipmentSetDefinitions(),
 		EconomyPolicy:        CurrentEconomyPolicy(),
+		SettlementTerritory:  CurrentSettlementTerritoryContract(),
 	}
 }

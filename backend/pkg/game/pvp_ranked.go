@@ -28,6 +28,10 @@ var pvpRankTiers = []PvPRankTierInfo{
 	{Key: "master", Name: "Mestre", MinRating: 1800, Icon: "👑", Order: 6},
 }
 
+func PvPRankTiers() []PvPRankTierInfo {
+	return append([]PvPRankTierInfo(nil), pvpRankTiers...)
+}
+
 func PvPRankTier(rating, placements int) PvPRankTierInfo {
 	if placements < PvPRankedPlacementsRequired {
 		return PvPRankTierInfo{Key: "placement", Name: "Posicionamento", MinRating: 0, Icon: "⚔️", Order: 0}

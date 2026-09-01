@@ -46,19 +46,46 @@ type PvPCombatActor struct {
 // PvPCombatEvent é um delta efêmero da arena. Ele não participa da sequência
 // econômica da expedição nem concede XP, item, ouro ou maestria.
 type PvPCombatEvent struct {
-	Tick       uint64 `json:"tick"`
-	Kind       string `json:"kind"`
-	SourceID   string `json:"source_id,omitempty"`
-	TargetID   string `json:"target_id,omitempty"`
-	SkillKey   string `json:"skill_key,omitempty"`
-	Amount     int    `json:"amount,omitempty"`
-	IsCritical bool   `json:"is_critical,omitempty"`
-	IsHealing  bool   `json:"is_healing,omitempty"`
-	WinnerID   string `json:"winner_id,omitempty"`
+	Tick          uint64 `json:"tick"`
+	Kind          string `json:"kind"`
+	SourceID      string `json:"source_id,omitempty"`
+	TargetID      string `json:"target_id,omitempty"`
+	SkillKey      string `json:"skill_key,omitempty"`
+	Amount        int    `json:"amount,omitempty"`
+	IsCritical    bool   `json:"is_critical,omitempty"`
+	IsHealing     bool   `json:"is_healing,omitempty"`
+	StatusKey     string `json:"status_key,omitempty"`
+	DurationTicks uint64 `json:"duration_ticks,omitempty"`
+	WinnerID      string `json:"winner_id,omitempty"`
 }
 
 // PvPCombatSnapshot é o payload seguro que poderá alimentar o renderer
 // isométrico. A sequência é própria da arena e não usa state_revision do PvE.
+type PvPCombatMetrics struct {
+	CharacterID         string         `json:"character_id"`
+	DamageDealt         int            `json:"damage_dealt"`
+	DamageTaken         int            `json:"damage_taken"`
+	HealingDone         int            `json:"healing_done"`
+	BasicDamage         int            `json:"basic_damage"`
+	SkillDamage         int            `json:"skill_damage"`
+	SkillDamageByKey    map[string]int `json:"skill_damage_by_key,omitempty"`
+	SkillHealingByKey   map[string]int `json:"skill_healing_by_key,omitempty"`
+	BasicAttacks        int            `json:"basic_attacks"`
+	SkillsUsed          int            `json:"skills_used"`
+	CriticalHits        int            `json:"critical_hits"`
+	MovementTicks       int            `json:"movement_ticks"`
+	MovementSteps       int            `json:"movement_steps"`
+	MovementDistance    float64        `json:"movement_distance"`
+	ChaseTicks          int            `json:"chase_ticks"`
+	ChaseSteps          int            `json:"chase_steps"`
+	KiteTicks           int            `json:"kite_ticks"`
+	KiteSteps           int            `json:"kite_steps"`
+	FirstContactTick    uint64         `json:"first_contact_tick,omitempty"`
+	DamageBeforeContact int            `json:"damage_before_contact"`
+	FinalHealth         int            `json:"final_health"`
+	FinalMana           int            `json:"final_mana"`
+}
+
 type PvPCombatSnapshot struct {
 	MatchID   string           `json:"match_id"`
 	ArenaKey  string           `json:"arena_key"`
@@ -81,6 +108,9 @@ type PvPCombatRuntimeState struct {
 	SkillCooldowns       [2]map[string]float64 `json:"skill_cooldowns,omitempty"`
 	SkillRotation        [2]int                `json:"skill_rotation,omitempty"`
 	MovementAccumulators [2]float64            `json:"movement_accumulators,omitempty"`
+	SlowUntilTick        [2]uint64             `json:"slow_until_tick,omitempty"`
+	SlowMultipliers      [2]float64            `json:"slow_multipliers,omitempty"`
+	Metrics              [2]PvPCombatMetrics   `json:"metrics,omitempty"`
 }
 
 // PvPCombatInstance é completamente independente de GameSession. O servidor
@@ -104,6 +134,11 @@ type PvPCombatInstance struct {
 	strategies           [2]PvPTacticalStrategy
 	movementAccumulators [2]float64
 	movedThisTick        [2]bool
+	movementDistanceTick [2]float64
+	slowUntilTick        [2]uint64
+	slowMultipliers      [2]float64
+	metrics              [2]PvPCombatMetrics
+	forfeitRequestedBy   string
 }
 
 // NewPvPCombatInstance materializa a arena a partir do snapshot imutável que
@@ -146,6 +181,9 @@ func NewPvPCombatInstance(match PvPMatch) (*PvPCombatInstance, error) {
 	instance.actors[1] = newPvPCombatActor(participants[1], duelArenaWidth-5, duelArenaHeight/2)
 	instance.actors[0].TargetID = instance.actors[1].CharacterID
 	instance.actors[1].TargetID = instance.actors[0].CharacterID
+	instance.metrics[0] = newPvPCombatMetrics(instance.actors[0].CharacterID)
+	instance.metrics[1] = newPvPCombatMetrics(instance.actors[1].CharacterID)
+	instance.slowMultipliers = [2]float64{1, 1}
 	for index, participant := range participants {
 		instance.skillLoadouts[index] = pvpSkillLoadout(participant.ActiveSkills, instance.actors[index].Archetype, match.RulesVersion)
 		instance.skillCooldowns[index] = normalizePvPSkillCooldowns(nil, instance.skillLoadouts[index])
@@ -180,6 +218,11 @@ func RestorePvPCombatInstance(match PvPMatch, runtime PvPCombatRuntimeState) (*P
 		actor.attackCooldown = runtime.AttackCooldowns[index]
 		instance.actors[index] = actor
 		instance.movementAccumulators[index] = math.Max(0, math.Min(0.999999, runtime.MovementAccumulators[index]))
+		instance.slowUntilTick[index] = runtime.SlowUntilTick[index]
+		instance.slowMultipliers[index] = runtime.SlowMultipliers[index]
+		if instance.slowMultipliers[index] <= 0 || instance.slowMultipliers[index] > 1 {
+			instance.slowMultipliers[index] = 1
+		}
 		instance.skillCooldowns[index] = normalizePvPSkillCooldowns(runtime.SkillCooldowns[index], instance.skillLoadouts[index])
 		if len(instance.skillLoadouts[index]) > 0 && runtime.SkillRotation[index] >= 0 {
 			instance.skillRotation[index] = runtime.SkillRotation[index] % len(instance.skillLoadouts[index])
@@ -187,6 +230,13 @@ func RestorePvPCombatInstance(match PvPMatch, runtime PvPCombatRuntimeState) (*P
 	}
 	if instance.actors[0].CharacterID == instance.actors[1].CharacterID {
 		return nil, fmt.Errorf("estado persistido repete combatente")
+	}
+	instance.metrics = runtime.Metrics
+	for index := range instance.metrics {
+		if instance.metrics[index].CharacterID == "" {
+			instance.metrics[index].CharacterID = instance.actors[index].CharacterID
+		}
+		ensurePvPCombatMetricMaps(&instance.metrics[index])
 	}
 	instance.tick = runtime.Snapshot.Tick
 	instance.startedAt = runtime.Snapshot.StartedAt.UTC()
@@ -242,7 +292,9 @@ func (instance *PvPCombatInstance) Tick(now time.Time) PvPCombatSnapshot {
 
 	instance.tick++
 	instance.movedThisTick = [2]bool{}
+	instance.movementDistanceTick = [2]float64{}
 	instance.moveLocked()
+	instance.captureMovementMetricsLocked()
 	instance.tickSkillCooldownsLocked()
 	instance.tickAttackCooldownsLocked()
 	events := instance.skillLocked()
@@ -289,6 +341,12 @@ func (instance *PvPCombatInstance) moveLocked() {
 
 		chasingRanged := actor.Archetype == "melee" && target.Archetype != "melee"
 		speed := pvpMovementSpeedFor(actor, strategy, retreating, chasingRanged)
+		if instance.rulesVersion >= PvPBalanceCombatRulesVersion && instance.tick <= instance.slowUntilTick[index] {
+			slow := instance.slowMultipliers[index]
+			if slow > 0 && slow < 1 {
+				speed *= slow
+			}
+		}
 		// MovementSpeedMultiplier foi calibrado para o tick PvE de 750 ms.
 		// Escalamos para os pulsos de 250 ms da arena sem criar três passos por
 		// pulso nem ignorar bônus de botas.
@@ -355,6 +413,9 @@ func (instance *PvPCombatInstance) moveLocked() {
 		instance.actors[index].GridY = clampArenaCoordinate(intents[index].y, duelArenaHeight)
 		instance.actors[index].State = intents[index].state
 		instance.movedThisTick[index] = old != [2]int{instance.actors[index].GridX, instance.actors[index].GridY}
+		if instance.movedThisTick[index] {
+			instance.movementDistanceTick[index] = gridDistance(old[0], old[1], instance.actors[index].GridX, instance.actors[index].GridY)
+		}
 	}
 }
 
@@ -391,6 +452,119 @@ type pvpAttackIntent struct {
 	targetIndex int
 	damage      int
 	isCritical  bool
+}
+
+func (instance *PvPCombatInstance) captureMovementMetricsLocked() {
+	if gridDistance(instance.actors[0].GridX, instance.actors[0].GridY, instance.actors[1].GridX, instance.actors[1].GridY) <= combatRangeForArchetype("melee") {
+		for index := range instance.metrics {
+			if instance.metrics[index].FirstContactTick == 0 {
+				instance.metrics[index].FirstContactTick = instance.tick
+			}
+		}
+	}
+	for index, actor := range instance.actors {
+		if actor.Health <= 0 {
+			continue
+		}
+		if instance.movedThisTick[index] {
+			instance.metrics[index].MovementTicks++
+			instance.metrics[index].MovementSteps++
+			instance.metrics[index].MovementDistance += instance.movementDistanceTick[index]
+		}
+		switch actor.State {
+		case "CHASE":
+			instance.metrics[index].ChaseTicks++
+			if instance.movedThisTick[index] {
+				instance.metrics[index].ChaseSteps++
+			}
+		case "KITE":
+			instance.metrics[index].KiteTicks++
+			if instance.movedThisTick[index] {
+				instance.metrics[index].KiteSteps++
+			}
+		}
+	}
+}
+
+func (instance *PvPCombatInstance) recordDamageLocked(sourceIndex, targetIndex, amount int, critical bool) {
+	if amount <= 0 {
+		return
+	}
+	instance.metrics[sourceIndex].DamageDealt += amount
+	instance.metrics[targetIndex].DamageTaken += amount
+	if critical {
+		instance.metrics[sourceIndex].CriticalHits++
+	}
+	if instance.metrics[sourceIndex].FirstContactTick == 0 {
+		instance.metrics[sourceIndex].DamageBeforeContact += amount
+	}
+}
+
+func newPvPCombatMetrics(characterID string) PvPCombatMetrics {
+	metric := PvPCombatMetrics{CharacterID: characterID}
+	ensurePvPCombatMetricMaps(&metric)
+	return metric
+}
+
+func ensurePvPCombatMetricMaps(metric *PvPCombatMetrics) {
+	if metric == nil {
+		return
+	}
+	if metric.SkillDamageByKey == nil {
+		metric.SkillDamageByKey = map[string]int{}
+	}
+	if metric.SkillHealingByKey == nil {
+		metric.SkillHealingByKey = map[string]int{}
+	}
+}
+
+func (instance *PvPCombatInstance) metricsSnapshotLocked() [2]PvPCombatMetrics {
+	out := instance.metrics
+	for index := range out {
+		out[index].FinalHealth = instance.actors[index].Health
+		out[index].FinalMana = instance.actors[index].Mana
+	}
+	return out
+}
+
+func (instance *PvPCombatInstance) applyPvPKnockbackLocked(sourceIndex, targetIndex, tiles int) {
+	if tiles <= 0 || sourceIndex < 0 || sourceIndex >= len(instance.actors) || targetIndex < 0 || targetIndex >= len(instance.actors) {
+		return
+	}
+	source := instance.actors[sourceIndex]
+	target := &instance.actors[targetIndex]
+	for step := 0; step < tiles; step++ {
+		nx, ny := stepGridAwayWithOrbitWithin(target.GridX, target.GridY, source.GridX, source.GridY, duelArenaWidth, duelArenaHeight, pvpOrbitClockwise(target.CharacterID))
+		if nx == target.GridX && ny == target.GridY {
+			break
+		}
+		if nx == source.GridX && ny == source.GridY {
+			break
+		}
+		target.GridX, target.GridY = nx, ny
+	}
+}
+
+// RequestForfeit marca o combatente como derrotado, mas deixa a finalização
+// ocorrer no próximo Tick autoritativo. Assim persistência, rating e publicação
+// continuam passando pelo mesmo pipeline usado por uma derrota normal.
+func (instance *PvPCombatInstance) RequestForfeit(characterID string) bool {
+	if instance == nil || characterID == "" {
+		return false
+	}
+	instance.mu.Lock()
+	defer instance.mu.Unlock()
+	if instance.status != PvPMatchActive || instance.forfeitRequestedBy != "" {
+		return false
+	}
+	for index := range instance.actors {
+		if instance.actors[index].CharacterID == characterID && instance.actors[index].Health > 0 {
+			instance.forfeitRequestedBy = characterID
+			instance.actors[index].Health = 0
+			return true
+		}
+	}
+	return false
 }
 
 type pvpSkillIntent struct {
@@ -435,7 +609,7 @@ func (instance *PvPCombatInstance) skillLocked() []PvPCombatEvent {
 			intents = append(intents, pvpSkillIntent{sourceIndex: sourceIndex, targetIndex: sourceIndex, rule: rule, healing: healing})
 			continue
 		}
-		damage, critical := instance.pvpDamageWithMultiplierLocked(*source, *target, rule.DamageMultiplier, rule.GuaranteedCritical)
+		damage, critical := instance.pvpDamageWithMultiplierLocked(*source, *target, rule.DamageMultiplier, rule.GuaranteedCritical, rule.BonusCriticalChance)
 		intents = append(intents, pvpSkillIntent{sourceIndex: sourceIndex, targetIndex: targetIndex, rule: rule, damage: damage, isCritical: critical})
 	}
 
@@ -443,13 +617,46 @@ func (instance *PvPCombatInstance) skillLocked() []PvPCombatEvent {
 	for _, intent := range intents {
 		source := &instance.actors[intent.sourceIndex]
 		target := &instance.actors[intent.targetIndex]
+		instance.metrics[intent.sourceIndex].SkillsUsed++
 		if intent.healing > 0 {
+			before := target.Health
 			target.Health = min(target.MaxHealth, target.Health+intent.healing)
-			events = append(events, PvPCombatEvent{Tick: instance.tick, Kind: "skill", SourceID: source.CharacterID, TargetID: target.CharacterID, SkillKey: intent.rule.Key, Amount: intent.healing, IsHealing: true})
+			actual := max(0, target.Health-before)
+			instance.metrics[intent.sourceIndex].HealingDone += actual
+			ensurePvPCombatMetricMaps(&instance.metrics[intent.sourceIndex])
+			instance.metrics[intent.sourceIndex].SkillHealingByKey[intent.rule.Key] += actual
+			events = append(events, PvPCombatEvent{Tick: instance.tick, Kind: "skill", SourceID: source.CharacterID, TargetID: target.CharacterID, SkillKey: intent.rule.Key, Amount: actual, IsHealing: true})
 			continue
 		}
+		actualDamage := min(target.Health, intent.damage)
 		target.Health = max(0, target.Health-intent.damage)
-		events = append(events, PvPCombatEvent{Tick: instance.tick, Kind: "skill", SourceID: source.CharacterID, TargetID: target.CharacterID, SkillKey: intent.rule.Key, Amount: intent.damage, IsCritical: intent.isCritical})
+		instance.recordDamageLocked(intent.sourceIndex, intent.targetIndex, actualDamage, intent.isCritical)
+		instance.metrics[intent.sourceIndex].SkillDamage += actualDamage
+		ensurePvPCombatMetricMaps(&instance.metrics[intent.sourceIndex])
+		instance.metrics[intent.sourceIndex].SkillDamageByKey[intent.rule.Key] += actualDamage
+		event := PvPCombatEvent{Tick: instance.tick, Kind: "skill", SourceID: source.CharacterID, TargetID: target.CharacterID, SkillKey: intent.rule.Key, Amount: actualDamage, IsCritical: intent.isCritical}
+		if instance.rulesVersion >= PvPBalanceCombatRulesVersion && target.Health > 0 {
+			if intent.rule.SlowMultiplier > 0 && intent.rule.SlowMultiplier < 1 && intent.rule.SlowDurationSeconds > 0 {
+				slowMultiplier := intent.rule.SlowMultiplier
+				slowDuration := intent.rule.SlowDurationSeconds
+				// Slow é a ferramenta do mago para criar espaço contra melee. Contra
+				// outro ranged ele é curto para não virar lockdown de longa distância.
+				if target.Archetype != "melee" {
+					slowMultiplier = math.Max(slowMultiplier, 0.92)
+					slowDuration = math.Min(slowDuration, 1.00)
+				}
+				durationTicks := uint64(math.Ceil(slowDuration / PvPCombatTickInterval.Seconds()))
+				instance.slowUntilTick[intent.targetIndex] = max(instance.slowUntilTick[intent.targetIndex], instance.tick+durationTicks)
+				instance.slowMultipliers[intent.targetIndex] = slowMultiplier
+				event.StatusKey = "slow"
+				event.DurationTicks = durationTicks
+			}
+			if intent.rule.KnockbackTiles > 0 {
+				instance.applyPvPKnockbackLocked(intent.sourceIndex, intent.targetIndex, intent.rule.KnockbackTiles)
+				event.StatusKey = "knockback"
+			}
+		}
+		events = append(events, event)
 	}
 	return events
 }
@@ -494,7 +701,7 @@ func (instance *PvPCombatInstance) nextReadyPvPSkillLocked(sourceIndex int, sour
 			} else {
 				// Arqueiro/mago precisam parar para mirar/castar depois de um passo de
 				// reposicionamento. Melee pode entrar em alcance e golpear no mesmo pulso.
-				if instance.rulesVersion >= PvPTacticalCombatRulesVersion && instance.movedThisTick[sourceIndex] && source.Archetype != "melee" {
+				if instance.rulesVersion >= PvPTacticalCombatRulesVersion && instance.movedThisTick[sourceIndex] && source.Archetype != "melee" && !rule.CanCastWhileMoving {
 					continue
 				}
 				if gridDistance(source.GridX, source.GridY, target.GridX, target.GridY) > combatRangeForArchetype(source.Archetype) {
@@ -535,17 +742,21 @@ func (instance *PvPCombatInstance) attackLocked() []PvPCombatEvent {
 				multiplier = 0.82
 			}
 		}
-		damage, critical := instance.pvpDamageWithMultiplierLocked(*source, *target, multiplier, false)
+		damage, critical := instance.pvpDamageWithMultiplierLocked(*source, *target, multiplier, false, 0)
 		intents = append(intents, pvpAttackIntent{sourceIndex: sourceIndex, targetIndex: targetIndex, damage: damage, isCritical: critical})
 	}
 
 	events := make([]PvPCombatEvent, 0, len(intents))
 	for _, intent := range intents {
 		source, target := &instance.actors[intent.sourceIndex], &instance.actors[intent.targetIndex]
+		actualDamage := min(target.Health, intent.damage)
 		target.Health = max(0, target.Health-intent.damage)
+		instance.metrics[intent.sourceIndex].BasicAttacks++
+		instance.metrics[intent.sourceIndex].BasicDamage += actualDamage
+		instance.recordDamageLocked(intent.sourceIndex, intent.targetIndex, actualDamage, intent.isCritical)
 		events = append(events, PvPCombatEvent{
 			Tick: instance.tick, Kind: "basic_attack", SourceID: source.CharacterID, TargetID: target.CharacterID,
-			Amount: intent.damage, IsCritical: intent.isCritical,
+			Amount: actualDamage, IsCritical: intent.isCritical,
 		})
 	}
 	return events
@@ -559,10 +770,47 @@ func pvpAttackCooldown(seconds float64) float64 {
 }
 
 func (instance *PvPCombatInstance) pvpDamageLocked(source, target PvPCombatActor) (int, bool) {
-	return instance.pvpDamageWithMultiplierLocked(source, target, 1, false)
+	return instance.pvpDamageWithMultiplierLocked(source, target, 1, false, 0)
 }
 
-func (instance *PvPCombatInstance) pvpDamageWithMultiplierLocked(source, target PvPCombatActor, multiplier float64, guaranteedCritical bool) (int, bool) {
+func pvpDefenseDamageMultiplier(defense int) float64 {
+	// Mitigação percentual evita o antigo "ataque - defesa*0,35", que fazia
+	// builds legítimas caírem para 1 de dano quando VIT/armadura eram altas.
+	// A curva preserva valor de defesa sem anular completamente armas leves.
+	value := math.Max(0, float64(defense))
+	return math.Max(0.34, 100.0/(100.0+value*1.35))
+}
+
+func pvpArchetypeDamageMultiplier(archetype string) float64 {
+	switch archetype {
+	case "distance":
+		// Arco+munição já somam duas fontes de ataque antes do scaling de DEX.
+		// Este coeficiente é somente PvP e não altera loot, crafting ou PvE.
+		return 0.95
+	case "magic":
+		return 1.01
+	default:
+		return 1
+	}
+}
+
+func pvpMatchupDamageMultiplier(source, target PvPCombatActor) float64 {
+	if source.Archetype == "magic" && target.Archetype == "distance" {
+		return 1.02
+	}
+	if source.Archetype == "distance" && target.Archetype == "magic" {
+		return 0.993
+	}
+	if source.Archetype == "magic" && target.Archetype == "melee" {
+		return 1.02
+	}
+	if source.Archetype == "melee" && target.Archetype == "magic" {
+		return 1.00
+	}
+	return 1
+}
+
+func (instance *PvPCombatInstance) pvpDamageWithMultiplierLocked(source, target PvPCombatActor, multiplier float64, guaranteedCritical bool, bonusCriticalChance float64) (int, bool) {
 	if multiplier <= 0 || math.IsNaN(multiplier) || math.IsInf(multiplier, 0) {
 		multiplier = 1
 	}
@@ -571,9 +819,19 @@ func (instance *PvPCombatInstance) pvpDamageWithMultiplierLocked(source, target 
 	if instance.rulesVersion >= PvPTacticalCombatRulesVersion {
 		multiplier *= pvpClosePressureMultiplier(source, target)
 	}
-	base := int(math.Round(float64(attack) * multiplier * (0.90 + instance.nextRandomLocked()*0.20)))
-	damage := max(1, base-int(math.Round(float64(defense)*pvpDefenseMitigationFactor)))
-	critical := guaranteedCritical || instance.nextRandomLocked() < math.Max(0, math.Min(1, source.Derived.CritChance/100))
+	if instance.rulesVersion >= PvPBalanceCombatRulesVersion {
+		multiplier *= pvpArchetypeDamageMultiplier(source.Archetype)
+		multiplier *= pvpMatchupDamageMultiplier(source, target)
+	}
+	base := float64(attack) * multiplier * (0.90 + instance.nextRandomLocked()*0.20)
+	damage := 0
+	if instance.rulesVersion >= PvPBalanceCombatRulesVersion {
+		damage = max(1, int(math.Round(base*pvpDefenseDamageMultiplier(defense))))
+	} else {
+		damage = max(1, int(math.Round(base))-int(math.Round(float64(defense)*pvpDefenseMitigationFactor)))
+	}
+	critChance := math.Max(0, math.Min(1, source.Derived.CritChance/100+bonusCriticalChance))
+	critical := guaranteedCritical || instance.nextRandomLocked() < critChance
 	if critical {
 		damage = max(1, int(math.Round(float64(damage)*pvpCriticalMultiplier)))
 	}
@@ -646,6 +904,9 @@ func (instance *PvPCombatInstance) RuntimeState() PvPCombatRuntimeState {
 		},
 		SkillRotation:        instance.skillRotation,
 		MovementAccumulators: instance.movementAccumulators,
+		SlowUntilTick:        instance.slowUntilTick,
+		SlowMultipliers:      instance.slowMultipliers,
+		Metrics:              instance.metricsSnapshotLocked(),
 	}
 }
 

@@ -98,7 +98,7 @@ export function CharacterScreen({ token, isAdmin = false, onSelectCharacter, onL
     }
   };
 
-  const prepareTestCharacter = async (character: any) => {
+  const prepareTestCharacter = async (character: any, mode: 'progress' | 'city' | 'kingdom' | 'kingdom_stress' = 'progress') => {
     if (!isAdmin || preparingId) return;
     setPreparingId(character.id);
     setError(null);
@@ -107,11 +107,11 @@ export function CharacterScreen({ token, isAdmin = false, onSelectCharacter, onL
       const res = await fetch(`${API_BASE_URL}/api/v1/admin/test-preset`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ character_id: character.id }),
+        body: JSON.stringify({ character_id: character.id, mode }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao aplicar preset de QA');
-      setNotice(`🧪 ${character.name} preparado: ${data.resources_granted} recursos, ${data.recipes_unlocked} receitas e profissões Nv. ${data.profession_level}.`);
+      setNotice(`🧪 ${character.name}: ${data.preset_mode || mode} · ${data.settlement_stage || 'camp'} · ${data.residents_prepared || 0} moradores · ${data.resources_granted} recursos.`);
       await fetchCharacters();
     } catch (err: any) {
       setError(err?.message || 'Erro ao preparar personagem de testes');
@@ -194,13 +194,24 @@ export function CharacterScreen({ token, isAdmin = false, onSelectCharacter, onL
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   {isAdmin && !char.progression_blocked && (
-                    <button
-                      onClick={(event) => { event.stopPropagation(); prepareTestCharacter(char); }}
-                      disabled={preparingId === char.id}
-                      className="pixel-btn pixel-btn-purple px-3 py-1.5 text-xs font-pixel-body"
-                    >
-                      {preparingId === char.id ? 'Preparando…' : '🧪 Preparar QA'}
-                    </button>
+                    <div className="flex flex-wrap justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+                      {([
+                        ['progress', '🧪 QA'],
+                        ['city', '🏙️ Cidade'],
+                        ['kingdom', '🏰 Reino'],
+                        ['kingdom_stress', '🔥 Stress'],
+                      ] as const).map(([mode, label]) => (
+                        <button
+                          key={mode}
+                          onClick={(event) => { event.stopPropagation(); prepareTestCharacter(char, mode); }}
+                          disabled={preparingId === char.id}
+                          className="pixel-btn pixel-btn-purple px-2 py-1 text-[10px] font-pixel-body"
+                          title={`Aplicar preset ${mode}`}
+                        >
+                          {preparingId === char.id ? '…' : label}
+                        </button>
+                      ))}
+                    </div>
                   )}
                   {!char.progression_blocked && (
                     <button className="pixel-btn pixel-btn-gold px-4 py-1.5 text-xs font-pixel-heading">

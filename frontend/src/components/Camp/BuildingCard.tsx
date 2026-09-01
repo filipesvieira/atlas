@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { BuildingDefinition } from '../../game/GameCatalog';
 import { BuildingSlot } from '../../hooks/useGameSocket';
 import { BuildingScenePreview } from './BuildingScenePreview';
+import { formatBuildingEffect, isDefenseBuilding } from '../../game/camp/BuildingDefensePresentation';
+import { SettlementStageLabels, isPerimeterBuilding } from '../../game/camp/CampLayoutRegistry';
 
 interface BuildingCardProps {
   buildingDef: BuildingDefinition;
@@ -49,9 +51,11 @@ export const BuildingCard: React.FC<BuildingCardProps> = ({
       setProgressPercent(pct);
 
       const diffSecs = Math.max(0, Math.ceil((end - now) / 1000));
-      const mins = Math.floor(diffSecs / 60);
+      const hours = Math.floor(diffSecs / 3600);
+      const mins = Math.floor((diffSecs % 3600) / 60);
       const secs = diffSecs % 60;
-      setTimeLeft(`${mins}:${secs < 10 ? '0' : ''}${secs}`);
+      if (hours > 0) setTimeLeft(`${hours}h ${mins}m`);
+      else setTimeLeft(`${mins}:${secs < 10 ? '0' : ''}${secs}`);
     };
 
     updateTimer();
@@ -65,33 +69,14 @@ export const BuildingCard: React.FC<BuildingCardProps> = ({
     const lvlDef = buildingDef.levels[currentLevel - 1];
     if (!lvlDef) return '';
     return lvlDef.effects
-      .map((eff) => {
-        switch (eff.key) {
-          case 'camp_hp_regen_percent':
-            return `+${eff.value}% Regen HP`;
-          case 'camp_mana_regen_percent':
-            return `+${eff.value}% Regen MP`;
-          case 'camp_all_regen_percent':
-            return `+${eff.value}% Regen Geral`;
-          case 'resource_storage':
-            return `Capacidade: ${eff.value}`;
-          case 'salvage_unlock':
-            return `Reciclagem Liberada`;
-          case 'salvage_efficiency_percent':
-            return `+${eff.value}% Rendimento`;
-          case 'salvage_batch_size':
-            return `Lote: ${eff.value} itens`;
-          case 'salvage_success_chance':
-            return `+${eff.value}% Taxa Êxito`;
-          case 'salvage_safe_mode':
-            return `Modo Seguro Lib.`;
-          default:
-            return '';
-        }
-      })
+      .map((eff) => formatBuildingEffect(eff.key, eff.value))
       .filter(Boolean)
       .join(' • ');
   };
+
+  const perimeter = isPerimeterBuilding(buildingDef.key);
+  const defense = isDefenseBuilding(buildingDef.key);
+  const unlockStageLabel = buildingDef.unlock_stage ? SettlementStageLabels[buildingDef.unlock_stage] || buildingDef.unlock_stage : '';
 
   return (
     <div
@@ -110,7 +95,8 @@ export const BuildingCard: React.FC<BuildingCardProps> = ({
             </div>
             <div>
               <h4 className="font-pixel-heading text-xs text-amber-300">{buildingDef.name}</h4>
-              <span className="text-[9px] text-slate-500 font-pixel-body capitalize">Slot {buildingDef.slot_type}</span>
+              <span className="text-[9px] text-slate-500 font-pixel-body">{perimeter ? 'Fortificação de perímetro' : defense ? 'Estrutura defensiva' : `Slot ${buildingDef.slot_type}`}</span>
+              {unlockStageLabel && <span className="block mt-0.5 text-[8px] text-cyan-500/80">Disponível a partir de {unlockStageLabel}</span>}
             </div>
           </div>
           <span

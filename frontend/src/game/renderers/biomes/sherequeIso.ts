@@ -436,7 +436,7 @@ function drawStaticProps(ctx: CanvasRenderingContext2D, geometry: IsoWorldGeomet
 
 /** Vila do Shereque em uma arena isométrica de 24x18 tiles. */
 export function getSherequeArenaBackground(w = 960, h = 420, geometry = ISO_ARENA_GEOMETRY): HTMLCanvasElement {
-  return getOffscreenCanvas('bg_shereque_iso_arena_v4', w, h, (ctx) => {
+  return getOffscreenCanvas(`bg_shereque_iso_arena_v4_${geometry.gridWidth}x${geometry.gridHeight}_${geometry.originX}_${geometry.originY}`, w, h, (ctx) => {
     ctx.fillStyle = SWAMP_PALETTE.void;
     ctx.fillRect(0, 0, w, h);
 

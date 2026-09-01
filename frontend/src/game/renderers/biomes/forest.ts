@@ -1,13 +1,13 @@
 import { getOffscreenCanvas } from './canvasCache';
 import {
   BuildingVisualProfiles,
-  CAMP_GRID_HEIGHT,
-  CAMP_GRID_WIDTH,
+  getCampGridHeight,
+  getCampGridWidth,
   getGridFootprint,
   tileToScreen,
 } from '../../camp/CampLayoutRegistry';
 import { renderCampfire } from '../../camp/renderers/CampfireRenderer';
-import { ISO_ARENA_GEOMETRY, IsoWorldGeometry, tileToScreen as isoTileToScreen } from '../../IsoWorldGeometry';
+import { ISO_ARENA_GEOMETRY, SETTLEMENT_WORLD_GEOMETRY, IsoWorldGeometry, tileToScreen as isoTileToScreen } from '../../IsoWorldGeometry';
 import { FOREST_NIGHT_PALETTE, stableVisualVariant, WORLD_VISUAL_CONTRACT } from '../../WorldVisualStyle';
 
 export function drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
@@ -91,7 +91,7 @@ export function getForestBackground(w = 500, h = 260): HTMLCanvasElement {
 
 /** Cenário: Acampamento / Safezone em perspectiva isométrica. */
 export function getCampBackground(w = 960, h = 420): HTMLCanvasElement {
-  return getOffscreenCanvas('bg_camp_iso_v4', w, h, (ctx) => {
+  return getOffscreenCanvas(`bg_camp_iso_v5_${getCampGridWidth()}x${getCampGridHeight()}`, w, h, (ctx) => {
     ctx.fillStyle = FOREST_NIGHT_PALETTE.void;
     ctx.fillRect(0, 0, w, h);
 
@@ -111,17 +111,18 @@ export function getCampBackground(w = 960, h = 420): HTMLCanvasElement {
       [0.55, 0.05], [0.68, 0.12], [0.79, 0.07], [0.90, 0.13],
     ].forEach(([rx, ry]) => ctx.fillRect(Math.round(w * rx), Math.round(h * ry), 2, 2));
 
-    // Terreno V3: 24x18. A grade segue sendo legível, mas discreta o bastante
-    // para a vila parecer cenário em vez de editor técnico.
-    for (let tx = 0; tx < CAMP_GRID_WIDTH; tx++) {
-      for (let ty = 0; ty < CAMP_GRID_HEIGHT; ty++) {
+    const campGridWidth = getCampGridWidth();
+    const campGridHeight = getCampGridHeight();
+    // Mundo territorial V5 recebido do backend.
+    for (let tx = 0; tx < campGridWidth; tx++) {
+      for (let ty = 0; ty < campGridHeight; ty++) {
         const c = tileToScreen(tx, ty);
-        const edge = tx === 0 || ty === 0 || tx === CAMP_GRID_WIDTH - 1 || ty === CAMP_GRID_HEIGHT - 1;
+        const edge = tx === 0 || ty === 0 || tx === campGridWidth - 1 || ty === campGridHeight - 1;
         const grassVariant = stableVisualVariant(tx, ty, FOREST_NIGHT_PALETTE.grass.length);
         const fill = edge
           ? FOREST_NIGHT_PALETTE.grassEdge
           : FOREST_NIGHT_PALETTE.grass[grassVariant];
-        drawIsoTile(ctx, tx, ty, fill, undefined, edge ? WORLD_VISUAL_CONTRACT.isoTile.edgeDepth : 0);
+        drawIsoTile(ctx, tx, ty, fill, undefined, edge ? WORLD_VISUAL_CONTRACT.isoTile.edgeDepth : 0, SETTLEMENT_WORLD_GEOMETRY);
         if (!edge && stableVisualVariant(tx, ty, 15) === 0) {
           drawForestTuft(ctx, c.x + 4, c.y + 1, grassVariant);
         }
@@ -131,40 +132,41 @@ export function getCampBackground(w = 960, h = 420): HTMLCanvasElement {
     // Eixos principais + pequenos ramais. Eles formam ruas naturais para os
     // moradores, sem impor onde o jogador deve colocar seus prédios.
     const pathTiles = new Set<string>();
-    const midX = Math.floor(CAMP_GRID_WIDTH / 2);
-    const midY = Math.floor(CAMP_GRID_HEIGHT / 2);
-    for (let x = 2; x < CAMP_GRID_WIDTH - 2; x++) pathTiles.add(`${x},${midY}`);
-    for (let y = 2; y < CAMP_GRID_HEIGHT - 2; y++) pathTiles.add(`${midX},${y}`);
+    const midX = Math.floor(campGridWidth / 2);
+    const midY = Math.floor(campGridHeight / 2);
+    for (let x = 2; x < campGridWidth - 2; x++) pathTiles.add(`${x},${midY}`);
+    for (let y = 2; y < campGridHeight - 2; y++) pathTiles.add(`${midX},${y}`);
     for (let i = -4; i <= 5; i++) {
       const x = midX + i;
       const y = midY + Math.floor(i / 2);
-      if (x > 0 && x < CAMP_GRID_WIDTH - 1 && y > 0 && y < CAMP_GRID_HEIGHT - 1) pathTiles.add(`${x},${y}`);
+      if (x > 0 && x < campGridWidth - 1 && y > 0 && y < campGridHeight - 1) pathTiles.add(`${x},${y}`);
     }
 
     pathTiles.forEach((entry) => {
       const [tx, ty] = entry.split(',').map(Number);
-      drawIsoTile(ctx, tx, ty, stableVisualVariant(tx, ty, 2) === 0 ? FOREST_NIGHT_PALETTE.path : FOREST_NIGHT_PALETTE.pathLight, 'rgba(120,83,45,0.52)');
+      drawIsoTile(ctx, tx, ty, stableVisualVariant(tx, ty, 2) === 0 ? FOREST_NIGHT_PALETTE.path : FOREST_NIGHT_PALETTE.pathLight, 'rgba(120,83,45,0.52)', 0, SETTLEMENT_WORLD_GEOMETRY);
     });
 
     // Vegetação fica nas bordas externas e acompanha o próprio grid, evitando
     // coordenadas mágicas do canvas antigo de 680px.
     const treeTiles: Array<[number, number, number]> = [
-      [1, 3, 0], [2, 8, 1], [3, 15, 2], [7, 17, 3],
-      [16, 1, 1], [21, 4, 2], [22, 10, 0], [19, 16, 3],
+      [1, 5, 0], [4, 18, 1], [7, campGridHeight - 4, 2], [17, campGridHeight - 2, 3],
+      [campGridWidth - 17, 1, 1], [campGridWidth - 5, 6, 2], [campGridWidth - 3, 21, 0], [campGridWidth - 9, campGridHeight - 4, 3],
+      [10, 3, 1], [campGridWidth - 7, campGridHeight - 10, 2],
     ];
     treeTiles.forEach(([tx, ty, variant]) => {
       const p = tileToScreen(tx, ty);
       drawForestTree(ctx, p.x, p.y, variant);
     });
 
-    const stoneTiles: Array<[number, number]> = [[3, 11], [6, 2], [18, 3], [21, 13], [12, 16], [2, 6]];
+    const stoneTiles: Array<[number, number]> = [[5, 24], [12, 2], [campGridWidth - 12, 3], [campGridWidth - 4, 26], [26, campGridHeight - 4], [2, 11]];
     stoneTiles.forEach(([tx, ty]) => {
       const p = tileToScreen(tx, ty);
       drawForestRock(ctx, p.x, p.y, stableVisualVariant(tx, ty, 3));
     });
-    const log = tileToScreen(4, 12);
+    const log = tileToScreen(9, campGridHeight - 8);
     drawFallenLog(ctx, log.x, log.y - 2);
-    const sign = tileToScreen(18, 5);
+    const sign = tileToScreen(campGridWidth - 10, 8);
     drawForestSign(ctx, sign.x, sign.y - 1);
   });
 }
@@ -172,7 +174,7 @@ export function getCampBackground(w = 960, h = 420): HTMLCanvasElement {
 /** Partículas ambientais do acampamento, desenhadas antes dos atores/prédios. */
 export function renderCampDynamic(ctx: CanvasRenderingContext2D, _width: number, _height: number, time: number) {
   const fireflies: Array<[number, number, number]> = [
-    [8, 5, 0], [16, 6, 1], [5, 12, 2], [18, 12, 3], [11, 3, 4],
+    [15, 10, 0], [27, 11, 1], [11, 22, 2], [32, 22, 3], [21, 7, 4],
   ];
   ctx.save();
   fireflies.forEach(([tx, ty, phase]) => {
@@ -320,7 +322,7 @@ const FOREST_ARENA_TREE_TILES: ReadonlyArray<readonly [number, number, number]> 
 
 /** Floresta da primeira expedição em uma arena isométrica de 24x18 tiles. */
 export function getForestArenaBackground(w = 960, h = 420, geometry = ISO_ARENA_GEOMETRY): HTMLCanvasElement {
-  return getOffscreenCanvas(`bg_forest_iso_arena_v3_${geometry.originX}_${geometry.originY}`, w, h, (ctx) => {
+  return getOffscreenCanvas(`bg_forest_iso_arena_v3_${geometry.gridWidth}x${geometry.gridHeight}_${geometry.originX}_${geometry.originY}`, w, h, (ctx) => {
     ctx.fillStyle = FOREST_NIGHT_PALETTE.void;
     ctx.fillRect(0, 0, w, h);
 

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 const read = (p) => fs.readFileSync(p, 'utf8');
 const resourcesSource = read('backend/pkg/game/resource_registry.go') + '\n' + read('backend/pkg/game/economy_resources.go');
 const recipes = read('backend/pkg/game/recipe_registry.go');
-const buildings = read('backend/pkg/game/building_registry.go');
+const buildings = read('backend/pkg/game/building_registry.go') + '\n' + read('backend/pkg/game/defense_building_registry.go');
 const buffs = read('backend/pkg/game/buffs.go');
 const crafting = read('backend/pkg/game/crafting.go');
 const gathering = read('backend/pkg/game/gathering_registry.go');
@@ -12,7 +12,7 @@ const salvage = read('backend/pkg/game/salvage.go');
 
 const keys = [...resourcesSource.matchAll(/\{Key:\s*"([a-z0-9_]+)"/g)].map((m) => m[1]);
 const unique = [...new Set(keys)];
-const intentionallyFuture = new Set(['abyssal_ember', 'trophy_abyss_avenger']);
+const intentionallyFuture = new Set([]);
 const sourceText = `${gathering}\n${profiles}\n${salvage}\n${recipes}`;
 const sinkText = `${recipes}\n${buildings}\n${buffs}\n${crafting}`;
 const missingSource = [];

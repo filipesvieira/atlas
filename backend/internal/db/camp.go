@@ -712,7 +712,8 @@ func LearnBuildingBlueprint(charID, itemID string) (*game.InventoryData, *game.C
 		}
 
 		if targetSlot == nil {
-			tileX, tileY, ok := game.FindFirstFreeCampPlacement(buildingKey, 0, withoutTarget)
+			stageKey := settlementStageKeyTx(tx, charID)
+			tileX, tileY, ok := game.FindFirstFreeCampPlacementForStage(stageKey, buildingKey, 0, withoutTarget)
 			if !ok {
 				return nil, nil, fmt.Errorf("não há espaço livre no terreno para posicionar o projeto de construção")
 			}
@@ -724,8 +725,9 @@ func LearnBuildingBlueprint(charID, itemID string) (*game.InventoryData, *game.C
 				return nil, nil, fmt.Errorf("posicionar fundação do projeto: %w", err)
 			}
 		} else if targetSlot.Level <= 0 && targetSlot.UpgradeTargetLevel <= 0 {
-			if err := game.ValidateCampPlacement(buildingKey, targetSlot.TileX, targetSlot.TileY, targetSlot.Rotation, withoutTarget, ""); err != nil {
-				tileX, tileY, ok := game.FindFirstFreeCampPlacement(buildingKey, targetSlot.Rotation, withoutTarget)
+			stageKey := settlementStageKeyTx(tx, charID)
+			if err := game.ValidateCampPlacementForStage(stageKey, buildingKey, targetSlot.TileX, targetSlot.TileY, targetSlot.Rotation, withoutTarget, ""); err != nil {
+				tileX, tileY, ok := game.FindFirstFreeCampPlacementForStage(stageKey, buildingKey, targetSlot.Rotation, withoutTarget)
 				if !ok {
 					return nil, nil, fmt.Errorf("não há espaço livre no terreno para posicionar o projeto de construção")
 				}
@@ -882,17 +884,25 @@ func EnsureCharacterCamp(charID string) error {
 		}
 	}
 
-	// Auto-descoberta dos projetos iniciais. O catálogo define quais prédios
-	// nascem disponíveis; novas construções não precisam voltar a este método.
+	// Auto-descoberta considera tanto o kit inicial quanto construções liberadas
+	// pela maturidade territorial. Isso evita dependências circulares como
+	// "ser Cidade para descobrir a Muralha exigida para virar Cidade".
+	stageKey := settlementStageKey(charID)
 	for _, def := range game.ListBuildingDefinitions() {
-		if !def.DefaultUnlocked {
+		autoUnlocked := def.DefaultUnlocked || game.BuildingUnlocksAtStage(def, stageKey)
+		if !autoUnlocked {
 			continue
+		}
+		sourceKey := "initial"
+		if !def.DefaultUnlocked && def.UnlockStage != "" {
+			sourceKey = "stage:" + def.UnlockStage
 		}
 		if _, err := DB.Exec(`
 			INSERT INTO character_building_blueprints (character_id, building_key, unlocked_max_level, source_key, discovered_at)
-			VALUES ($1, $2, $3, 'initial', NOW())
-			ON CONFLICT (character_id, building_key) DO NOTHING
-		`, charID, def.Key, def.MaxLevel); err != nil {
+			VALUES ($1, $2, $3, $4, NOW())
+			ON CONFLICT (character_id, building_key) DO UPDATE
+			SET unlocked_max_level=GREATEST(character_building_blueprints.unlocked_max_level,EXCLUDED.unlocked_max_level)
+		`, charID, def.Key, def.MaxLevel, sourceKey); err != nil {
 			return err
 		}
 
@@ -926,7 +936,7 @@ func EnsureCharacterCamp(charID string) error {
 		if err := rows.Close(); err != nil {
 			return err
 		}
-		tileX, tileY, ok := game.FindFirstFreeCampPlacement(def.Key, 0, occupied)
+		tileX, tileY, ok := game.FindFirstFreeCampPlacementForStage(stageKey, def.Key, 0, occupied)
 		if !ok {
 			return fmt.Errorf("não há espaço livre para posicionar o projeto inicial de %s", def.Name)
 		}
@@ -1083,14 +1093,27 @@ func StartBuildingUpgrade(accountID, charID, slotKey, buildingKey string) (*game
 		return nil, err
 	}
 
-	// 1. Construções básicas da alpha ficam disponíveis desde o início. O
-	// sistema de manuais permanece autoritativo para conteúdo especial futuro
-	// (DefaultUnlocked=false).
+	stageKey := settlementStageKeyTx(tx, charID)
+	if bDef.UnlockStage != "" && !game.SettlementStageAtLeast(stageKey, bDef.UnlockStage) {
+		return nil, fmt.Errorf("%s só pode ser projetada a partir do estágio %s", bDef.Name, bDef.UnlockStage)
+	}
+	if game.BuildingUnlocksAtStage(bDef, stageKey) {
+		if _, err := tx.Exec(`
+			INSERT INTO character_building_blueprints(character_id,building_key,unlocked_max_level,source_key,discovered_at)
+			VALUES($1,$2,$3,$4,NOW())
+			ON CONFLICT(character_id,building_key) DO UPDATE SET unlocked_max_level=GREATEST(character_building_blueprints.unlocked_max_level,EXCLUDED.unlocked_max_level)`,
+			charID, buildingKey, bDef.MaxLevel, "stage:"+bDef.UnlockStage); err != nil {
+			return nil, err
+		}
+	}
+
+	// Construções não liberadas pelo estágio continuam usando manuais como fonte
+	// autoritativa de descoberta.
 	if !bDef.DefaultUnlocked {
 		var bpCount int
 		err = tx.QueryRow(`SELECT COUNT(*) FROM character_building_blueprints WHERE character_id = $1 AND building_key = $2`, charID, buildingKey).Scan(&bpCount)
 		if err != nil || bpCount == 0 {
-			return nil, fmt.Errorf("o projeto de %s ainda não foi descoberto. Encontre o Manual de Construção correspondente", bDef.Name)
+			return nil, fmt.Errorf("o projeto de %s ainda não foi descoberto", bDef.Name)
 		}
 	}
 
@@ -1150,6 +1173,9 @@ func StartBuildingUpgrade(accountID, charID, slotKey, buildingKey string) (*game
 	lvlDef, ok := game.GetBuildingLevelDefinition(buildingKey, targetLevel)
 	if !ok {
 		return nil, fmt.Errorf("nível de construção não configurado")
+	}
+	if lvlDef.RequiredSettlementStage != "" && !game.SettlementStageAtLeast(stageKey, lvlDef.RequiredSettlementStage) {
+		return nil, fmt.Errorf("%s Nv. %d requer o estágio territorial %s", bDef.Name, targetLevel, lvlDef.RequiredSettlementStage)
 	}
 
 	// 5. Validar Pré-requisitos de Outras Construções
@@ -1272,9 +1298,17 @@ func StartBuildingUpgrade(accountID, charID, slotKey, buildingKey string) (*game
 	if _, err := tx.Exec(`UPDATE character_camps SET state_revision = state_revision + 1, updated_at = NOW() WHERE character_id = $1`, charID); err != nil {
 		return nil, fmt.Errorf("incrementar revisão do acampamento: %w", err)
 	}
+	if err := invalidateSettlementDefenseSnapshotTx(tx, charID, now); err != nil {
+		return nil, fmt.Errorf("invalidar snapshot defensivo após obra: %w", err)
+	}
 
 	if err := tx.Commit(); err != nil {
 		return nil, err
+	}
+	if completeImmediately {
+		if err := reconcileSettlementStage(charID, now); err != nil {
+			return nil, err
+		}
 	}
 
 	return GetCharacterCamp(charID)
@@ -1340,7 +1374,13 @@ func ReconcileCampUpgrades(charID string, now time.Time) (*game.CampState, bool,
 	if _, err := tx.Exec(`UPDATE settlements SET prosperity=prosperity+$2,revision=revision+1,updated_at=NOW() WHERE character_id=$1`, charID, prosperityGain); err != nil {
 		return nil, false, err
 	}
+	if err := invalidateSettlementDefenseSnapshotTx(tx, charID, now); err != nil {
+		return nil, false, err
+	}
 	if err := tx.Commit(); err != nil {
+		return nil, false, err
+	}
+	if err := reconcileSettlementStage(charID, now); err != nil {
 		return nil, false, err
 	}
 	camp, err := GetCharacterCamp(charID)

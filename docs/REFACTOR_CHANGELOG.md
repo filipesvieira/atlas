@@ -684,4 +684,24 @@
 - anti-win-trading inicial por conta + retorno decrescente da mesma dupla;
 - correção de reconnect de matchmaking com `challenge_id` nulo;
 - M4-B permanece pendente para abandono/desconexão, snapshot defensivo assíncrono opcional, telemetria e apresentação final dos cosméticos.
+## 2026-08-29 — Multiplayer M4-B Ranked Hardening
 
+- desconexão de cliente durante arena ativa tornou-se telemetria, não derrota automática; a simulação autoritativa continua no servidor;
+- desistência explícita é persistida de forma idempotente e materializada pela líder global da arena, usando o mesmo fluxo transacional de resultado/rating;
+- migration `000031_pvp_ranked_hardening.sql` adiciona motivo de conclusão, estado de forfeit, métricas por participante, flags de integridade e seleção de cosméticos sazonais;
+- runtime PvP persiste dano, cura, ataques básicos, skills, críticos, CHASE/KITE, primeiro contato melee e dano pré-contato, preservando telemetria em reconnect/failover;
+- histórico passa a expor duração, motivo de término, desconexões e métricas seguras;
+- ranked registra flags auditáveis de repetição/retorno zero/repetição de forfeit sem ban automático;
+- Central da Arena exibe visão de saúde competitiva e seleção funcional de título/banner/cosmético já desbloqueados;
+- `WorldChatPanel` legado é removido conforme `DELETE_FILES.txt`; o console ativo continua sendo `CommunicationConsole`;
+- snapshot defensivo assíncrono offline permanece opcional e adiado; a próxima macroetapa é M5.
+## 2026-08-30 — M5-B Fortificações e Defesa Ativa
+
+- catálogo modular recebe 10 construções defensivas, totalizando 17 estruturas;
+- Muralha/Portão passam a `placement_mode=perimeter` e são renderizados ao redor do território atual, sem ocupar lotes arrastáveis;
+- oito estruturas internas recebem footprints, renderers pixel/isométricos e integração ao layout livre;
+- desbloqueio e nível mínimo por estágio removem circularidade de progressão entre Vila, Cidade e Reino;
+- presets QA Cidade/Reino/Stress materializam o catálogo e respeitam o teto de nível territorial;
+- upgrades/reposicionamentos invalidam snapshots defensivos, mantendo raids desabilitadas;
+- auditor do acampamento valida as 10 estruturas M5-B e seus renderers;
+- correções recentes de bordas PvE/isolamento do zoom do assentamento foram preservadas; `GameViewport.ts` não foi alterado nesta entrega.

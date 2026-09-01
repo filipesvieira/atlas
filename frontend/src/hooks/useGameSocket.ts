@@ -247,10 +247,47 @@ export interface SettlementArmoryItem {
   stored_at: string;
 }
 
+export interface SettlementStageDefinition {
+  key: string;
+  name: string;
+  icon: string;
+  min_prosperity: number;
+  min_population: number;
+  required_buildings: Record<string, number>;
+  territory_width?: number;
+  territory_height?: number;
+}
+
+export interface SettlementStageRequirementProgress {
+  kind: 'prosperity' | 'population' | 'building' | string;
+  key: string;
+  required: number;
+  current: number;
+  met: boolean;
+}
+
+export interface SettlementStageProgress {
+  current: SettlementStageDefinition;
+  next?: SettlementStageDefinition;
+  requirements: SettlementStageRequirementProgress[];
+  ready: boolean;
+}
+
+export interface SettlementDefenseFoundation {
+  raids_enabled: boolean;
+  strategy: string;
+  shield_until?: string;
+  revision: number;
+  snapshot_ready: boolean;
+}
+
 export interface SettlementState {
   id: string;
   name: string;
   stage_key: string;
+  stage_progress?: SettlementStageProgress;
+  territory?: { min_x: number; min_y: number; max_x: number; max_y: number };
+  defense?: SettlementDefenseFoundation;
   population: number;
   population_capacity: number;
   reputation: number;
@@ -366,6 +403,8 @@ export interface PublicPlayerProfile {
   rating: number;
   wins: number;
   losses: number;
+  title_key?: string;
+  banner_key?: string;
 }
 
 export interface DuelChallenge {
@@ -452,6 +491,11 @@ export interface PvPMatchHistoryEntry {
   season_number?: number;
   honor_awarded?: number;
   repeat_multiplier?: number;
+  completion_reason?: string;
+  duration_seconds?: number;
+  disconnect_count?: number;
+  disconnected_seconds?: number;
+  metrics?: PvPCombatMetrics;
   started_at: string;
   ended_at: string;
 }
@@ -530,6 +574,39 @@ export interface PvPLadderEntry {
   tier:PvPRankTierInfo;
 }
 
+export interface PvPCombatMetrics {
+  character_id:string;
+  damage_dealt:number;
+  damage_taken:number;
+  healing_done:number;
+  basic_attacks:number;
+  skills_used:number;
+  critical_hits:number;
+  movement_ticks:number;
+  chase_ticks:number;
+  kite_ticks:number;
+  first_contact_tick?:number;
+  damage_before_contact:number;
+}
+
+export interface PvPTierDistributionEntry { tier:PvPRankTierInfo; players:number; percent:number; }
+export interface PvPCompetitiveOverview {
+  season_number:number;
+  positioned_players:number;
+  ranked_matches:number;
+  average_duration_seconds:number;
+  forfeit_matches:number;
+  repeat_limited_matches:number;
+  tier_distribution:PvPTierDistributionEntry[];
+}
+export interface PvPCosmeticUnlock { type:'title'|'banner'|'cosmetic'|string; key:string; season_number?:number; unlocked_at:string; }
+export interface PvPCosmeticCollection {
+  equipped_title?:string;
+  equipped_banner?:string;
+  equipped_cosmetic?:string;
+  unlocks:PvPCosmeticUnlock[];
+}
+
 export interface CombatMessage {
   protocol_version?: number;
   request_id?: string;
@@ -552,6 +629,8 @@ export interface CombatMessage {
   pvp_season?: PvPSeasonStatus;
   pvp_ladder?: PvPLadderEntry[];
   pvp_rewards?: PvPSeasonReward[];
+  pvp_competitive?: PvPCompetitiveOverview;
+  pvp_cosmetics?: PvPCosmeticCollection;
   error?: string;
   character?: {
     id: string;
@@ -819,6 +898,8 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 	const [pvpMatchmaking, setPvPMatchmaking] = useState<PvPMatchmakingStatus>({ queued:false, rating:1000, combat_power:0 });
 	const [pvpSeason, setPvPSeason] = useState<PvPSeasonStatus | null>(null);
 	const [pvpLadder, setPvPLadder] = useState<PvPLadderEntry[]>([]);
+	const [pvpCompetitive, setPvPCompetitive] = useState<PvPCompetitiveOverview | null>(null);
+	const [pvpCosmetics, setPvPCosmetics] = useState<PvPCosmeticCollection | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
   const onCombatEventRef = useRef<((event: CombatMessage) => void) | null>(null);
@@ -937,9 +1018,14 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 				});
 			}
 			if (msg.pvp_match_notice) {
-				setPvPMatchNotice(msg.pvp_match_notice);
-                setPvPMatchmaking(previous => ({...previous, queued:false}));
-				setPvPArenaWaiting(msg.type === 'PVP_MATCH_WAITING' || msg.pvp_match_notice.player_confirmed === true);
+        if (msg.pvp_match_notice.status === 'cancelled' || msg.type === 'PVP_MATCH_CANCELLED') {
+          setPvPMatchNotice(null);
+          setPvPArenaWaiting(false);
+        } else {
+          setPvPMatchNotice(msg.pvp_match_notice);
+          setPvPMatchmaking(previous => ({...previous, queued:false}));
+          setPvPArenaWaiting(msg.type === 'PVP_MATCH_WAITING' || msg.pvp_match_notice.player_confirmed === true);
+        }
 			}
 			if (msg.pvp_combat) {
 				setPvPCombat(msg.pvp_combat);
@@ -948,6 +1034,7 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
                   ws.send(JSON.stringify({ action: 'REQUEST_PVP_HISTORY', request_id: makeRequestId('pvphistoryend') }));
                   ws.send(JSON.stringify({ action: 'REQUEST_PVP_SEASON_STATUS', request_id: makeRequestId('pvpseasonend') }));
                   ws.send(JSON.stringify({ action: 'REQUEST_PVP_LADDER', request_id: makeRequestId('pvpladderend') }));
+                  ws.send(JSON.stringify({ action: 'REQUEST_PVP_COMPETITIVE', request_id: makeRequestId('pvpcompetitiveend') }));
                 }
 			}
             if (msg.pvp_history) setPvPHistory(msg.pvp_history);
@@ -955,6 +1042,8 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
             if (msg.pvp_matchmaking) setPvPMatchmaking(msg.pvp_matchmaking);
             if (msg.pvp_season) setPvPSeason(msg.pvp_season);
             if (msg.pvp_ladder) setPvPLadder(msg.pvp_ladder);
+            if (msg.pvp_competitive) setPvPCompetitive(msg.pvp_competitive);
+            if (msg.pvp_cosmetics) setPvPCosmetics(msg.pvp_cosmetics);
             if (msg.pvp_rewards && msg.type === 'PVP_SEASON_REWARDS_CLAIMED') {
               setPvPSeason((previous) => previous ? { ...previous, pending_rewards: previous.pending_rewards.filter((reward) => !msg.pvp_rewards!.some((claimed) => claimed.id === reward.id)) } : previous);
             }
@@ -1554,6 +1643,11 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
   const requestPvPSeasonStatus = () => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'REQUEST_PVP_SEASON_STATUS',request_id:makeRequestId('pvpseason')})); };
   const requestPvPLadder = () => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'REQUEST_PVP_LADDER',request_id:makeRequestId('pvpladder')})); };
   const claimPvPSeasonRewards = () => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'CLAIM_PVP_SEASON_REWARDS',request_id:makeRequestId('pvpreward')})); };
+  const forfeitPvPMatch = (matchId:string) => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'FORFEIT_PVP_MATCH',pvp_match_id:matchId,request_id:makeRequestId('pvpforfeit')})); };
+  const requestPvPCompetitive = () => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'REQUEST_PVP_COMPETITIVE',request_id:makeRequestId('pvpcompetitive')})); };
+  const requestPvPCosmetics = () => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'REQUEST_PVP_COSMETICS',request_id:makeRequestId('pvpcosmetics')})); };
+  const setPvPCosmetic = (type:'title'|'banner'|'cosmetic', key:string) => { if (socketRef.current?.readyState===WebSocket.OPEN) socketRef.current.send(JSON.stringify({action:'SET_PVP_COSMETIC',pvp_cosmetic_type:type,pvp_cosmetic_key:key,request_id:makeRequestId('pvpcosmeticset')})); };
+
   const clearPvPReplay = () => setPvPReplay(null);
 
   const setEquippedSkin = useCallback((skinKey: string) => {
@@ -1624,6 +1718,8 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
         pvpMatchmaking,
         pvpSeason,
         pvpLadder,
+        pvpCompetitive,
+        pvpCosmetics,
     sendWorldChat,
     blockChatCharacter,
     unblockChatCharacter,
@@ -1643,6 +1739,10 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
         requestPvPSeasonStatus,
         requestPvPLadder,
         claimPvPSeasonRewards,
+    forfeitPvPMatch,
+    requestPvPCompetitive,
+    requestPvPCosmetics,
+    setPvPCosmetic,
         clearPvPReplay,
 		setEquippedSkin,
     clearPublicProfile,

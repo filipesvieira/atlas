@@ -1,6 +1,6 @@
 # Status da documentação — Reino do Avesso
 
-Data da revisão: **2026-08-27**  
+Data da revisão: **2026-08-30**  
 Checkout auditado: `/l/disk0/filipev/Projetos/atlas/atlas`
 
 Este documento é o índice de navegação da documentação. Quando um plano antigo
@@ -15,13 +15,14 @@ continuam preservados como registro histórico da entrega em que foram escritos.
 | Catálogo | versão `2026.08-performance-v2-equipment-identity-v1` | `backend/pkg/game/game_catalog.go` |
 | Conteúdo | 9 regiões, 40 monstros/bosses, 40 perfis de loot, 111 templates e 40 visuais | `node tools/audit-content.mjs` |
 | Profissões/economia | 13 profissões, 6 de coleta e 7 de artesanato; 6 expedições de coleta | `node tools/audit-economy.mjs` |
-| Assentamento | 7 construções canônicas, layout V3 em grade 24x18 | `backend/pkg/game/building_registry.go`, `backend/pkg/game/camp_layout.go` |
-| Arenas isométricas | acampamento, Floresta e Vila do Shereque usam `ISO_ARENA_GEOMETRY`; Floresta e Shereque possuem terreno/colisão próprios | `frontend/src/game/registries/BiomeRegistry.ts`, `backend/pkg/game/arena_terrain.go` |
+| Assentamento | Layout V4: mundo 44x32 com bounds progressivos 24x18 -> 44x32; 17 construções canônicas após M5-B, incluindo fortificações de perímetro | `backend/pkg/game/building_registry.go`, `backend/pkg/game/defense_building_registry.go`, `backend/pkg/game/camp_layout.go` |
+| Arenas isométricas | arenas PvE/PvP permanecem em `ISO_ARENA_GEOMETRY` 24x18; assentamento usa geometria territorial V4 independente até 44x32 | `frontend/src/game/IsoWorldGeometry.ts`, `frontend/src/game/camp/CampLayoutRegistry.ts`, `backend/pkg/game/camp_layout.go` |
 | Outras arenas | continuam com renderers legados até receberem geometria e terreno próprios | `frontend/src/game/registries/BiomeRegistry.ts` |
 | Renderização | Canvas 2D com cache offscreen e interpolação; PixiJS continua como dependência instalada, mas não é o renderer atual do jogo | `frontend/src/components/Viewport/GameViewport.ts`, `frontend/src/game/renderers/` |
-| Persistência | 30 arquivos de migration embutidos, até `000030_pvp_ranked_seasons.sql` | `backend/migrations/`, `backend/internal/db/migrator.go` |
+| Combat Feel | CFF-A concluída: hit stop visual, sparks/bursts, screen shake acessível, critical/death impact e reações visuais compartilhadas entre PvE/PvP; CFF-B/C ficam após M7 | `frontend/src/game/effects/CombatPresentationSystem.ts`, `docs/COMBAT_FEEL_MASTER_PLAN.md` |
+| Persistência | 35 arquivos SQL embutidos; migrations canônicas atualmente chegam a `000035_settlement_stage_foundation.sql`, incluindo `000032_pvp_balance_qa.sql` | `backend/migrations/`, `backend/internal/db/migrator.go` |
 | WebSocket | ticket curto single-use para conexão e deltas `character_delta` em caminhos quentes | `backend/cmd/server/security.go`, `frontend/src/hooks/useGameSocket.ts` |
-| Multiplayer/realtime | chat mundial persistente, Pub/Sub Redis, presença global TTL, ticket WebSocket compartilhado, schedulers com liderança PostgreSQL, desafios PvP, confirmação bilateral, duelo isolado com recuperação por pulso persistido, matchmaking casual e ranqueado, temporadas/ladder/honra M4-A; arena isométrica visual no Canvas, block/report, perfil PvP e stream social separado | `backend/cmd/server/multiplayer.go`, `backend/cmd/server/pvp_arena_scheduler.go`, `backend/pkg/game/pvp_combat.go`, `backend/pkg/game/pvp_skill_rules.go`, `backend/internal/db/multiplayer.go`, `frontend/src/components/Viewport/PvPArenaViewport.ts` |
+| Multiplayer/realtime | M1-M4 concluídas; PvP v4 reconciliado com balance gate CP-normalizado, telemetria e restore; matchmaking casual/ranqueado, temporadas, honra, forfeit e integridade permanecem server-authoritative | `backend/cmd/server/multiplayer.go`, `backend/cmd/server/pvp_arena_scheduler.go`, `backend/pkg/game/pvp_combat.go`, `backend/pkg/game/pvp_skill_rules.go`, `backend/internal/db/multiplayer.go`, `frontend/src/components/Viewport/PvPArenaViewport.ts` |
 | Prólogo | seis telas, versionado e exibido uma vez por personagem no navegador; pode ser revisto pelo menu | `frontend/src/components/Prologue/`, `frontend/src/App.tsx` |
 
 ## Auditorias executadas
@@ -38,7 +39,7 @@ node tools/audit-resource-usage.mjs
 Resultados resumidos:
 
 - `audit-content`: 9 regiões, 40 monstros/bosses, 40 perfis, 111 itens e 40 visuais;
-- `audit-camp-content`: 88 recursos registrados, 40 perfis de monstros, 7 construções canônicas, layout 24x18 V3;
+- `audit-camp-content`: território V4 44x32, arena 24x18 e seis estágios territoriais validados;
 - `audit-economy`: 13 profissões, 6 expedições de coleta e cobertura de crafting/assentamento;
 - `audit-resource-usage`: nenhum recurso obtível sem origem e destino; apenas `abyssal_ember` e `trophy_abyss_avenger` estão reservados para conteúdo futuro.
 
@@ -50,6 +51,7 @@ Resultados resumidos:
 - [`KNOWLEDGE_BASE.md`](KNOWLEDGE_BASE.md): regras de domínio e arquitetura viva.
 - [`ARCHITECTURE_MODULAR.md`](ARCHITECTURE_MODULAR.md): registries, contratos e extensibilidade.
 - [`ARENA_TERRAIN_SYSTEM.md`](ARENA_TERRAIN_SYSTEM.md): grade, colisão, profundidade e terrenos.
+- [`COMBAT_FEEL_MASTER_PLAN.md`](COMBAT_FEEL_MASTER_PLAN.md): roadmap, invariantes e escopo CFF-A/B/C.
 - [`MIGRATION_RUNBOOK_ECONOMY_V2.md`](MIGRATION_RUNBOOK_ECONOMY_V2.md): operação de migrations, rollout e rollback.
 - [`ATLAS_GAME_SPECIALIST_MANUAL.md`](ATLAS_GAME_SPECIALIST_MANUAL.md): práticas para implementar conteúdo novo.
 - [`REFACTOR_CHANGELOG.md`](REFACTOR_CHANGELOG.md): histórico consolidado e últimas entregas.
@@ -84,5 +86,12 @@ antigas.
   Shereque também possui renderer, geometria e terreno isométricos próprios.
 - A documentação agora distingue **dependência instalada** de **tecnologia
   efetivamente usada**: o jogo atual renderiza em Canvas 2D.
-- A lista de migrations deve ser lida até `000026`; uma migration aplicada nunca
-  deve ser editada. Mudanças futuras precisam ser aditivas.
+- A lista de migrations canônicas deve ser lida no diretório `backend/migrations/`; migration aplicada nunca deve ser editada. Mudanças futuras são sempre aditivas.
+- CFF-A foi inserida antes da M5-B por ser presentation-only; CFF-B/C permanecem após M7 porque alteram regras de combate.
+## Atualização 2026-08-30 — M5-B.1
+
+- Territory V5: Reino 52x38; Cidade permanece 40x28; Layout Version 5.
+- Contrato territorial é backend-authoritative via GameCatalog (`settlement_territory`).
+- Hover/click/drag de construções e deep-links são parte da fundação oficial de UX.
+- `docs/KINGDOM_VS_KINGDOM_MASTER_PLAN.md` é a fonte canônica para M5-C/M6/M7.
+- Próxima etapa: M5-C. Raid real permanece M7.

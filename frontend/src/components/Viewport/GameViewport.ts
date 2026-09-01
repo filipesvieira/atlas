@@ -3,10 +3,11 @@ import { heroRegistry } from '../../game/registries/HeroRegistry';
 import { SkinRegistryService } from '../../game/registries/SkinRegistry';
 import { monsterRegistry } from '../../game/registries/MonsterRegistry';
 import { CombatEffectRegistry } from '../../game/effects/CombatEffectRegistry';
+import { CombatPresentationSystem, type CombatImpactProfile } from '../../game/effects/CombatPresentationSystem';
 import { Position } from '../../game/effects/types';
 import { campSceneRenderer } from '../../game/camp/CampSceneRenderer';
-import { getGridFootprint, screenToTile, tileToScreen } from '../../game/camp/CampLayoutRegistry';
-import { ISO_ARENA_GEOMETRY, IsoWorldGeometry, clampIsoTile, tileToScreen as isoTileToScreen } from '../../game/IsoWorldGeometry';
+import { getGridFootprint, getSettlementStageBounds, getSettlementStageCenter, getSettlementStageScreenBounds, isPerimeterBuilding, screenToTile, tileToScreen } from '../../game/camp/CampLayoutRegistry';
+import { ISO_ARENA_GEOMETRY, SETTLEMENT_WORLD_GEOMETRY, SETTLEMENT_WORLD_PIXEL_HEIGHT, SETTLEMENT_WORLD_PIXEL_WIDTH, IsoWorldGeometry, clampIsoTile, createArenaGeometry, getIsoWorldCanvasSize, screenToTile as isoScreenToTile, tileToScreen as isoTileToScreen } from '../../game/IsoWorldGeometry';
 import { drawWandStar, drawStaffVortex, drawFireballComet, drawIceOrbComet, drawRealArrow, drawLollipopBolt } from '../../game/effects/renderers/projectileSprites';
 import type { CampState, SettlementState } from '../../hooks/useGameSocket';
 
@@ -95,14 +96,19 @@ interface RenderMonster {
   attackDuration: number;
   spawnTimer: number;
   spawnDuration: number;
+  hitReactionTimer: number;
+  hitReactionDuration: number;
+  hitReactionOffsetX: number;
+  hitReactionOffsetY: number;
 }
 
 // O backend decide o próximo tile a cada ciclo de combate. O cliente usa a
 // distância recebida nesse intervalo para manter a caminhada contínua entre
 // snapshots, sem inventar posições que possam afetar combate ou alcance.
 const ARENA_SERVER_TICK_SECONDS = 0.75;
-const MIN_VIEWPORT_ZOOM = 1.0;
-const MAX_VIEWPORT_ZOOM = 1.5;
+const MIN_ARENA_ZOOM = 1.0;
+const MIN_SETTLEMENT_ZOOM = 0.65;
+const MAX_VIEWPORT_ZOOM = 1.45;
 const VIEWPORT_ZOOM_STEP = 0.1;
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -157,6 +163,11 @@ export class GameViewport {
   private heroFacing = 1;
   private heroAttackDuration = 0.35; // 350ms de ciclo de ataque
   private heroAttackTimer = 0;
+  private heroHitFlashTimer = 0;
+  private heroHitReactionTimer = 0;
+  private heroHitReactionDuration = 0;
+  private heroHitReactionOffsetX = 0;
+  private heroHitReactionOffsetY = 0;
 
   // Estado dos Monstros e Bioma
   private regionId = 'forest';
@@ -167,6 +178,7 @@ export class GameViewport {
 
   // Subsistema Modular de Efeitos
   private effectRegistry = new CombatEffectRegistry();
+  private combatPresentation = new CombatPresentationSystem();
 
   // Efeitos visuais e partículas
   private floatingTexts: FloatingText[] = [];
@@ -179,6 +191,11 @@ export class GameViewport {
   private draggingBuildingRotation = 0;
   private draggingBuildingPoint: { x: number; y: number } | null = null;
   private onMoveCampBuilding?: (slotKey: string, tileX: number, tileY: number, rotation: number) => void;
+  private onCampBuildingHover?: (slotKey: string | null, clientX: number, clientY: number) => void;
+  private onCampBuildingClick?: (slotKey: string) => void;
+  private campPointerCandidateSlotKey: string | null = null;
+  private campPointerStartClient: { x: number; y: number } | null = null;
+  private hoveredBuildingSlotKey: string | null = null;
   private onMoveHero?: (direction: string, pressed: boolean) => void;
   private pressedMovementKeys = new Set<string>();
   private heroMovementHeartbeat: number | null = null;
@@ -188,6 +205,9 @@ export class GameViewport {
   private viewportZoom = 1.15;
   private cameraFocusX = this.width / 2;
   private cameraFocusY = this.height / 2;
+  private cameraManual = false;
+  private cameraPanPointerId: number | null = null;
+  private cameraPanLastClient: { x: number; y: number } | null = null;
 
   private arenaActorScreenPosition(gridX: number, gridY: number) {
     const geometry = this.arenaGeometry || ISO_ARENA_GEOMETRY;
@@ -196,42 +216,144 @@ export class GameViewport {
     return { x: ground.x, y: ground.y - geometry.actorFootOffset, depth: ground.y };
   }
 
+  private resolveArenaGeometry(arenaKey: string, width?: unknown, height?: unknown): IsoWorldGeometry | null {
+    const base = biomeRegistry.getIsoGeometry(arenaKey);
+    if (!base) return null;
+    const snapshotWidth = Number(width);
+    const snapshotHeight = Number(height);
+    if (!Number.isFinite(snapshotWidth) || !Number.isFinite(snapshotHeight) || snapshotWidth < 1 || snapshotHeight < 1) {
+      return base;
+    }
+    return createArenaGeometry(snapshotWidth, snapshotHeight);
+  }
+
+  private activeArenaCanvasSize() {
+    return getIsoWorldCanvasSize(this.arenaGeometry || ISO_ARENA_GEOMETRY);
+  }
+
   constructor() {}
 
   public setCampMoveHandler(handler?: (slotKey: string, tileX: number, tileY: number, rotation: number) => void) {
     this.onMoveCampBuilding = handler;
   }
 
+  public setCampInteractionHandlers(
+    onHover?: (slotKey: string | null, clientX: number, clientY: number) => void,
+    onClick?: (slotKey: string) => void,
+  ) {
+    this.onCampBuildingHover = onHover;
+    this.onCampBuildingClick = onClick;
+  }
+
   public setHeroMoveHandler(handler?: (direction: string, pressed: boolean) => void) {
     this.onMoveHero = handler;
   }
 
+  private settlementStageKey() {
+    return this.settlement?.stage_key || 'camp';
+  }
+
+  /** O Reino desbloqueia exatamente toda a malha territorial V4. */
+  private usesFullSettlementWorld() {
+    const bounds = getSettlementStageBounds(this.settlementStageKey());
+    return bounds.minX === 0
+      && bounds.minY === 0
+      && bounds.maxX === SETTLEMENT_WORLD_GEOMETRY.gridWidth
+      && bounds.maxY === SETTLEMENT_WORLD_GEOMETRY.gridHeight;
+  }
+
+  /**
+   * Menor zoom que ainda mantém a câmera dentro do buffer do assentamento.
+   * Botão e roda precisam respeitá-lo: aplicar só no `fit` faria as bordas
+   * pretas retornarem ao diminuir o zoom por um caminho alternativo.
+   */
+  private minimumSettlementZoom() {
+    const center = this.usesFullSettlementWorld()
+      ? { x: SETTLEMENT_WORLD_PIXEL_WIDTH / 2, y: SETTLEMENT_WORLD_PIXEL_HEIGHT / 2 }
+      : getSettlementStageCenter(this.settlementStageKey());
+    const safeVisibleWidth = Math.max(1, Math.min(center.x, SETTLEMENT_WORLD_PIXEL_WIDTH - center.x) * 2);
+    const safeVisibleHeight = Math.max(1, Math.min(center.y, SETTLEMENT_WORLD_PIXEL_HEIGHT - center.y) * 2);
+    return Math.max(
+      MIN_SETTLEMENT_ZOOM,
+      this.width / safeVisibleWidth,
+      this.height / safeVisibleHeight,
+    );
+  }
+
   public zoomIn() {
     this.viewportZoom = Math.min(MAX_VIEWPORT_ZOOM, this.viewportZoom + VIEWPORT_ZOOM_STEP);
+    if (!this.isActive) this.cameraManual = true;
   }
 
   public zoomOut() {
-    this.viewportZoom = Math.max(MIN_VIEWPORT_ZOOM, this.viewportZoom - VIEWPORT_ZOOM_STEP);
+    const minimumZoom = this.isActive ? MIN_ARENA_ZOOM : this.minimumSettlementZoom();
+    this.viewportZoom = Math.max(minimumZoom, this.viewportZoom - VIEWPORT_ZOOM_STEP);
+    if (!this.isActive) this.cameraManual = true;
+  }
+
+  public fitSettlement() {
+    if (this.isActive) return;
+    const fullWorld = this.usesFullSettlementWorld();
+    const bounds = fullWorld
+      ? { minX: 0, maxX: SETTLEMENT_WORLD_PIXEL_WIDTH, minY: 0, maxY: SETTLEMENT_WORLD_PIXEL_HEIGHT }
+      : getSettlementStageScreenBounds(this.settlementStageKey(), 30);
+    const width = Math.max(1, bounds.maxX - bounds.minX);
+    const height = Math.max(1, bounds.maxY - bounds.minY);
+    const fit = Math.min((this.width - 54) / width, (this.height - 42) / height);
+    // O Reino ocupa todo o buffer territorial (1400px). Em uma tela 16:7,
+    // o fit de contenção poderia ficar abaixo de `canvas / mundo`, expondo o
+    // fundo do elemento nas laterais. Este mínimo adicional preserva a visão
+    // ampla, mas nunca deixa a câmera sair do buffer renderizado.
+    this.viewportZoom = Math.min(MAX_VIEWPORT_ZOOM, Math.max(this.minimumSettlementZoom(), fit));
+    const center = fullWorld
+      ? { x: SETTLEMENT_WORLD_PIXEL_WIDTH / 2, y: SETTLEMENT_WORLD_PIXEL_HEIGHT / 2 }
+      : getSettlementStageCenter(this.settlementStageKey());
+    this.cameraFocusX = center.x;
+    this.cameraFocusY = center.y;
+    this.cameraManual = false;
   }
 
   public resetZoom() {
+    if (!this.isActive) {
+      this.fitSettlement();
+      return;
+    }
     this.viewportZoom = 1.15;
   }
 
   private updateCameraFocus() {
     const visibleWidth = this.width / this.viewportZoom;
     const visibleHeight = this.height / this.viewportZoom;
-    const minX = visibleWidth / 2;
-    const maxX = this.width - visibleWidth / 2;
-    const minY = visibleHeight / 2;
-    const maxY = this.height - visibleHeight / 2;
+    const arenaCanvas = this.activeArenaCanvasSize();
+    const worldBounds = this.isActive
+      ? { minX: 0, minY: 0, maxX: arenaCanvas.width, maxY: arenaCanvas.height }
+      : this.usesFullSettlementWorld()
+        ? { minX: 0, minY: 0, maxX: SETTLEMENT_WORLD_PIXEL_WIDTH, maxY: SETTLEMENT_WORLD_PIXEL_HEIGHT }
+        : getSettlementStageScreenBounds(this.settlementStageKey(), 72);
+    const minX = worldBounds.minX + visibleWidth / 2;
+    const maxX = worldBounds.maxX - visibleWidth / 2;
+    const minY = worldBounds.minY + visibleHeight / 2;
+    const maxY = worldBounds.maxY - visibleHeight / 2;
     const clampFocus = (value: number, min: number, max: number) => {
       if (max < min) return (min + max) / 2;
       return Math.max(min, Math.min(max, value));
     };
 
-    this.cameraFocusX = clampFocus(this.heroX, minX, maxX);
-    this.cameraFocusY = clampFocus(this.heroY, minY, maxY);
+    if (this.isActive) {
+      this.cameraFocusX = clampFocus(this.heroX, minX, maxX);
+      this.cameraFocusY = clampFocus(this.heroY, minY, maxY);
+      return;
+    }
+
+    if (!this.cameraManual) {
+      const center = this.usesFullSettlementWorld()
+        ? { x: SETTLEMENT_WORLD_PIXEL_WIDTH / 2, y: SETTLEMENT_WORLD_PIXEL_HEIGHT / 2 }
+        : getSettlementStageCenter(this.settlementStageKey());
+      this.cameraFocusX = center.x;
+      this.cameraFocusY = center.y;
+    }
+    this.cameraFocusX = clampFocus(this.cameraFocusX, minX, maxX);
+    this.cameraFocusY = clampFocus(this.cameraFocusY, minY, maxY);
   }
 
   /**
@@ -280,7 +402,9 @@ export class GameViewport {
     canvas.addEventListener('pointerdown', this.handleCampPointerDown);
     canvas.addEventListener('pointermove', this.handleCampPointerMove);
     canvas.addEventListener('pointerup', this.handleCampPointerUp);
+    canvas.addEventListener('pointerleave', this.handleCampPointerLeave);
     canvas.addEventListener('pointercancel', this.handleCampPointerUp);
+    canvas.addEventListener('wheel', this.handleCampWheel, { passive: false });
     window.addEventListener('keydown', this.handleCampKeyDown);
     window.addEventListener('keydown', this.handleHeroKeyDown);
     window.addEventListener('keyup', this.handleHeroKeyUp);
@@ -311,18 +435,27 @@ export class GameViewport {
       this.handleHeroPointerDown(event);
       return;
     }
-    if (this.isActive || !this.camp || !this.onMoveCampBuilding || !this.canvas) return;
+    if (!this.canvas) return;
+    const wantsPan = event.button === 1 || (event.button === 0 && event.altKey);
+    if (wantsPan) {
+      event.preventDefault();
+      this.cameraManual = true;
+      this.cameraPanPointerId = event.pointerId;
+      this.cameraPanLastClient = { x: event.clientX, y: event.clientY };
+      this.canvas.setPointerCapture?.(event.pointerId);
+      this.canvas.style.cursor = 'grabbing';
+      return;
+    }
+    if (!this.camp) return;
     const point = this.canvasPoint(event);
     const slotKey = campSceneRenderer.hitTest(point.x, point.y);
     if (!slotKey) return;
     const building = this.camp.buildings?.[slotKey];
-    if (!building || building.upgrade_target_level) return;
-    this.draggingBuildingSlotKey = slotKey;
-    this.draggingBuildingRotation = building.rotation || 0;
-    this.draggingBuildingPoint = point;
+    if (!building) return;
+    this.campPointerCandidateSlotKey = slotKey;
+    this.campPointerStartClient = { x: event.clientX, y: event.clientY };
     this.canvas.setPointerCapture?.(event.pointerId);
-    this.canvas.style.cursor = 'grabbing';
-    this.updateCampPlacementPreview(point.x, point.y);
+    this.canvas.style.cursor = isPerimeterBuilding(building.building_key) ? 'pointer' : 'grab';
   };
 
 
@@ -331,10 +464,58 @@ export class GameViewport {
       this.handleHeroPointerMove(event);
       return;
     }
-    if (!this.draggingBuildingSlotKey || this.isActive) return;
+    if (this.cameraPanPointerId === event.pointerId && this.cameraPanLastClient && this.canvas) {
+      event.preventDefault();
+      const rect = this.canvas.getBoundingClientRect();
+      const dx = ((event.clientX - this.cameraPanLastClient.x) / Math.max(1, rect.width)) * this.width / this.viewportZoom;
+      const dy = ((event.clientY - this.cameraPanLastClient.y) / Math.max(1, rect.height)) * this.height / this.viewportZoom;
+      this.cameraFocusX -= dx;
+      this.cameraFocusY -= dy;
+      this.cameraPanLastClient = { x: event.clientX, y: event.clientY };
+      return;
+    }
     const point = this.canvasPoint(event);
-    this.draggingBuildingPoint = point;
-    this.updateCampPlacementPreview(point.x, point.y);
+    if (!this.draggingBuildingSlotKey && this.campPointerCandidateSlotKey && this.campPointerStartClient) {
+      const distance = Math.hypot(event.clientX - this.campPointerStartClient.x, event.clientY - this.campPointerStartClient.y);
+      const candidate = this.camp?.buildings?.[this.campPointerCandidateSlotKey];
+      if (distance >= 6 && candidate && !candidate.upgrade_target_level && !isPerimeterBuilding(candidate.building_key) && this.onMoveCampBuilding) {
+        this.draggingBuildingSlotKey = this.campPointerCandidateSlotKey;
+        this.draggingBuildingRotation = candidate.rotation || 0;
+        this.draggingBuildingPoint = point;
+        if (this.canvas) this.canvas.style.cursor = 'grabbing';
+        this.updateCampPlacementPreview(point.x, point.y);
+      }
+    }
+    if (this.draggingBuildingSlotKey) {
+      this.draggingBuildingPoint = point;
+      this.updateCampPlacementPreview(point.x, point.y);
+      return;
+    }
+    if (!this.campPointerCandidateSlotKey) {
+      const hovered = campSceneRenderer.hitTest(point.x, point.y);
+      if (hovered !== this.hoveredBuildingSlotKey) this.hoveredBuildingSlotKey = hovered;
+      this.onCampBuildingHover?.(hovered, event.clientX, event.clientY);
+      if (this.canvas) this.canvas.style.cursor = hovered ? 'pointer' : 'default';
+    }
+  };
+
+
+  private handleCampPointerLeave = (event: PointerEvent) => {
+    if (this.isActive || this.draggingBuildingSlotKey || this.cameraPanPointerId === event.pointerId) return;
+    this.hoveredBuildingSlotKey = null;
+    this.onCampBuildingHover?.(null, event.clientX, event.clientY);
+    if (this.canvas) this.canvas.style.cursor = 'default';
+  };
+
+  private handleCampWheel = (event: WheelEvent) => {
+    if (this.isActive) return;
+    event.preventDefault();
+    this.cameraManual = true;
+    const direction = event.deltaY < 0 ? 1 : -1;
+    this.viewportZoom = Math.max(
+      this.minimumSettlementZoom(),
+      Math.min(MAX_VIEWPORT_ZOOM, this.viewportZoom + direction * VIEWPORT_ZOOM_STEP),
+    );
   };
 
   private handleCampKeyDown = (event: KeyboardEvent) => {
@@ -382,7 +563,7 @@ export class GameViewport {
   }
 
   private heroMovementDirectionForPoint(point: { x: number; y: number }) {
-    const targetTile = screenToTile(point.x, point.y);
+    const targetTile = isoScreenToTile(point.x, point.y, this.arenaGeometry || ISO_ARENA_GEOMETRY);
     const deltaX = targetTile.tileX - this.heroGridX;
     const deltaY = targetTile.tileY - this.heroGridY;
     const vertical = deltaY === 0 ? '' : deltaY < 0 ? 'up' : 'down';
@@ -517,7 +698,24 @@ export class GameViewport {
       this.handleHeroPointerUp(event);
       return;
     }
-    if (!this.draggingBuildingSlotKey) return;
+    if (this.cameraPanPointerId === event.pointerId) {
+      if (this.canvas?.hasPointerCapture?.(event.pointerId)) this.canvas.releasePointerCapture?.(event.pointerId);
+      this.cameraPanPointerId = null;
+      this.cameraPanLastClient = null;
+      if (this.canvas) this.canvas.style.cursor = 'default';
+      return;
+    }
+    if (!this.draggingBuildingSlotKey) {
+      const clickedSlotKey = this.campPointerCandidateSlotKey;
+      this.campPointerCandidateSlotKey = null;
+      this.campPointerStartClient = null;
+      if (clickedSlotKey) this.onCampBuildingClick?.(clickedSlotKey);
+      if (this.canvas) {
+        this.canvas.style.cursor = this.hoveredBuildingSlotKey ? 'pointer' : 'default';
+        if (this.canvas.hasPointerCapture?.(event.pointerId)) this.canvas.releasePointerCapture?.(event.pointerId);
+      }
+      return;
+    }
     const slotKey = this.draggingBuildingSlotKey;
     const point = this.canvasPoint(event);
     const building = this.camp?.buildings?.[slotKey];
@@ -527,12 +725,16 @@ export class GameViewport {
       const tile = screenToTile(point.x, point.y);
       const tileX = tile.tileX - Math.floor(fp.width / 2);
       const tileY = tile.tileY - Math.floor(fp.height / 2);
-      const valid = campSceneRenderer.isPlacementValid(this.camp, slotKey, tileX, tileY, rotation);
+      const valid = campSceneRenderer.isPlacementValid(this.camp, slotKey, tileX, tileY, rotation, this.settlementStageKey());
       if (valid) this.onMoveCampBuilding(slotKey, tileX, tileY, rotation);
     }
     this.draggingBuildingSlotKey = null;
+    this.campPointerCandidateSlotKey = null;
+    this.campPointerStartClient = null;
     this.draggingBuildingRotation = 0;
     this.draggingBuildingPoint = null;
+    this.cameraPanPointerId = null;
+    this.cameraPanLastClient = null;
     campSceneRenderer.setPlacementPreview(null);
     if (this.canvas) {
       this.canvas.style.cursor = 'default';
@@ -551,7 +753,7 @@ export class GameViewport {
     const tileY = tile.tileY - Math.floor(fp.height / 2);
     campSceneRenderer.setPlacementPreview({
       slotKey, tileX, tileY, rotation,
-      valid: campSceneRenderer.isPlacementValid(this.camp, slotKey, tileX, tileY, rotation),
+      valid: campSceneRenderer.isPlacementValid(this.camp, slotKey, tileX, tileY, rotation, this.settlementStageKey()),
     });
   }
 
@@ -576,6 +778,16 @@ export class GameViewport {
   // ─── ATUALIZAÇÃO DA LÓGICA E ANIMAÇÃO ──────────────────────────────────────
 
   private update(_dt: number) {
+    // CFF-A: apenas o relógio visual pode pausar. Backend/WebSocket continuam
+    // processando normalmente durante hit stop.
+    _dt = this.combatPresentation.advance(_dt);
+    if (this.heroHitFlashTimer > 0 && _dt > 0) {
+      this.heroHitFlashTimer = Math.max(0, this.heroHitFlashTimer - _dt);
+    }
+    if (this.heroHitReactionTimer > 0) {
+      this.heroHitReactionTimer = Math.max(0, this.heroHitReactionTimer - _dt);
+    }
+
     // 0. Atualizar Temporizador do Golpe do Herói
     if (this.heroAttackTimer > 0) {
       this.heroAttackTimer = Math.max(0, this.heroAttackTimer - _dt);
@@ -699,11 +911,14 @@ export class GameViewport {
         m.isWalking = false;
       }
 
-      if (m.hitFlashTimer > 0) {
+      if (m.hitFlashTimer > 0 && _dt > 0) {
         m.hitFlashTimer -= 1;
       }
       if (m.attackTimer > 0) {
         m.attackTimer = Math.max(0, m.attackTimer - _dt);
+      }
+      if (m.hitReactionTimer > 0) {
+        m.hitReactionTimer = Math.max(0, m.hitReactionTimer - _dt);
       }
     });
 
@@ -944,7 +1159,7 @@ export class GameViewport {
   /** Posição atual da fogueira para partículas, respeitando drag-and-drop. */
   private getCampfireParticleOrigin() {
     const building = Object.values(this.camp?.buildings || {}).find((slot) => slot.building_key === 'campfire');
-    if (!building) return tileToScreen(10.5, 8.5);
+    if (!building) return tileToScreen(20.5, 15.5);
     const fp = getGridFootprint(building.building_key, building.rotation || 0);
     return tileToScreen(building.tile_x + (fp.width - 1) / 2, building.tile_y + (fp.height - 1) / 2);
   }
@@ -961,7 +1176,7 @@ export class GameViewport {
     // zoom.
     const frameTime = performance.now();
     if (!this.isActive) {
-      const campHero = campSceneRenderer.getHeroSceneState(frameTime, this.camp);
+      const campHero = campSceneRenderer.getHeroSceneState(frameTime, this.camp, this.settlementStageKey());
       this.heroX = campHero.x;
       this.heroY = campHero.y;
     }
@@ -973,14 +1188,22 @@ export class GameViewport {
     // atores, projéteis e textos de combate. O HUD fica fora deste canvas e
     // continua em tamanho fixo.
     ctx.save();
+    this.combatPresentation.applyScreenShake(ctx, frameTime);
     this.applyCameraTransform(ctx);
 
     // 1. Desenhar cenário
     const biomeKey = this.isActive ? this.regionId : 'camp';
-    const activeGeometry = biomeRegistry.getIsoGeometry(biomeKey);
-    this.arenaGeometry = this.isActive ? (activeGeometry || null) : biomeRegistry.getIsoGeometry('camp') || null;
+    if (this.isActive && !this.arenaGeometry) {
+      this.arenaGeometry = this.resolveArenaGeometry(biomeKey);
+    } else if (!this.isActive) {
+      this.arenaGeometry = biomeRegistry.getIsoGeometry('camp') || null;
+    }
+    const activeGeometry = this.arenaGeometry || undefined;
     this.isIsoArena = this.isActive && Boolean(activeGeometry);
-    const bgBuffer = biomeRegistry.render(biomeKey, this.width, this.height);
+    const arenaCanvas = this.isActive && this.isIsoArena ? this.activeArenaCanvasSize() : null;
+    const backgroundWidth = arenaCanvas?.width || (this.isActive ? this.width : SETTLEMENT_WORLD_PIXEL_WIDTH);
+    const backgroundHeight = arenaCanvas?.height || (this.isActive ? this.height : SETTLEMENT_WORLD_PIXEL_HEIGHT);
+    const bgBuffer = biomeRegistry.render(biomeKey, backgroundWidth, backgroundHeight, activeGeometry);
     if (this.isActive && this.isIsoArena && !this.arenaInitialized) {
       const fallbackHero = this.arenaActorScreenPosition(this.heroGridX, this.heroGridY);
       this.heroBaseX = fallbackHero.x;
@@ -991,10 +1214,13 @@ export class GameViewport {
       this.heroBaseX = 140;
       this.heroBaseY = BATTLE_GROUND_Y;
     }
-    ctx.drawImage(bgBuffer, 0, 0, this.width, this.height);
+    // O buffer da arena pode ser maior que a janela visível. A câmera recorta
+    // esse mundo diretamente; redimensioná-lo para 960x420 faria terrenos
+    // futuros parecerem menores e reintroduziria faixas vazias nas bordas.
+    ctx.drawImage(bgBuffer, 0, 0);
     // Cada bioma decide sua própria camada dinâmica. O viewport não precisa
     // conhecer floresta, Shereque ou qualquer fase futura individualmente.
-    biomeRegistry.renderDynamic(biomeKey, ctx, this.width, this.height, frameTime);
+    biomeRegistry.renderDynamic(biomeKey, ctx, backgroundWidth, backgroundHeight, frameTime, activeGeometry);
 
     // 1.1 Desenhar Construções Dinâmicas do Acampamento
     let campHeroRendered = false;
@@ -1022,7 +1248,8 @@ export class GameViewport {
           const campWalkStep = campHero.walking ? Math.sin(this.heroWalkFrame * 1.8) * 3.5 : 0;
           const campBob = campHero.walking ? Math.sin(this.heroWalkFrame) * 1.2 : Math.sin(frameTime / 500) * 0.8;
           this.renderHeroActor(ctx, heroVisualKey, campBob, campWalkStep, false, 0);
-        }
+        },
+        this.settlementStageKey(),
       );
     }
 
@@ -1068,7 +1295,7 @@ export class GameViewport {
     // e antes dos que estão à frente, evitando que alguém pareça sobre o
     // telhado só porque o cenário veio de um canvas cacheado.
     const depthObjects = this.isActive
-      ? biomeRegistry.getDepthObjects(biomeKey, ctx, this.width, this.height, frameTime)
+      ? biomeRegistry.getDepthObjects(biomeKey, ctx, backgroundWidth, backgroundHeight, frameTime, activeGeometry)
       : [];
     [...actorEntries, ...depthObjects]
       .sort((a, b) => a.depth - b.depth)
@@ -1190,6 +1417,9 @@ export class GameViewport {
       }
     });
 
+    // 5.4 CFF-A: feedback genérico de impacto acima dos VFX e abaixo do texto.
+    this.combatPresentation.renderWorld(ctx);
+
     // 6. Desenhar Textos Flutuantes (Dano / Cura)
     this.floatingTexts.forEach((ft) => {
       ctx.save();
@@ -1207,6 +1437,13 @@ export class GameViewport {
     ctx.restore();
   }
 
+  private visualReactionOffset(timer: number, duration: number, offsetX: number, offsetY: number) {
+    if (timer <= 0 || duration <= 0) return { x: 0, y: 0 };
+    const ratio = Math.max(0, Math.min(1, timer / duration));
+    const eased = Math.sin(ratio * Math.PI / 2);
+    return { x: offsetX * eased, y: offsetY * eased };
+  }
+
   private renderHeroActor(
     ctx: CanvasRenderingContext2D,
     heroVisualKey: string,
@@ -1215,7 +1452,15 @@ export class GameViewport {
     isAttacking: boolean,
     attackProgress: number
   ) {
-    heroRegistry.renderDynamic(ctx, this.heroX, this.heroY + heroBob, heroVisualKey, {
+    const reaction = this.visualReactionOffset(
+      this.heroHitReactionTimer, this.heroHitReactionDuration,
+      this.heroHitReactionOffsetX, this.heroHitReactionOffsetY,
+    );
+    const renderX = this.heroX + reaction.x;
+    const renderY = this.heroY + reaction.y;
+    ctx.save();
+    if (this.heroHitFlashTimer > 0) ctx.globalAlpha = 0.68;
+    heroRegistry.renderDynamic(ctx, renderX, renderY + heroBob, heroVisualKey, {
       time: performance.now(),
       walkStep,
       isWalking: this.isActive && this.heroArenaState !== 'IDLE',
@@ -1225,7 +1470,8 @@ export class GameViewport {
       facing: this.heroFacing,
       size: 48,
     });
-    this.drawHeroPlate(ctx, this.heroX, this.heroY - 37 + heroBob);
+    ctx.restore();
+    this.drawHeroPlate(ctx, renderX, renderY - 37 + heroBob);
   }
 
   /**
@@ -1348,13 +1594,19 @@ export class GameViewport {
     const mobSpriteSize = isBoss ? 64 : 48;
     const visualScale = monsterRegistry.getVisualScale(visualKey);
 
+    const reaction = this.visualReactionOffset(
+      m.hitReactionTimer, m.hitReactionDuration, m.hitReactionOffsetX, m.hitReactionOffsetY,
+    );
+    const renderX = m.currentX + reaction.x;
+    const renderY = m.currentY + reaction.y;
+
     if (m.spawnTimer > 0) {
-      this.renderTeleportPortal(ctx, m.currentX, m.currentY, spawnProgress);
+      this.renderTeleportPortal(ctx, renderX, renderY, spawnProgress);
     }
 
     ctx.save();
     ctx.globalAlpha = entranceAlpha;
-    ctx.translate(m.currentX, m.currentY + mobBob);
+    ctx.translate(renderX, renderY + mobBob);
     const spawnScale = m.spawnTimer > 0 ? 0.72 + spawnProgress * 0.28 : 1;
     ctx.scale(spawnScale * visualScale, spawnScale * visualScale);
 
@@ -1389,7 +1641,7 @@ export class GameViewport {
 
     if (m.spawnTimer <= 0 || spawnProgress > 0.55) {
       const plateOffsetY = monsterRegistry.getNameplateOffsetY(visualKey, isBoss ? 42 : 30) * visualScale;
-      this.drawMonsterPlate(ctx, m.currentX, m.currentY - plateOffsetY + mobBob, m, entranceAlpha);
+      this.drawMonsterPlate(ctx, renderX, renderY - plateOffsetY + mobBob, m, entranceAlpha);
     }
   }
 
@@ -1497,6 +1749,99 @@ export class GameViewport {
     ctx.restore();
   }
 
+  private impactDelayMs(kind: string, skillKey?: string) {
+    switch ((skillKey || '').toLowerCase()) {
+      case 'brutal_strike': return 150;
+      case 'whirlwind': return 120;
+      case 'multishot': return 300;
+      case 'sniper_shot': return 180;
+      case 'fireball': return 285;
+      case 'ice_shard': return 300;
+      case 'arcane_nova': return 165;
+      case 'divine_heal': return 80;
+      default:
+        if (kind === 'heal') return 70;
+        if (this.weaponArchetype === 'distance' || this.weaponArchetype === 'arrow' || this.weaponArchetype === 'bow') return 235;
+        if (this.weaponArchetype === 'magic') return 255;
+        return 105;
+    }
+  }
+
+  private applyMonsterPresentationReaction(targetId: string | undefined, profile: CombatImpactProfile, direction: Position) {
+    if (!targetId) return;
+    const monster = this.monsters.get(targetId);
+    if (!monster) return;
+    monster.hitFlashTimer = Math.max(monster.hitFlashTimer, profile.weight === 'finisher' ? 12 : 8);
+    monster.hitReactionDuration = Math.max(0.001, profile.staggerMs / 1000);
+    monster.hitReactionTimer = monster.hitReactionDuration;
+    monster.hitReactionOffsetX = direction.x * profile.visualKnockbackPx;
+    monster.hitReactionOffsetY = direction.y * profile.visualKnockbackPx * 0.55;
+  }
+
+  private applyHeroPresentationReaction(profile: CombatImpactProfile, direction: Position) {
+    this.heroHitFlashTimer = Math.max(this.heroHitFlashTimer, profile.weight === 'finisher' ? 0.20 : 0.12);
+    this.heroHitReactionDuration = Math.max(0.001, profile.staggerMs / 1000);
+    this.heroHitReactionTimer = this.heroHitReactionDuration;
+    this.heroHitReactionOffsetX = direction.x * profile.visualKnockbackPx;
+    this.heroHitReactionOffsetY = direction.y * profile.visualKnockbackPx * 0.55;
+  }
+
+  private scheduleHeroCombatImpact(effect: any) {
+    const targetId = effect?.target_ids?.[0] as string | undefined;
+    const target = targetId ? this.monsters.get(targetId) : undefined;
+    const isHealing = effect?.key === 'divine_heal' || effect?.kind === 'heal';
+    const isLethal = Boolean(targetId) && (!target || target.health <= 0);
+    const delayMs = this.impactDelayMs(effect?.kind || 'attack', effect?.key);
+    const targetProvider = isHealing
+      ? () => ({ x: this.heroX, y: this.heroY - 10 })
+      : () => this.resolveTargetPos(targetId);
+    const sourceProvider = () => ({ x: this.heroX, y: this.heroY - 6 });
+
+    this.combatPresentation.scheduleImpact(
+      delayMs,
+      targetProvider,
+      {
+        archetype: this.weaponArchetype === 'arrow' || this.weaponArchetype === 'bow' ? 'distance' : this.weaponArchetype,
+        weaponType: this.mainHandItem?.weapon_type,
+        weaponName: this.mainHandItem?.name,
+        skillKey: effect?.key,
+        isCritical: Boolean(effect?.is_crit),
+        isLethal,
+        isHealing,
+      },
+      sourceProvider,
+      (profile, direction) => {
+        if (!isHealing) this.applyMonsterPresentationReaction(targetId, profile, direction);
+      },
+    );
+  }
+
+  private scheduleIncomingHeroImpact() {
+    let source: RenderMonster | undefined;
+    let nearest = Number.POSITIVE_INFINITY;
+    for (const monster of this.monsters.values()) {
+      const distance = Math.hypot(monster.currentX - this.heroX, monster.currentY - this.heroY);
+      if (distance < nearest) {
+        nearest = distance;
+        source = monster;
+      }
+    }
+    const sourceProvider = source
+      ? () => ({ x: source!.currentX, y: source!.currentY - 6 })
+      : () => ({ x: this.heroX - 30, y: this.heroY });
+    this.combatPresentation.scheduleImpact(
+      source?.attackType === 'ranged' ? 180 : 85,
+      () => ({ x: this.heroX, y: this.heroY - 8 }),
+      {
+        archetype: source?.attackType === 'ranged' ? 'distance' : 'melee',
+        weaponType: source?.isBoss ? 'boss' : 'monster',
+        isLethal: this.heroHealth <= 0,
+      },
+      sourceProvider,
+      (profile, direction) => this.applyHeroPresentationReaction(profile, direction),
+    );
+  }
+
   // ─── PROCESSADOR DE EVENTOS DO SERVIDOR GO ───────────────────────────────
 
   public handleLiveCombatEvent(msg: any) {
@@ -1547,9 +1892,19 @@ export class GameViewport {
     }
 
     if (msg.is_active !== undefined) {
+      const wasActive = this.isActive;
       this.isActive = msg.is_active;
+      if (wasActive && !this.isActive) this.fitSettlement();
+      if (!wasActive && this.isActive) {
+        // O "fit" do assentamento pode chegar a 0.65x. Ele não pode vazar
+        // para uma arena, pois deixaria o buffer 24x18 menor que o canvas e
+        // exporia bordas pretas ao redor do cenário.
+        this.viewportZoom = 1.15;
+        this.cameraManual = false;
+      }
       if (!this.isActive) {
         this.stopManualHeroMovement();
+        this.combatPresentation.clear();
         // Eventos atrasados de combate não podem iniciar investida, projétil
         // ou efeito de impacto enquanto o herói está no acampamento.
         this.effectRegistry.clear();
@@ -1565,7 +1920,7 @@ export class GameViewport {
 
     if (msg.arena?.hero) {
       const arenaKey = msg.arena.key || msg.active_biome || msg.active_region || this.regionId;
-      this.arenaGeometry = biomeRegistry.getIsoGeometry(arenaKey) || null;
+      this.arenaGeometry = this.resolveArenaGeometry(arenaKey, msg.arena.width, msg.arena.height);
       this.isIsoArena = Boolean(this.arenaGeometry);
       if (!this.isIsoArena) {
         this.arenaInitialized = false;
@@ -1619,13 +1974,18 @@ export class GameViewport {
     }
 
     if (msg.economy?.settlement) {
-      this.settlement = msg.economy.settlement;
+      const previousStage = this.settlement?.stage_key;
+      const nextSettlement = msg.economy.settlement as SettlementState;
+      this.settlement = nextSettlement;
+      if (!this.isActive && previousStage !== nextSettlement.stage_key) this.fitSettlement();
     }
 
     // 2. Atualizar Bioma da Região
     if (msg.active_biome || msg.active_region || msg.region_id || msg.region || msg.regionId || msg.activeRegion) {
       this.regionId = msg.active_biome || msg.active_region || msg.region_id || msg.region || msg.regionId || msg.activeRegion;
-      this.arenaGeometry = this.isActive ? biomeRegistry.getIsoGeometry(this.regionId) || null : biomeRegistry.getIsoGeometry('camp') || null;
+      if (!msg.arena) {
+        this.arenaGeometry = this.isActive ? this.resolveArenaGeometry(this.regionId) : biomeRegistry.getIsoGeometry('camp') || null;
+      }
       this.isIsoArena = this.isActive && Boolean(this.arenaGeometry);
       if (!this.isIsoArena) this.arenaInitialized = false;
     }
@@ -1717,6 +2077,10 @@ export class GameViewport {
             attackDuration: 0.34,
             spawnTimer: 0.85,
             spawnDuration: 0.85,
+            hitReactionTimer: 0,
+            hitReactionDuration: 0,
+            hitReactionOffsetX: 0,
+            hitReactionOffsetY: 0,
           };
           this.monsters.set(mobId, m);
         } else {
@@ -1778,6 +2142,10 @@ export class GameViewport {
           () => ({ x: this.heroX, y: this.heroY })
         );
 
+        if (eff.kind === 'attack' || eff.kind === 'skill' || eff.kind === 'heal') {
+          this.scheduleHeroCombatImpact(eff);
+        }
+
         if (eff.kind === 'attack' || (eff.kind === 'skill' && eff.key !== 'divine_heal')) {
           hasHeroAttack = true;
           if (eff.kind === 'skill') {
@@ -1799,7 +2167,7 @@ export class GameViewport {
           this.addFloatingText(`+${eff.amount} HP`, this.heroX, BATTLE_GROUND_Y - 40, '#4ade80', 1.25, 0, -1.6);
         } else if (eff.is_crit) {
           // Dano Crítico: Salto alto e dourado brilhante no centro
-          this.addFloatingText(`⚡ CRIT! -${eff.amount}`, targetPos.x, targetPos.y - 50, '#fde047', 1.45, 0, -3.2);
+          this.addFloatingText(`💥 CRÍTICO! -${eff.amount}!`, targetPos.x, targetPos.y - 52, '#fde047', 1.55, 0, -3.5);
         } else if (eff.kind === 'skill' && eff.amount > 0) {
           // Habilidade / Magia: Salto em leque para a direita com cor temática
           const skillColor = eff.key === 'ice_shard' ? '#38bdf8' : eff.key === 'multishot' ? '#facc15' : '#fb923c';
@@ -1816,10 +2184,12 @@ export class GameViewport {
     } else if (this.isActive && msg.damage_dealt && msg.damage_dealt > 0) {
       this.triggerAttackAnimation();
       const defTarget = this.resolveTargetPos();
+      this.scheduleHeroCombatImpact({ kind: 'attack', key: 'basic_attack', amount: msg.damage_dealt, target_ids: [] });
       this.addFloatingText(`-${msg.damage_dealt}`, defTarget.x, defTarget.y - 45, '#fca5a5', 1.0, -0.85, -2.0);
     }
 
     if (this.isActive && msg.damage_taken && msg.damage_taken > 0) {
+      this.scheduleIncomingHeroImpact();
       // A arena isométrica muda a altura do herói conforme o tile. Usar o
       // ground fixo da batalha antiga colocava o dano longe do sprite, às
       // vezes fora da área visível acima da cabeça.
@@ -1899,10 +2269,15 @@ export class GameViewport {
 
   /** Animação fluida de ataque baseada estritamente na arma empunhada */
   private triggerAttackAnimation(targetId?: string, skillKey?: string) {
-    this.heroAttackTimer = this.heroAttackDuration;
-
     const isMagic = this.weaponArchetype === 'magic';
     const isRanged = this.weaponArchetype === 'distance' || this.weaponArchetype === 'arrow' || this.weaponArchetype === 'bow';
+    this.heroAttackDuration = skillKey === 'brutal_strike' ? 0.48
+      : skillKey === 'whirlwind' ? 0.44
+        : isMagic ? 0.40
+          : isRanged ? 0.34
+            : 0.36;
+    this.heroAttackTimer = this.heroAttackDuration;
+
     const targetPos = this.resolveTargetPos(targetId);
     // O alvo do último golpe pode ter sido removido da lista de vivos neste
     // mesmo evento. A orientação do herói deve seguir o ponto real do golpe,
@@ -2016,7 +2391,9 @@ export class GameViewport {
       this.canvas.removeEventListener('pointerdown', this.handleCampPointerDown);
       this.canvas.removeEventListener('pointermove', this.handleCampPointerMove);
       this.canvas.removeEventListener('pointerup', this.handleCampPointerUp);
+      this.canvas.removeEventListener('pointerleave', this.handleCampPointerLeave);
       this.canvas.removeEventListener('pointercancel', this.handleCampPointerUp);
+      this.canvas.removeEventListener('wheel', this.handleCampWheel);
       campSceneRenderer.setPlacementPreview(null);
     }
     window.removeEventListener('keydown', this.handleCampKeyDown);
@@ -2024,8 +2401,11 @@ export class GameViewport {
     window.removeEventListener('keyup', this.handleHeroKeyUp);
     window.removeEventListener('blur', this.handleHeroWindowBlur);
     this.stopManualHeroMovement();
+    this.combatPresentation.clear();
     this.draggingBuildingSlotKey = null;
     this.draggingBuildingPoint = null;
+    this.cameraPanPointerId = null;
+    this.cameraPanLastClient = null;
     if (this.canvas && this.canvas.parentElement) {
       this.canvas.parentElement.removeChild(this.canvas);
     }

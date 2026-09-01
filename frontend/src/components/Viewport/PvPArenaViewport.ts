@@ -1,6 +1,7 @@
 import { heroRegistry } from '../../game/registries/HeroRegistry';
 import { SkinRegistryService } from '../../game/registries/SkinRegistry';
 import { CombatEffectRegistry } from '../../game/effects/CombatEffectRegistry';
+import { CombatPresentationSystem, type CombatImpactProfile } from '../../game/effects/CombatPresentationSystem';
 import { drawRealArrow, drawWandStar } from '../../game/effects/renderers/projectileSprites';
 import { ISO_ARENA_GEOMETRY, tileToScreen } from '../../game/IsoWorldGeometry';
 import type { PvPCombatActor, PvPCombatEvent, PvPCombatSnapshot } from '../../hooks/useGameSocket';
@@ -17,6 +18,10 @@ interface RenderActor extends PvPCombatActor {
   skillKey: string;
   hitFlashTimer: number;
   displayHealth: number;
+  hitReactionTimer: number;
+  hitReactionDuration: number;
+  hitReactionOffsetX: number;
+  hitReactionOffsetY: number;
 }
 
 interface ArenaProjectile {
@@ -28,7 +33,9 @@ interface ArenaProjectile {
 }
 
 interface PendingImpact {
+  sourceID: string;
   targetID: string;
+  skillKey?: string;
   amount: number;
   isHealing: boolean;
   isCritical: boolean;
@@ -65,6 +72,7 @@ export class PvPArenaViewport {
   private projectiles: ArenaProjectile[] = [];
   private pendingImpacts: PendingImpact[] = [];
   private effects = new CombatEffectRegistry();
+  private combatPresentation = new CombatPresentationSystem();
   private processedEvents = new Set<string>();
   private matchID = '';
   private tick = 0;
@@ -117,6 +125,7 @@ export class PvPArenaViewport {
       this.projectiles = [];
       this.pendingImpacts = [];
       this.effects.clear();
+      this.combatPresentation.clear();
       this.processedEvents.clear();
     }
 
@@ -141,6 +150,10 @@ export class PvPArenaViewport {
           skillKey: '',
           hitFlashTimer: 0,
           displayHealth: input.health,
+          hitReactionTimer: 0,
+          hitReactionDuration: 0,
+          hitReactionOffsetX: 0,
+          hitReactionOffsetY: 0,
         });
         continue;
       }
@@ -163,6 +176,13 @@ export class PvPArenaViewport {
     }
   }
 
+  private attackAnimationDuration(event: PvPCombatEvent, source: RenderActor) {
+    if (event.skill_key === 'brutal_strike') return 0.48;
+    if (event.skill_key === 'whirlwind') return 0.44;
+    if (event.kind === 'skill') return source.archetype === 'magic' ? 0.42 : source.archetype === 'distance' ? 0.36 : 0.40;
+    return source.archetype === 'magic' ? 0.38 : source.archetype === 'distance' ? 0.32 : 0.36;
+  }
+
   private applyCombatEvent(event: PvPCombatEvent) {
     const key = `${event.tick}:${event.kind}:${event.source_id}:${event.target_id}:${event.skill_key || ''}:${event.amount}:${event.is_healing ? 'heal' : ''}`;
     if (this.processedEvents.has(key)) return;
@@ -182,7 +202,7 @@ export class PvPArenaViewport {
       // qualquer interpolação residual para não atacar deslizando.
       source.currentX = source.targetX;
       source.currentY = source.targetY;
-      source.attackDuration = event.kind === 'skill' ? 0.34 : 0.24;
+      source.attackDuration = this.attackAnimationDuration(event, source);
       source.attackTimer = source.attackDuration;
       if (event.kind === 'skill') {
         source.skillTimer = 0.48;
@@ -199,7 +219,9 @@ export class PvPArenaViewport {
     }
 
     this.pendingImpacts.push({
+      sourceID: source?.character_id || event.source_id || '',
       targetID: target.character_id,
+      skillKey: event.skill_key,
       amount: event.amount || 0,
       isHealing: Boolean(event.is_healing),
       isCritical: Boolean(event.is_critical),
@@ -246,27 +268,59 @@ export class PvPArenaViewport {
     }
   }
 
+  private visualReactionOffset(timer: number, duration: number, offsetX: number, offsetY: number) {
+    if (timer <= 0 || duration <= 0) return { x: 0, y: 0 };
+    const ratio = Math.max(0, Math.min(1, timer / duration));
+    const eased = Math.sin(ratio * Math.PI / 2);
+    return { x: offsetX * eased, y: offsetY * eased };
+  }
+
+  private applyActorPresentationReaction(target: RenderActor, profile: CombatImpactProfile, source?: RenderActor) {
+    const dx = source ? target.currentX - source.currentX : 1;
+    const dy = source ? target.currentY - source.currentY : 0;
+    const length = Math.max(0.0001, Math.hypot(dx, dy));
+    target.hitReactionDuration = Math.max(0.001, profile.staggerMs / 1000);
+    target.hitReactionTimer = target.hitReactionDuration;
+    target.hitReactionOffsetX = (dx / length) * profile.visualKnockbackPx;
+    target.hitReactionOffsetY = (dy / length) * profile.visualKnockbackPx * 0.55;
+  }
+
   private applyImpact(impact: PendingImpact) {
     const target = this.actors.get(impact.targetID);
     if (!target) return;
+    const source = impact.sourceID ? this.actors.get(impact.sourceID) : undefined;
+    const isLethal = !impact.isHealing && impact.amount >= target.displayHealth;
+    const profile = this.combatPresentation.triggerImpact(
+      { x: target.currentX, y: target.currentY - 8 },
+      {
+        archetype: source?.archetype,
+        skillKey: impact.skillKey,
+        isCritical: impact.isCritical,
+        isLethal,
+        isHealing: impact.isHealing,
+      }
+    );
+
     if (impact.isHealing) {
       target.displayHealth = Math.min(target.max_health, target.displayHealth + impact.amount);
     } else {
       target.displayHealth = Math.max(0, target.displayHealth - impact.amount);
-      target.hitFlashTimer = Math.max(target.hitFlashTimer, 0.18);
+      target.hitFlashTimer = Math.max(target.hitFlashTimer, isLethal ? 0.24 : impact.isCritical ? 0.21 : 0.16);
+      this.applyActorPresentationReaction(target, profile, source);
     }
     this.floatingDamage.push({
-      text: `${impact.isHealing ? '+' : `${impact.isCritical ? '⚡ ' : ''}-`}${impact.amount}`,
+      text: `${impact.isHealing ? '+' : `${impact.isCritical ? '💥 ' : ''}-`}${impact.amount}${impact.isCritical ? '!' : ''}`,
       x: target.currentX + (Math.random() - 0.5) * 12,
       y: target.currentY - 44,
       color: impact.isHealing ? '#6ee7b7' : impact.isCritical ? '#fde047' : '#fda4af',
       alpha: 1,
       velocityX: (Math.random() - 0.5) * 10,
-      velocityY: -28,
+      velocityY: impact.isCritical ? -34 : -28,
     });
   }
 
   private update(delta: number) {
+    delta = this.combatPresentation.advance(delta);
     for (const actor of this.actors.values()) {
       const deltaX = actor.targetX - actor.currentX;
       const deltaY = actor.targetY - actor.currentY;
@@ -282,6 +336,7 @@ export class PvPArenaViewport {
       actor.attackTimer = Math.max(0, actor.attackTimer - delta);
       actor.skillTimer = Math.max(0, actor.skillTimer - delta);
       actor.hitFlashTimer = Math.max(0, actor.hitFlashTimer - delta);
+      actor.hitReactionTimer = Math.max(0, actor.hitReactionTimer - delta);
     }
 
     this.effects.update(delta * 1000);
@@ -385,6 +440,8 @@ export class PvPArenaViewport {
     const ctx = this.ctx;
     if (!ctx || !this.terrain) return;
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.save();
+    this.combatPresentation.applyScreenShake(ctx, now);
     ctx.drawImage(this.terrain, 0, 0);
     this.renderTorches(ctx, now);
 
@@ -392,7 +449,9 @@ export class PvPArenaViewport {
     for (const actor of actors) this.renderActor(ctx, actor, now);
     this.renderProjectiles(ctx);
     this.effects.render(ctx);
+    this.combatPresentation.renderWorld(ctx);
     this.renderFloatingDamage(ctx);
+    ctx.restore();
   }
 
   private renderTorches(ctx: CanvasRenderingContext2D, now: number) {
@@ -415,8 +474,13 @@ export class PvPArenaViewport {
   }
 
   private renderActor(ctx: CanvasRenderingContext2D, actor: RenderActor, now: number) {
+    const reaction = this.visualReactionOffset(
+      actor.hitReactionTimer, actor.hitReactionDuration, actor.hitReactionOffsetX, actor.hitReactionOffsetY,
+    );
+    const renderX = actor.currentX + reaction.x;
+    const renderY = actor.currentY + reaction.y;
     const opponent = Array.from(this.actors.values()).find((candidate) => candidate.character_id !== actor.character_id);
-    const facing = opponent && opponent.currentX < actor.currentX ? -1 : 1;
+    const facing = opponent && opponent.currentX < renderX ? -1 : 1;
     const fallbackArchetype = actor.archetype === 'magic' ? 'hero_mage' : actor.archetype === 'distance' ? 'hero_archer' : 'hero_knight';
     const archetype = SkinRegistryService.getSkin(actor.skin_key || '')?.renderKey || fallbackArchetype;
     const isMoving = Math.hypot(actor.targetX - actor.currentX, actor.targetY - actor.currentY) > 0.75;
@@ -426,7 +490,7 @@ export class PvPArenaViewport {
     ctx.save();
     ctx.fillStyle = 'rgba(3, 1, 12, 0.55)';
     ctx.beginPath();
-    ctx.ellipse(actor.currentX, actor.currentY + 17, 15, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(renderX, renderY + 17, 15, 5, 0, 0, Math.PI * 2);
     ctx.fill();
     this.renderSkillEffect(ctx, actor);
     const isDead = actor.displayHealth <= 0;
@@ -444,20 +508,20 @@ export class PvPArenaViewport {
     if (isDead) {
       ctx.save();
       ctx.globalAlpha *= 0.58;
-      ctx.translate(actor.currentX, actor.currentY + 12);
+      ctx.translate(renderX, renderY + 12);
       ctx.rotate(facing * 0.72);
       heroRegistry.renderDynamic(ctx, 0, 0, archetype, renderOptions);
       ctx.restore();
     } else {
-      heroRegistry.renderDynamic(ctx, actor.currentX, actor.currentY + bob, archetype, renderOptions);
+      heroRegistry.renderDynamic(ctx, renderX, renderY + bob, archetype, renderOptions);
     }
     ctx.restore();
 
     const self = actor.character_id === this.selfCharacterID;
     ctx.font = 'bold 9px monospace';
     const plateWidth = Math.max(74, Math.min(154, ctx.measureText(`${actor.name} (Lv.${actor.level})`).width + 12));
-    const plateX = actor.currentX - plateWidth / 2;
-    const plateY = actor.currentY - 50;
+    const plateX = renderX - plateWidth / 2;
+    const plateY = renderY - 50;
     ctx.save();
     ctx.fillStyle = self ? 'rgba(9, 42, 78, 0.9)' : 'rgba(71, 14, 43, 0.9)';
     ctx.fillRect(plateX, plateY, plateWidth, 21);
@@ -465,7 +529,7 @@ export class PvPArenaViewport {
     ctx.strokeRect(plateX, plateY, plateWidth, 21);
     ctx.textAlign = 'center';
     ctx.fillStyle = self ? '#bae6fd' : '#fecdd3';
-    ctx.fillText(`${self ? '✦ ' : '⚔ '}${actor.name} (Lv.${actor.level})`, actor.currentX, plateY + 9);
+    ctx.fillText(`${self ? '✦ ' : '⚔ '}${actor.name} (Lv.${actor.level})`, renderX, plateY + 9);
     ctx.fillStyle = '#090b1d';
     ctx.fillRect(plateX + 4, plateY + 14, plateWidth - 8, 4);
     ctx.fillStyle = hpPercent > 0.5 ? '#22c55e' : hpPercent > 0.2 ? '#f59e0b' : '#f43f5e';

@@ -22,6 +22,12 @@ type Config struct {
 	DevToolsEnabled   bool
 	DevAdminEmail     string
 	DevAdminPassword  string
+	DevPvPQAEmailA    string
+	DevPvPQAPasswordA string
+	DevPvPQAEmailB    string
+	DevPvPQAPasswordB string
+	DevPvPQAEmailC    string
+	DevPvPQAPasswordC string
 }
 
 // LoadConfig carrega as configurações das variáveis de ambiente e valida restrições.
@@ -83,6 +89,12 @@ func LoadConfig() (*Config, error) {
 	devToolsEnabled := strings.EqualFold(getEnv("ATLAS_DEV_TOOLS_ENABLED", "true"), "true")
 	devAdminEmail := strings.ToLower(strings.TrimSpace(getEnv("ATLAS_DEV_ADMIN_EMAIL", "atlas-admin@local.test")))
 	devAdminPassword := getEnv("ATLAS_DEV_ADMIN_PASSWORD", "AtlasTest!2026")
+	devPvPQAEmailA := strings.ToLower(strings.TrimSpace(getEnv("ATLAS_DEV_PVP_QA_A_EMAIL", "pvp-qa-a@local.test")))
+	devPvPQAPasswordA := getEnv("ATLAS_DEV_PVP_QA_A_PASSWORD", "PvPQAAlpha!2026")
+	devPvPQAEmailB := strings.ToLower(strings.TrimSpace(getEnv("ATLAS_DEV_PVP_QA_B_EMAIL", "pvp-qa-b@local.test")))
+	devPvPQAPasswordB := getEnv("ATLAS_DEV_PVP_QA_B_PASSWORD", "PvPQABravo!2026")
+	devPvPQAEmailC := strings.ToLower(strings.TrimSpace(getEnv("ATLAS_DEV_PVP_QA_C_EMAIL", "pvp-qa-c@local.test")))
+	devPvPQAPasswordC := getEnv("ATLAS_DEV_PVP_QA_C_PASSWORD", "PvPQAMage!2026")
 	if env == "production" || env == "staging" {
 		if strings.EqualFold(os.Getenv("ATLAS_DEV_TOOLS_ENABLED"), "true") {
 			return nil, fmt.Errorf("ATLAS_DEV_TOOLS_ENABLED não pode ser usado em %s", env)
@@ -90,9 +102,20 @@ func LoadConfig() (*Config, error) {
 		devToolsEnabled = false
 		devAdminEmail = ""
 		devAdminPassword = ""
+		devPvPQAEmailA = ""
+		devPvPQAPasswordA = ""
+		devPvPQAEmailB = ""
+		devPvPQAPasswordB = ""
+		devPvPQAEmailC = ""
+		devPvPQAPasswordC = ""
 	} else if devToolsEnabled {
 		if devAdminEmail == "" || len(devAdminPassword) < 12 {
 			return nil, fmt.Errorf("ferramentas de teste exigem ATLAS_DEV_ADMIN_EMAIL e senha com ao menos 12 caracteres")
+		}
+		if devPvPQAEmailA == "" || devPvPQAEmailB == "" || devPvPQAEmailC == "" ||
+			devPvPQAEmailA == devPvPQAEmailB || devPvPQAEmailA == devPvPQAEmailC || devPvPQAEmailB == devPvPQAEmailC ||
+			len(devPvPQAPasswordA) < 12 || len(devPvPQAPasswordB) < 12 || len(devPvPQAPasswordC) < 12 {
+			return nil, fmt.Errorf("perfis PvP de QA exigem três emails distintos e senhas com ao menos 12 caracteres")
 		}
 	}
 
@@ -110,6 +133,12 @@ func LoadConfig() (*Config, error) {
 		DevToolsEnabled:   devToolsEnabled,
 		DevAdminEmail:     devAdminEmail,
 		DevAdminPassword:  devAdminPassword,
+		DevPvPQAEmailA:    devPvPQAEmailA,
+		DevPvPQAPasswordA: devPvPQAPasswordA,
+		DevPvPQAEmailB:    devPvPQAEmailB,
+		DevPvPQAPasswordB: devPvPQAPasswordB,
+		DevPvPQAEmailC:    devPvPQAEmailC,
+		DevPvPQAPasswordC: devPvPQAPasswordC,
 	}, nil
 }
 
