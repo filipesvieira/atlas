@@ -29,9 +29,9 @@ export interface Item {
   special_effect: string;
   value_gold?: number;
   required_level?: number;
-  bonus_str?: number;
-  bonus_dex?: number;
-  bonus_int?: number;
+  melee_power_bonus?: number;
+  ranged_power_bonus?: number;
+  magic_power_bonus?: number;
   bonus_hp?: number;
   bonus_mp?: number;
   gold_bonus?: number;
@@ -674,24 +674,18 @@ export function TibiaBackpackModal({
                 </div>
               </div>
 
-              {/* Atributos Primários */}
+              {/* Especialização S1: maestria por uso em vez de atributos manuais */}
               <div className="p-1.5 bg-slate-900/70 rounded border border-slate-800/80 space-y-1">
                 <div className="text-[9px] font-pixel-heading text-slate-400 uppercase tracking-wider">
-                  Atributos Primários
+                  Especialização por uso
                 </div>
-                <div className="grid grid-cols-2 gap-1">
-                  <span className="text-slate-300" title="Força: Dano Melee e Capacidade">
-                    FOR: <strong className="text-amber-400 font-pixel-heading">{derivedStats?.effective_str ?? character?.str ?? 5}</strong>
-                  </span>
-                  <span className="text-slate-300" title="Destreza: Dano Distância e Chance Crítica">
-                    DES: <strong className="text-emerald-400 font-pixel-heading">{derivedStats?.effective_dex ?? character?.dex ?? 5}</strong>
-                  </span>
-                  <span className="text-slate-300" title="Inteligência: Dano Mágico e Regen de MP">
-                    INT: <strong className="text-sky-400 font-pixel-heading">{derivedStats?.effective_int ?? character?.int_stat ?? 5}</strong>
-                  </span>
-                  <span className="text-slate-300" title="Vitalidade: Vida Máxima e Defesa">
-                    VIT: <strong className="text-rose-400 font-pixel-heading">{derivedStats?.effective_vit ?? character?.vit ?? 5}</strong>
-                  </span>
+                <div className="grid grid-cols-2 gap-1 text-[9px]">
+                  <span className="text-slate-300">🎓 Maestria: <strong className="text-amber-300 font-pixel-heading">{derivedStats?.active_mastery_key || '—'}</strong></span>
+                  <span className="text-slate-300">Nv.: <strong className="text-amber-300 font-pixel-heading">{derivedStats?.active_mastery_level ?? 10}</strong></span>
+                  <span className="text-slate-300">⚔️ Poder melee: <strong className="text-rose-300 font-pixel-heading">+{derivedStats?.melee_power_bonus ?? 0}</strong></span>
+                  <span className="text-slate-300">🏹 Poder distância: <strong className="text-emerald-300 font-pixel-heading">+{derivedStats?.ranged_power_bonus ?? 0}</strong></span>
+                  <span className="text-slate-300">🔮 Poder mágico: <strong className="text-cyan-300 font-pixel-heading">+{derivedStats?.magic_power_bonus ?? 0}</strong></span>
+                  <span className="text-slate-300">🎒 Capacidade: <strong className="text-sky-300 font-pixel-heading">{derivedStats?.total_capacity ?? 0}</strong></span>
                 </div>
               </div>
 

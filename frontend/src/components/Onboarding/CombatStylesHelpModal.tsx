@@ -21,7 +21,7 @@ export function CombatStylesHelpModal({ isOpen, onClose }: CombatStylesHelpModal
           </div>
           <h2 className="text-base sm:text-lg font-pixel-heading text-amber-400">Como funcionam os estilos de combate?</h2>
           <p className="text-xs text-slate-400 max-w-md mx-auto font-pixel-body">
-            Não existem classes permanentes. Seu estilo é definido pela arma equipada, pelos atributos investidos e pelas habilidades aprendidas.
+            Não existem classes permanentes. Seu estilo é definido pela arma equipada, pela maestria que evolui com o uso e pelas habilidades aprendidas.
           </p>
         </div>
 

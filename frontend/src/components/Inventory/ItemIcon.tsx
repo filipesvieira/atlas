@@ -174,9 +174,9 @@ export function getRarityStyle(rarity?: string) {
 export function BonusBadges({ item }: { item?: any }) {
   if (!item) return null;
   const hasBonuses =
-    item.bonus_str ||
-    item.bonus_dex ||
-    item.bonus_int ||
+    item.melee_power_bonus ||
+    item.ranged_power_bonus ||
+    item.magic_power_bonus ||
     item.bonus_hp ||
     item.bonus_mp ||
     item.gold_bonus ||
@@ -195,9 +195,9 @@ export function BonusBadges({ item }: { item?: any }) {
 
   return (
     <div className="flex flex-wrap gap-1 mt-1 text-[9px] font-mono">
-      {item.bonus_str ? <span className="px-1 bg-amber-950/80 text-amber-300 border border-amber-800/60 rounded">+{fmt(item.bonus_str)} STR</span> : null}
-      {item.bonus_dex ? <span className="px-1 bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 rounded">+{fmt(item.bonus_dex)} DEX</span> : null}
-      {item.bonus_int ? <span className="px-1 bg-sky-950/80 text-sky-300 border border-sky-800/60 rounded">+{fmt(item.bonus_int)} INT</span> : null}
+      {item.melee_power_bonus ? <span className="px-1 bg-amber-950/80 text-amber-300 border border-amber-800/60 rounded">+{fmt(item.melee_power_bonus)} Poder Melee</span> : null}
+      {item.ranged_power_bonus ? <span className="px-1 bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 rounded">+{fmt(item.ranged_power_bonus)} Poder Dist.</span> : null}
+      {item.magic_power_bonus ? <span className="px-1 bg-sky-950/80 text-sky-300 border border-sky-800/60 rounded">+{fmt(item.magic_power_bonus)} Poder Mágico</span> : null}
       {item.bonus_hp ? <span className="px-1 bg-rose-950/80 text-rose-300 border border-rose-800/60 rounded">+{fmt(item.bonus_hp)} HP</span> : null}
       {item.bonus_mp ? <span className="px-1 bg-blue-950/80 text-blue-300 border border-blue-800/60 rounded">+{fmt(item.bonus_mp)} MP</span> : null}
       {item.gold_bonus ? <span className="px-1 bg-yellow-950/80 text-yellow-300 border border-yellow-800/60 rounded">+{fmt(item.gold_bonus)}% Ouro</span> : null}

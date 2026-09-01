@@ -1,7 +1,8 @@
 # Reino do Avesso — Kingdom vs Kingdom Master Plan
 
-**Status:** documento canônico criado na M5-B.1  
-**Próxima implementação:** M5-C — Defense Power, Readiness, Guarnição, Engenheiro, Ferimentos, Proteção e Snapshot defensivo.  
+**Status:** documento canônico atualizado após S1 e durante o fechamento da M5-D.  
+**M5-C:** Defense Power, Readiness, guarnição automática, estratégia e snapshot defensivo concluídos.  
+**Próxima fase de produto:** fechar o gate integral da M5-D; depois M6 — Scouting.  
 **Scouting:** M6.  
 **Raid real:** M7.
 
@@ -84,7 +85,7 @@ Depois da luta:
 
 ### Quartel
 **Papel:** guarnição.  
-**M5-C:** capacidade 4/8/12 guardas conforme nível, treinamento e distribuição automática/manual.  
+**M5-C:** capacidade 4/8/12 conforme nível; a população preenche a guarnição automaticamente, preservando uma reserva civil. Não existe microgestão obrigatória de guardas.  
 **M7:** guardas participam do combate interno.
 
 ### Cofre do Reino
@@ -104,7 +105,7 @@ Depois da luta:
 
 ### Oficina do Engenheiro
 **Papel:** manutenção militar.  
-**M5-C:** fila de reparos, eficiência, slots de armadilhas, prioridade automática/manual.  
+**M5-C:** eficiência de reparos e capacidade de armadilhas são calculadas automaticamente; fila/dano real só é materializado quando M7 introduzir consequências de raid.  
 **M7:** repara dano pós-raid e prepara defesas.
 
 ### Sala de Guerra
@@ -140,7 +141,7 @@ O snapshot congela apenas o necessário para resolução de defesa:
 - versão do layout;
 - estágio/território;
 - níveis e integridade das estruturas relevantes;
-- guarnição e alocação;
+- guarnição automática derivada de população/capacidade;
 - estratégia defensiva;
 - Defense Power decomposto;
 - buffs territoriais aplicáveis;
@@ -152,14 +153,12 @@ Mover/melhorar estrutura invalida o snapshot ativo. M5-C é responsável por reg
 
 ## 6. Estratégias defensivas iniciais
 
-Sugestão de presets:
+A M5-C usa apenas três escolhas de alto nível:
 - **Equilibrada:** distribuição neutra;
-- **Fortificar Portão:** mais defesa de breach, menos cobertura interna;
-- **Defesa em Profundidade:** aceita desgaste exterior e reforça combate interno;
-- **Proteger Recursos:** prioriza Cofre/Armazém/Tesouraria;
-- **Alerta Máximo:** usa Torre/Sala de Guerra para scouting e prontidão.
+- **Agressiva:** prioriza guarnição e vigilância;
+- **Defensiva:** prioriza fortificações e suporte.
 
-Presets evitam microgerenciamento obrigatório. Alocação manual pode coexistir.
+Não existe configuração por guarda ou por tile. Esse nível de simplicidade é deliberado. Futuras estratégias só devem ser adicionadas se mudarem decisões reais sem virar microgestão.
 
 ## 7. UX das construções
 
@@ -194,7 +193,21 @@ Cidade = 1.120 tiles. Reino = 1.976 tiles: **+76,4%**.
 
 O backend fornece `SettlementTerritoryContract` via GameCatalog. Frontend calcula bounds centralizados a partir desse contrato.
 
-## 9. Roadmap congelado
+
+## 9. Mapa Territorial e coordenadas
+
+A M5-D atribui a cada assentamento uma coordenada fixa `(x,y)` em um mundo/shard. A Sala de Guerra abre o **Mapa Territorial**, separado do mapa PvE.
+
+Regras congeladas:
+- coordenadas únicas e backend-authoritative;
+- distância influencia tempo/logística, nunca multiplica diretamente Attack/Defense Power;
+- nome/coordenada podem ser públicos, detalhes defensivos exigem M6;
+- sem realocação de Reino na primeira versão;
+- proteção de novato e pós-raid permanece obrigatória.
+
+Contrato completo: `WORLD_COORDINATE_MAP_MASTER_PLAN.md`.
+
+## 10. Roadmap congelado
 
 ```text
 ✅ M5-A     Progressão territorial
@@ -202,7 +215,9 @@ O backend fornece `SettlementTerritoryContract` via GameCatalog. Frontend calcul
 ✅ CFF-A    Combat Feel Presentation
 ✅ M5-B     Fortificações
 ✅ M5-B.1   Territory V5 + Usability + RvR Spec
-➡️ M5-C     Defense Power / Readiness / Snapshot
+✅ M5-C     Defense Power / Readiness / Snapshot + feedback de promoção
+✅ S1       Simplificação da Progressão do Herói
+🟡 M5-D     World Grid / Mapa Territorial
 ⬜ M6       Scouting
 ⬜ M7       Raid Reino vs Reino
 ⬜ CFF-B

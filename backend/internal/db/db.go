@@ -169,6 +169,9 @@ func InitDB(connStr string) (*sql.DB, error) {
 	if err := BootstrapStaticData(DB); err != nil {
 		return nil, err
 	}
+	if err := ReconcileSettlementWorldLocations(time.Now().UTC()); err != nil {
+		return nil, fmt.Errorf("reconciliar coordenadas territoriais: %w", err)
+	}
 	LoadCache()
 
 	return DB, nil
@@ -205,12 +208,12 @@ func CreateCharacter(accountID, name, vocation, origin string) (*Character, erro
 	defer tx.Rollback()
 	query := `
 		INSERT INTO characters (account_id, name, vocation, origin, level, experience, health, max_health, mana, max_mana, gold_bank, str, dex, int_stat, vit, unspent_points, masteries, learned_skills, active_skills, unlocked_regions, starter_pack_claimed, starter_pack_key, progression_version, lifetime_experience, highest_level_ever, equipped_skin_key)
-		VALUES ($1, $2, $3, $4, 1, 0, 225, 225, 115, 115, 100, 5, 5, 5, 5, 0, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, true, 'classless_all', 1, 0, 1, 'peasant')
+		VALUES ($1, $2, $3, $4, 1, 0, 225, 225, 115, 115, 100, 5, 5, 5, 5, 0, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, true, 'classless_all', $5, 0, 1, 'peasant')
 		RETURNING id, account_id, name, vocation, origin, level, experience, health, max_health, mana, max_mana, gold_bank, COALESCE(str, 5), COALESCE(dex, 5), COALESCE(int_stat, 5), COALESCE(vit, 5), COALESCE(unspent_points, 0), COALESCE(masteries, '{}'::jsonb), COALESCE(learned_skills, '[]'::jsonb), COALESCE(active_skills, '[]'::jsonb), last_login, last_logout, COALESCE(starter_pack_claimed, false), COALESCE(starter_pack_key, '')
 	`
 	char := &Character{}
 	var masteriesRaw, skillsRaw, activeRaw string
-	err = tx.QueryRow(query, accountID, name, vocation, origin).Scan(
+	err = tx.QueryRow(query, accountID, name, vocation, origin, game.CurrentHeroProgressionVersion).Scan(
 		&char.ID, &char.AccountID, &char.Name, &char.Vocation, &char.Origin,
 		&char.Level, &char.Experience, &char.Health, &char.MaxHealth,
 		&char.Mana, &char.MaxMana, &char.GoldBank, &char.STR, &char.DEX, &char.INT, &char.VIT, &char.UnspentPoints,
@@ -233,7 +236,7 @@ func CreateCharacter(accountID, name, vocation, origin string) (*Character, erro
 	char.ActiveRegion = "forest"
 	char.ActiveStance = "balanced"
 	char.CurrentStage = 1
-	char.ProgressionVersion = 1
+	char.ProgressionVersion = game.CurrentHeroProgressionVersion
 	char.LifetimeExperience = 0
 	char.HighestLevelEver = 1
 	char.StateRevision = 0

@@ -131,7 +131,7 @@ func calculateItemQuality(it Item) float64 {
 	}
 	statsScore := float64(it.PhysicalAttack+it.MagicAttack)*2.0 +
 		float64(it.Defense)*2.2 +
-		float64(it.BonusSTR+it.BonusDEX+it.BonusINT)*6.0 +
+		float64(it.MeleePowerBonus+it.RangedPowerBonus+it.MagicPowerBonus)*3.0 +
 		float64(it.BonusHP)/8.0 + float64(it.BonusMP)/10.0 +
 		it.CritChance*3.0 + it.Lifesteal*4.0 +
 		float64(it.ManaRegen)*8.0

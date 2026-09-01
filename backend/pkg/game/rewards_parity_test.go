@@ -77,8 +77,8 @@ func TestApplyExperienceGain_SingleAndMultiLevelUp(t *testing.T) {
 	// Concedendo XP suficiente para subir 2 níveis (Lv 1 -> 2 -> 3)
 	// Lv 1 precisa de 250 XP; Lv 2 precisa de ~966 XP. Total: 1500 XP
 	leveled, newLvls, statPoints = ApplyExperienceGain(char, 1500)
-	if !leveled || newLvls < 1 || statPoints < 3 {
-		t.Errorf("Esperado level up com 1600 XP acumulados. Leveled=%v, newLvls=%d, statPoints=%d, char.Level=%d",
+	if !leveled || newLvls < 1 || statPoints != 0 || char.UnspentPoints != 0 {
+		t.Errorf("Esperado level up S1 sem pontos manuais. Leveled=%v, newLvls=%d, statPoints=%d, char.Level=%d",
 			leveled, newLvls, statPoints, char.Level)
 	}
 

@@ -23,6 +23,10 @@ type DeveloperPresetResult struct {
 	Blueprints        int       `json:"blueprints_unlocked"`
 	ProfessionLevel   int       `json:"profession_level"`
 	TimersFinished    int64     `json:"timers_finished"`
+	WorldPreset       string    `json:"world_preset,omitempty"`
+	WorldKey          string    `json:"world_key,omitempty"`
+	WorldX            int       `json:"world_x"`
+	WorldY            int       `json:"world_y"`
 	AppliedAt         time.Time `json:"applied_at"`
 }
 
@@ -53,6 +57,12 @@ func ApplyDeveloperPreset(charID string, now time.Time) (*DeveloperPresetResult,
 // continuam usando as tabelas normais; por isso o mesmo personagem exercita os
 // fluxos reais de craft, coleta, construção e combate.
 func ApplyDeveloperPresetMode(charID string, now time.Time, mode string) (*DeveloperPresetResult, error) {
+	return ApplyDeveloperPresetModeWithWorld(charID, now, mode, "")
+}
+
+// ApplyDeveloperPresetModeWithWorld permite posicionar personagens administrativos
+// em pontos fixos do mundo QA sem alterar a geografia persistente dos jogadores.
+func ApplyDeveloperPresetModeWithWorld(charID string, now time.Time, mode, worldPreset string) (*DeveloperPresetResult, error) {
 	mode = normalizeDeveloperPresetMode(mode)
 	if charID == "" {
 		return nil, fmt.Errorf("character_id obrigatório")
@@ -90,14 +100,15 @@ func ApplyDeveloperPresetMode(charID string, now time.Time, mode string) (*Devel
 	if err != nil {
 		return nil, err
 	}
+	qaHealth := game.HeroBaseHealth + 100*game.HeroHealthPerLevel
+	qaMana := game.HeroBaseMana + 100*game.HeroManaPerLevel
 	result, err := tx.Exec(`
 		UPDATE characters
-		SET level=GREATEST(level,100),experience=0,health=3600,max_health=3600,mana=1730,max_mana=1730,
-		    gold_bank=GREATEST(gold_bank,100000000),str=GREATEST(str,100),dex=GREATEST(dex,100),
-		    int_stat=GREATEST(int_stat,100),vit=GREATEST(vit,100),unspent_points=GREATEST(unspent_points,100),
-		    unlocked_regions=$2::jsonb,learned_skills=$3::jsonb,highest_level_ever=GREATEST(highest_level_ever,100),progression_version=GREATEST(progression_version,2),
+		SET level=GREATEST(level,100),experience=0,health=$4,max_health=$4,mana=$5,max_mana=$5,
+		    gold_bank=GREATEST(gold_bank,100000000),unspent_points=0,
+		    unlocked_regions=$2::jsonb,learned_skills=$3::jsonb,highest_level_ever=GREATEST(highest_level_ever,100),progression_version=GREATEST(progression_version,$6),
 		    is_expedition_active=FALSE,current_stage=1,is_boss_stage=FALSE,state_revision=state_revision+1
-		WHERE id=$1`, charID, string(unlockedJSON), string(allSkillsJSON))
+		WHERE id=$1`, charID, string(unlockedJSON), string(allSkillsJSON), qaHealth, qaMana, game.CurrentHeroProgressionVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +180,11 @@ func ApplyDeveloperPresetMode(charID string, now time.Time, mode string) (*Devel
 		}
 	}
 
+	worldLocation, err := applyDeveloperWorldPresetTx(tx, charID, worldPreset, now)
+	if err != nil {
+		return nil, err
+	}
+
 	// Povoa todos os 7 pioneiros no assentamento do personagem de teste
 	var settlementID string
 	if err := tx.QueryRow(`SELECT id FROM settlements WHERE character_id=$1`, charID).Scan(&settlementID); err == nil {
@@ -235,7 +251,40 @@ func ApplyDeveloperPresetMode(charID string, now time.Time, mode string) (*Devel
 		Blueprints:        blueprintCount,
 		ProfessionLevel:   professionLevel,
 		TimersFinished:    timersFinished,
+		WorldPreset:       worldPreset,
+		WorldKey:          worldLocation.WorldKey,
+		WorldX:            worldLocation.X,
+		WorldY:            worldLocation.Y,
 		AppliedAt:         now,
+	}, nil
+}
+
+func applyDeveloperWorldPresetTx(tx *sql.Tx, charID, preset string, now time.Time) (game.WorldLocation, error) {
+	var settlementID string
+	if err := tx.QueryRow(`SELECT id::text FROM settlements WHERE character_id=$1 FOR UPDATE`, charID).Scan(&settlementID); err != nil {
+		return game.WorldLocation{}, err
+	}
+	if preset == "" {
+		return ensureSettlementWorldLocationTx(tx, settlementID, now)
+	}
+	coordinate, ok := game.WorldMapQACoordinate(preset)
+	if !ok {
+		return game.WorldLocation{}, fmt.Errorf("preset territorial QA inválido: %s", preset)
+	}
+	var worldID, worldName string
+	if err := tx.QueryRow(`SELECT id::text,name FROM worlds WHERE key=$1`, game.QAWorldKey).Scan(&worldID, &worldName); err != nil {
+		return game.WorldLocation{}, fmt.Errorf("mundo QA territorial indisponível: %w", err)
+	}
+	assigned := now.UTC()
+	if _, err := tx.Exec(`
+		UPDATE settlements
+		SET world_id=$2,world_x=$3,world_y=$4,world_allocation_index=NULL,world_assigned_at=$5,revision=revision+1,updated_at=$5
+		WHERE id=$1`, settlementID, worldID, coordinate.X, coordinate.Y, assigned); err != nil {
+		return game.WorldLocation{}, fmt.Errorf("posição %s já está ocupada no mundo QA ou não pôde ser aplicada: %w", preset, err)
+	}
+	return game.WorldLocation{
+		WorldID: worldID, WorldKey: game.QAWorldKey, WorldName: worldName,
+		X: coordinate.X, Y: coordinate.Y, AssignedAt: assigned,
 	}, nil
 }
 

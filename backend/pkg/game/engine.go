@@ -31,6 +31,9 @@ const (
 	MaxCharacterLevel = 10000
 )
 
+// CurrentHeroProgressionVersion identifica a progressão simplificada S1.
+const CurrentHeroProgressionVersion = 2
+
 const (
 	DefaultMonsterAttackSpeed = 2.50 // Cadência padrão de ataque dos monstros em segundos
 )
@@ -152,64 +155,67 @@ type CombatEffectEvent struct {
 }
 
 type CharacterDelta struct {
-	Health        int   `json:"health"`
-	MaxHealth     int   `json:"max_health"`
-	Mana          int   `json:"mana"`
-	MaxMana       int   `json:"max_mana"`
-	Level         int   `json:"level"`
-	Experience    int64 `json:"experience"`
-	GoldBank      int64 `json:"gold_bank"`
-	UnspentPoints int   `json:"unspent_points"`
+	Health     int   `json:"health"`
+	MaxHealth  int   `json:"max_health"`
+	Mana       int   `json:"mana"`
+	MaxMana    int   `json:"max_mana"`
+	Level      int   `json:"level"`
+	Experience int64 `json:"experience"`
+	GoldBank   int64 `json:"gold_bank"`
 }
 
 type CombatMessage struct {
-	ProtocolVersion         int                        `json:"protocol_version,omitempty"`
-	RequestID               string                     `json:"request_id,omitempty"`
-	Sequence                uint64                     `json:"seq,omitempty"`
-	StateRevision           int64                      `json:"state_revision,omitempty"`
-	Type                    string                     `json:"type"` // TICK_UPDATE, COMBAT_EVENT, LOOT_DROP, LEVEL_UP, EQUIPMENT_UPDATE, STANCE_UPDATE, SKILL_CAST, STATE_SNAPSHOT
-	Timestamp               string                     `json:"timestamp"`
-	Character               *CharacterData             `json:"character,omitempty"`
-	CharacterDelta          *CharacterDelta            `json:"character_delta,omitempty"`
-	Inventory               *InventoryData             `json:"inventory,omitempty"`
-	Monsters                []Monster                  `json:"monsters,omitempty"`
-	DamageDealt             int                        `json:"damage_dealt,omitempty"`
-	DamageTaken             int                        `json:"damage_taken,omitempty"`
-	DPS                     int                        `json:"dps,omitempty"`
-	TotalAttack             int                        `json:"total_attack"`
-	TotalDefense            int                        `json:"total_defense"`
-	DerivedStats            DerivedStats               `json:"derived_stats"`
-	CombatEffects           []CombatEffectEvent        `json:"combat_effects,omitempty"`
-	Arena                   *ArenaSnapshot             `json:"arena,omitempty"`
-	SkillCooldowns          map[string]int             `json:"skill_cooldowns,omitempty"`
-	AttackCooldownRemaining float64                    `json:"attack_cooldown_remaining"`
-	ActiveRegion            string                     `json:"active_region,omitempty"`
-	ActiveBiome             string                     `json:"active_biome,omitempty"`
-	ActiveStance            string                     `json:"active_stance,omitempty"`
-	CurrentStage            int                        `json:"current_stage"`
-	MaxStages               int                        `json:"max_stages"`
-	IsBossStage             bool                       `json:"is_boss_stage"`
-	LogText                 string                     `json:"log_text,omitempty"`
-	NotificationText        string                     `json:"notification_text,omitempty"`
-	ItemFound               *Item                      `json:"item_found,omitempty"`
-	IsActive                bool                       `json:"is_active"`
-	Camp                    *CampState                 `json:"camp,omitempty"`
-	Resources               []ResourceAmount           `json:"resources,omitempty"`
-	ResourceDrops           []ResourceAmount           `json:"resource_drops,omitempty"`
-	ResourceInventory       *ResourceInventorySnapshot `json:"resource_inventory,omitempty"`
-	DiscoveredLoot          []string                   `json:"discovered_loot,omitempty"`
-	AutoSellSettings        *AutoSellSettings          `json:"auto_sell_settings,omitempty"`
-	AutoPotionSettings      *AutoPotionSettings        `json:"auto_potion_settings,omitempty"`
-	AutoPotionState         *AutoPotionState           `json:"auto_potion_state,omitempty"`
-	OverflowChest           []Item                     `json:"overflow_chest,omitempty"`
-	AutoSellPreview         *AutoSellEvaluationResult  `json:"auto_sell_preview,omitempty"`
-	Economy                 *EconomyState              `json:"economy,omitempty"`
-	ActiveBuffs             []ActiveBuff               `json:"active_buffs,omitempty"`
-	GatheringResult         *GatheringResult           `json:"gathering_result,omitempty"`
-	CraftPreview            *CraftPreview              `json:"craft_preview,omitempty"`
-	CraftResult             *CraftResult               `json:"craft_result,omitempty"`
-	CraftBatchResult        *CraftBatchResult          `json:"craft_batch_result,omitempty"`
-	ConsumeResult           *ConsumeResult             `json:"consume_result,omitempty"`
+	ProtocolVersion            int                        `json:"protocol_version,omitempty"`
+	RequestID                  string                     `json:"request_id,omitempty"`
+	Sequence                   uint64                     `json:"seq,omitempty"`
+	StateRevision              int64                      `json:"state_revision,omitempty"`
+	Type                       string                     `json:"type"` // TICK_UPDATE, COMBAT_EVENT, LOOT_DROP, LEVEL_UP, EQUIPMENT_UPDATE, STANCE_UPDATE, SKILL_CAST, STATE_SNAPSHOT
+	Timestamp                  string                     `json:"timestamp"`
+	Character                  *CharacterData             `json:"character,omitempty"`
+	CharacterDelta             *CharacterDelta            `json:"character_delta,omitempty"`
+	Inventory                  *InventoryData             `json:"inventory,omitempty"`
+	Monsters                   []Monster                  `json:"monsters,omitempty"`
+	DamageDealt                int                        `json:"damage_dealt,omitempty"`
+	DamageTaken                int                        `json:"damage_taken,omitempty"`
+	DPS                        int                        `json:"dps,omitempty"`
+	TotalAttack                int                        `json:"total_attack"`
+	TotalDefense               int                        `json:"total_defense"`
+	DerivedStats               DerivedStats               `json:"derived_stats"`
+	CombatEffects              []CombatEffectEvent        `json:"combat_effects,omitempty"`
+	Arena                      *ArenaSnapshot             `json:"arena,omitempty"`
+	SkillCooldowns             map[string]int             `json:"skill_cooldowns,omitempty"`
+	AttackCooldownRemaining    float64                    `json:"attack_cooldown_remaining"`
+	ActiveRegion               string                     `json:"active_region,omitempty"`
+	ActiveBiome                string                     `json:"active_biome,omitempty"`
+	ActiveStance               string                     `json:"active_stance,omitempty"`
+	CurrentStage               int                        `json:"current_stage"`
+	MaxStages                  int                        `json:"max_stages"`
+	IsBossStage                bool                       `json:"is_boss_stage"`
+	LogText                    string                     `json:"log_text,omitempty"`
+	NotificationText           string                     `json:"notification_text,omitempty"`
+	Error                      string                     `json:"error,omitempty"`
+	ItemFound                  *Item                      `json:"item_found,omitempty"`
+	IsActive                   bool                       `json:"is_active"`
+	Camp                       *CampState                 `json:"camp,omitempty"`
+	Resources                  []ResourceAmount           `json:"resources,omitempty"`
+	ResourceDrops              []ResourceAmount           `json:"resource_drops,omitempty"`
+	ResourceInventory          *ResourceInventorySnapshot `json:"resource_inventory,omitempty"`
+	DiscoveredLoot             []string                   `json:"discovered_loot,omitempty"`
+	AutoSellSettings           *AutoSellSettings          `json:"auto_sell_settings,omitempty"`
+	AutoPotionSettings         *AutoPotionSettings        `json:"auto_potion_settings,omitempty"`
+	AutoPotionState            *AutoPotionState           `json:"auto_potion_state,omitempty"`
+	OverflowChest              []Item                     `json:"overflow_chest,omitempty"`
+	AutoSellPreview            *AutoSellEvaluationResult  `json:"auto_sell_preview,omitempty"`
+	Economy                    *EconomyState              `json:"economy,omitempty"`
+	TerritorialMap             *TerritorialMapSnapshot    `json:"territorial_map,omitempty"`
+	SettlementScouting         *SettlementScoutingState   `json:"settlement_scouting,omitempty"`
+	ScoutingTargetSettlementID string                     `json:"scouting_target_settlement_id,omitempty"`
+	ActiveBuffs                []ActiveBuff               `json:"active_buffs,omitempty"`
+	GatheringResult            *GatheringResult           `json:"gathering_result,omitempty"`
+	CraftPreview               *CraftPreview              `json:"craft_preview,omitempty"`
+	CraftResult                *CraftResult               `json:"craft_result,omitempty"`
+	CraftBatchResult           *CraftBatchResult          `json:"craft_batch_result,omitempty"`
+	ConsumeResult              *ConsumeResult             `json:"consume_result,omitempty"`
 }
 
 type GameSession struct {
@@ -301,8 +307,8 @@ func RefreshProgressionView(char *CharacterData) {
 	if char.HighestLevelEver < char.Level {
 		char.HighestLevelEver = char.Level
 	}
-	if char.ProgressionVersion < 1 {
-		char.ProgressionVersion = 1
+	if char.ProgressionVersion < CurrentHeroProgressionVersion {
+		char.ProgressionVersion = CurrentHeroProgressionVersion
 	}
 	char.XPRequired = GetRequiredXPForLevel(char.Level)
 	if char.XPRequired > 0 {
@@ -780,7 +786,7 @@ func (s *GameSession) StartTicker() {
 				}
 
 				// Regeneração no acampamento amplificada pelas construções:
-				baseHP := math.Max(6.0, 6.0+float64(s.Character.VIT)*0.12)
+				baseHP := math.Max(6.0, 6.0+float64(s.Character.Level)*0.10)
 				hpMultiplier := 1.0 + (campBonuses.HPRegenBonusPercent / 100.0)
 				hpRegen := int(math.Round(baseHP * hpMultiplier))
 
@@ -1351,7 +1357,7 @@ func (s *GameSession) processTick() {
 		s.Character.Health = int(float64(s.Character.MaxHealth) * 0.4)
 		s.Character.ExpeditionDeathsTotal++
 		s.Character.LastExpeditionDeathStage = failedStage
-		recoverySeconds := offlineCampRecoverySeconds(s.Character.MaxHealth, s.Character.Level, s.Character.VIT)
+		recoverySeconds := offlineCampRecoverySeconds(s.Character.MaxHealth, s.Character.Level)
 		s.Character.ExpeditionRecoveryUntil = time.Now().UTC().Add(time.Duration(recoverySeconds * float64(time.Second)))
 		s.RecoveringFromDefeat = true
 		s.AutoResumePending = s.Character.AutoResumeExpedition
@@ -2703,7 +2709,7 @@ func (s *GameSession) broadcastMessage(msg CombatMessage) {
 			Health: msg.Character.Health, MaxHealth: msg.Character.MaxHealth,
 			Mana: msg.Character.Mana, MaxMana: msg.Character.MaxMana,
 			Level: msg.Character.Level, Experience: msg.Character.Experience,
-			GoldBank: msg.Character.GoldBank, UnspentPoints: msg.Character.UnspentPoints,
+			GoldBank: msg.Character.GoldBank,
 		}
 		msg.Character = nil
 		msg.Inventory = nil
@@ -3053,55 +3059,6 @@ func (s *GameSession) ToggleSkill(skillKey string) {
 			IsActive:  s.IsExpeditionActive,
 		})
 	}
-}
-
-func (s *GameSession) AllocateStat(statKey string) {
-	s.Mu.Lock()
-	defer s.Mu.Unlock()
-
-	if s.Character.UnspentPoints <= 0 {
-		return
-	}
-
-	allocated := false
-	switch strings.ToLower(statKey) {
-	case "str", "for", "força":
-		s.Character.STR += 1
-		allocated = true
-	case "dex", "des", "destreza":
-		s.Character.DEX += 1
-		allocated = true
-	case "int", "int_stat", "inteligência":
-		s.Character.INT += 1
-		allocated = true
-	case "vit", "vitalidade":
-		s.Character.VIT += 1
-		allocated = true
-	}
-
-	if !allocated {
-		return
-	}
-
-	s.Character.UnspentPoints -= 1
-	totalAtk, totalDef := s.CalculateStats()
-
-	if s.SaveCharFunc != nil {
-		_ = s.SaveCharFunc(s.Character)
-	}
-
-	s.broadcastMessage(CombatMessage{
-		Type:         "CHARACTER_UPDATE",
-		Timestamp:    time.Now().Format("15:04:05"),
-		Character:    s.Character,
-		Inventory:    s.Inventory,
-		TotalAttack:  totalAtk,
-		TotalDefense: totalDef,
-		ActiveRegion: s.ActiveRegion,
-		ActiveStance: s.ActiveStance,
-		LogText:      fmt.Sprintf("✨ Atributo [%s] incrementado! Pontos restantes: %d.", strings.ToUpper(statKey), s.Character.UnspentPoints),
-		IsActive:     s.IsExpeditionActive,
-	})
 }
 
 func (s *GameSession) ChooseStarterPack(pack string) {

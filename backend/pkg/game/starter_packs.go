@@ -28,10 +28,10 @@ var StarterPacks = []StarterPackDefinition{
 	{
 		ID: "melee", Aliases: []string{"guerreiro", "guerreira"}, Vocation: "Guerreiro",
 		Title: "⚔️ Guerreiro (Melee)", Subtitle: "Combate Corpo a Corpo & Defesa Sólida",
-		KitLabel: "Espada do Aprendiz + Broquel de Madeira", StatFocus: "Força (FOR) & Vitalidade (VIT)", Accent: "amber",
+		KitLabel: "Espada do Aprendiz + Broquel de Madeira", StatFocus: "Espada, Escudo & Maestrias por uso", Accent: "amber",
 		Details: []string{
 			"🛡️ Permite equipar um Escudo no slot OffHand para alta mitigação de dano.",
-			"⚔️ Cada ponto de FOR concede +1.5 de Dano Físico Melee.",
+			"⚔️ Usar espadas evolui sua Maestria de Espada e aumenta sua eficiência com esse estilo.",
 			"💪 Robusto para aguentar hordas em regiões de nível elevado.",
 		},
 		MainHand: &StarterItemDefinition{TemplateName: "Espada do Aprendiz", Rarity: "Comum", SpecialEffect: "Arma melee inicial"},
@@ -40,11 +40,11 @@ var StarterPacks = []StarterPackDefinition{
 	{
 		ID: "distance", Aliases: []string{"arqueiro", "arqueira"}, Vocation: "Arqueiro",
 		Title: "🏹 Arqueiro (Distância)", Subtitle: "Ataques de Precisão & Danos Críticos",
-		KitLabel: "Arco Curvo + Flechas de Madeira", StatFocus: "Destreza (DES) & Vitalidade (VIT)", Accent: "emerald",
+		KitLabel: "Arco Curvo + Flechas de Madeira", StatFocus: "Distância, Munição & Maestria por uso", Accent: "emerald",
 		Details: []string{
 			"🎯 Armas de distância usam o slot Ammo para munição (Flechas/Virotes).",
 			"⚠️ Armas de distância ocupam 2 Mãos e desequipam o Escudo automaticamente.",
-			"⚡ Cada ponto em DES concede +1.5 Dano de Distância e +0.25% de Chance Crítica.",
+			"⚡ A Maestria de Distância cresce pelo uso e melhora dano, cadência e crítico de forma controlada.",
 		},
 		MainHand: &StarterItemDefinition{TemplateName: "Arco Curvo", Rarity: "Comum", SpecialEffect: "Arma de distância inicial"},
 		Ammo:     &StarterItemDefinition{TemplateName: "Flechas de Madeira", Rarity: "Comum", SpecialEffect: "Munição inicial"},
@@ -52,9 +52,9 @@ var StarterPacks = []StarterPackDefinition{
 	{
 		ID: "magic", Aliases: []string{"mago", "maga"}, Vocation: "Mago",
 		Title: "🔮 Mago (Mágico)", Subtitle: "Feitiços Arcanos & Varinhas Elementais",
-		KitLabel: "Varinha do Aprendiz + Livro: Bola de Fogo", StatFocus: "Inteligência (INT) & Vitalidade (VIT)", Accent: "sky",
+		KitLabel: "Varinha do Aprendiz + Livro: Bola de Fogo", StatFocus: "Poder Mágico, Mana & Maestria por uso", Accent: "sky",
 		Details: []string{
-			"✨ Varinhas e cajados atacam com Dano Mágico escalado pela sua INT.",
+			"✨ Varinhas e cajados usam Poder Mágico do equipamento e evoluem com sua Maestria Mágica.",
 			"📜 Ataques mágicos e feitiços de deck evoluem a Maestria de Magia.",
 			"🔥 Acompanha o Livro de Bola de Fogo para aprender o primeiro feitiço em área.",
 		},

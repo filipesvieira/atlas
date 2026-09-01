@@ -17,15 +17,16 @@ const settlementSchedulerTopic = "atlas.settlement.scheduler.v1"
 // possui localmente. Assim não replicamos estado de combate nem inventários
 // mutáveis via Pub/Sub.
 type settlementSchedulerEvent struct {
-	CharacterID       string            `json:"character_id"`
-	EventType         string            `json:"event_type"`
-	LogText           string            `json:"log_text,omitempty"`
-	CampChanged       bool              `json:"camp_changed,omitempty"`
-	ResourcesChanged  bool              `json:"resources_changed,omitempty"`
-	InventoryChanged  bool              `json:"inventory_changed,omitempty"`
-	GoldDelta         int64             `json:"gold_delta,omitempty"`
-	CharacterRevision int64             `json:"character_revision,omitempty"`
-	CraftResult       *game.CraftResult `json:"craft_result,omitempty"`
+	CharacterID                string            `json:"character_id"`
+	EventType                  string            `json:"event_type"`
+	LogText                    string            `json:"log_text,omitempty"`
+	CampChanged                bool              `json:"camp_changed,omitempty"`
+	ResourcesChanged           bool              `json:"resources_changed,omitempty"`
+	InventoryChanged           bool              `json:"inventory_changed,omitempty"`
+	GoldDelta                  int64             `json:"gold_delta,omitempty"`
+	CharacterRevision          int64             `json:"character_revision,omitempty"`
+	CraftResult                *game.CraftResult `json:"craft_result,omitempty"`
+	ScoutingTargetSettlementID string            `json:"scouting_target_settlement_id,omitempty"`
 }
 
 type settlementSchedulerBus interface {
@@ -190,15 +191,16 @@ func synchronizeSettlementSchedulerEvent(event settlementSchedulerEvent) {
 		session.Character.StateRevision = event.CharacterRevision
 	}
 	message := game.CombatMessage{
-		Type:              event.EventType,
-		Timestamp:         time.Now().Format("15:04:05"),
-		Character:         game.CloneCharacterSnapshot(session.Character),
-		Economy:           economy,
-		Inventory:         game.CloneInventorySnapshot(session.Inventory),
-		ResourceInventory: resources,
-		CraftResult:       event.CraftResult,
-		Camp:              game.CloneCampSnapshot(session.Camp),
-		LogText:           event.LogText,
+		Type:                       event.EventType,
+		Timestamp:                  time.Now().Format("15:04:05"),
+		Character:                  game.CloneCharacterSnapshot(session.Character),
+		Economy:                    economy,
+		Inventory:                  game.CloneInventorySnapshot(session.Inventory),
+		ResourceInventory:          resources,
+		CraftResult:                event.CraftResult,
+		ScoutingTargetSettlementID: event.ScoutingTargetSettlementID,
+		Camp:                       game.CloneCampSnapshot(session.Camp),
+		LogText:                    event.LogText,
 	}
 	session.SendMessageLocked(message)
 	session.Mu.Unlock()

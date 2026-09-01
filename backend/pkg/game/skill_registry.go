@@ -297,7 +297,7 @@ func init() {
 			if target == nil {
 				return nil
 			}
-			magicDmg := 35 + int(float64(ctx.MagicMasteryLvl)*2.5) + (ctx.Character.Level / 3) + int(float64(ctx.DerivedStats.EffectiveINT)*0.6)
+			magicDmg := 35 + int(float64(ctx.MagicMasteryLvl)*2.5) + (ctx.Character.Level / 3) + int(float64(ctx.DerivedStats.TotalAttack)*0.45)
 			target.Health -= magicDmg
 			return &SkillResult{
 				DamageDealt:  magicDmg,
@@ -333,7 +333,7 @@ func init() {
 			if target == nil {
 				return nil
 			}
-			magicDmg := 25 + int(float64(ctx.MagicMasteryLvl)*2.0) + (ctx.Character.Level / 4) + int(float64(ctx.DerivedStats.EffectiveINT)*0.4)
+			magicDmg := 25 + int(float64(ctx.MagicMasteryLvl)*2.0) + (ctx.Character.Level / 4) + int(float64(ctx.DerivedStats.TotalAttack)*0.35)
 			target.Health -= magicDmg
 			return &SkillResult{
 				DamageDealt: magicDmg,
@@ -362,7 +362,7 @@ func init() {
 		TargetType:        "area",
 		VisualKey:         "arcane_nova",
 		Execute: func(ctx *SkillContext) *SkillResult {
-			damagePerTarget := 18 + int(float64(ctx.MagicMasteryLvl)*1.8) + (ctx.Character.Level / 3) + int(float64(ctx.DerivedStats.EffectiveINT)*0.5)
+			damagePerTarget := 18 + int(float64(ctx.MagicMasteryLvl)*1.8) + (ctx.Character.Level / 3) + int(float64(ctx.DerivedStats.TotalAttack)*0.40)
 			if damagePerTarget < 1 {
 				damagePerTarget = 1
 			}
@@ -394,7 +394,7 @@ func init() {
 		Key:               "divine_heal",
 		Name:              "Cura Divina",
 		Icon:              "✨",
-		Description:       "Invoca a luz dos deuses restaurando HP com base em INT quando a vida cai para 70% ou menos.",
+		Description:       "Invoca a luz dos deuses restaurando HP com base em nível, Maestria Mágica e Mana Máxima quando a vida cai para 70% ou menos.",
 		ManaCost:          28,
 		MinLevel:          8,
 		CooldownTicks:     7,
@@ -410,7 +410,7 @@ func init() {
 			return (float64(ctx.Character.Health) / float64(ctx.Character.MaxHealth)) <= 0.70
 		},
 		Execute: func(ctx *SkillContext) *SkillResult {
-			healAmount := 60 + int(float64(ctx.DerivedStats.EffectiveINT)*1.8) + (ctx.Character.Level * 2)
+			healAmount := 60 + (ctx.MagicMasteryLvl * 3) + (ctx.Character.Level * 2) + (ctx.DerivedStats.MaxMana / 8)
 			ctx.Character.Health += healAmount
 			if ctx.Character.Health > ctx.Character.MaxHealth {
 				ctx.Character.Health = ctx.Character.MaxHealth

@@ -54,6 +54,7 @@ type CreateCharacterRequest struct {
 type DeveloperPresetRequest struct {
 	CharacterID string `json:"character_id"`
 	Mode        string `json:"mode,omitempty"`
+	WorldPreset string `json:"world_preset,omitempty"`
 }
 
 func main() {
@@ -627,7 +628,7 @@ func HandleDeveloperPreset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := db.ApplyDeveloperPresetMode(req.CharacterID, time.Now().UTC(), req.Mode)
+	result, err := db.ApplyDeveloperPresetModeWithWorld(req.CharacterID, time.Now().UTC(), req.Mode, req.WorldPreset)
 	if err != nil {
 		log.Printf("erro ao aplicar preset de QA em %s: %v", req.CharacterID, err)
 		jsonError(w, http.StatusInternalServerError, "não foi possível preparar o personagem de testes")

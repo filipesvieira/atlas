@@ -44,9 +44,9 @@ type RecipeDefinition struct {
 	BaseMagic               int              `json:"base_magic,omitempty"`
 	BaseDef                 int              `json:"base_def,omitempty"`
 	BaseWeight              float64          `json:"base_weight,omitempty"`
-	BaseSTR                 int              `json:"base_str,omitempty"`
-	BaseDEX                 int              `json:"base_dex,omitempty"`
-	BaseINT                 int              `json:"base_int,omitempty"`
+	BaseMeleePower          int              `json:"base_melee_power,omitempty"`
+	BaseRangedPower         int              `json:"base_ranged_power,omitempty"`
+	BaseMagicPower          int              `json:"base_magic_power,omitempty"`
 	BaseHP                  int              `json:"base_hp,omitempty"`
 	BaseMP                  int              `json:"base_mp,omitempty"`
 	CritChance              float64          `json:"crit_chance,omitempty"`
@@ -117,9 +117,9 @@ func buildRecipeRegistry() map[string]RecipeDefinition {
 			BaseMagic:              template.BaseMagic,
 			BaseDef:                template.BaseDef,
 			BaseWeight:             template.BaseWeight,
-			BaseSTR:                template.BaseSTR,
-			BaseDEX:                template.BaseDEX,
-			BaseINT:                template.BaseINT,
+			BaseMeleePower:         template.BaseMeleePower,
+			BaseRangedPower:        template.BaseRangedPower,
+			BaseMagicPower:         template.BaseMagicPower,
 			BaseHP:                 template.BaseHP,
 			BaseMP:                 template.BaseMP,
 			CritChance:             template.CritChance,

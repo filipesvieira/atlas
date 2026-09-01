@@ -92,7 +92,7 @@ O duelo já começa automaticamente depois da confirmação dos dois participant
 - partidas por forfeit, sem `ended_at` válido ou com gap de CP >2% são excluídas do conjunto QA;
 - migration `000032_pvp_balance_qa.sql` corrige terminais históricos sem `ended_at` e impede nova regressão.
 
-## Etapa M5 — Acampamento -> Reino defensável (M5-B concluída; M5-C próxima)
+## Etapa M5 — Acampamento -> Reino defensável (M5-C concluída)
 
 ### M5-A — Progressão territorial e fundação defensiva (concluída)
 
@@ -107,13 +107,13 @@ O duelo já começa automaticamente depois da confirmação dos dois participant
 ### M5-A.1 — Expansão Territorial V4 (concluída)
 
 - arena PvE/PvP permanece em `24x18`; o assentamento ganha geometria própria e independente;
-- mundo territorial máximo passa a `44x32`, com área construtiva central desbloqueada por estágio: `24x18 -> 28x20 -> 32x22 -> 36x24 -> 40x28 -> 44x32`;
+- a M5-A.1 introduziu mundo `44x32`; a M5-B.1 posteriormente consolidou Layout V5 `52x38`, mantendo Cidade `40x28` e ampliando apenas Reino para `52x38`;
 - layouts V3 existentes migram uma única vez por `+10 X / +7 Y`, preservando todas as relações espaciais do jogador;
 - placement/drag-and-drop continuam server-authoritative, agora validados contra os limites do estágio atual;
 - câmera do assentamento ganha `fit`, zoom até `0.65x` e pan por botão do meio ou `Alt+arrastar`, sem alterar a câmera das arenas;
 - moradores visíveis são limitados e distribuídos por rotas territoriais para impedir poluição visual conforme a população cresce;
 - QA ganha presets `progress`, `city`, `kingdom` e `kingdom_stress`; os três últimos constroem automaticamente o catálogo disponível e escalam a população para avaliação visual;
-- auditoria do acampamento valida simultaneamente arena `24x18`, território `44x32`, Layout V4 e os seis estágios.
+- o auditor atual valida arena `24x18`, território V5 `52x38`, os seis estágios e a separação de câmera PvE/assentamento.
 
 ### CFF-A — Combat Feel Presentation Foundation (concluída antes da M5-B)
 
@@ -139,15 +139,33 @@ O duelo já começa automaticamente depois da confirmação dos dois participant
 - renderer do perímetro cresce junto com o território atual; a expansão do cinturão na promoção representa a reconfiguração abstrata da fortificação, enquanto o nível representa sua qualidade/resistência;
 - raids continuam `FALSE` durante toda a M5-B.
 
-### M5-C — Engenheiro, Defense Power e snapshot defensivo (próxima)
+### M5-C — Defense Power, Readiness e snapshot defensivo (concluída)
 
-- consolidar efeitos das fortificações em `Defense Power` explicável e auditável;
-- especialização/atribuição do Engenheiro para reparos, armadilhas e infraestrutura militar;
-- guarnição derivada do Quartel e moradores mobilizados;
-- cálculo de proteção de Armazém/Tesouraria, recuperação, integridade e barreira;
-- gerar `settlement_defense_snapshots` versionados e imutáveis para consumo de M6/M7;
-- qualquer mutação relevante invalida o snapshot anterior;
-- preparar UI de prontidão defensiva sem ativar raids antes da etapa apropriada.
+- efeitos das fortificações são consolidados em `Defense Power` decomposto e auditável;
+- `Readiness` 0–100 é separado do poder bruto;
+- Quartel cria capacidade, mas guardas ativos são preenchidos automaticamente pela população, preservando reserva civil;
+- Enfermaria, Engenheiro, Cofre e Ressonador expõem recuperação, reparo, proteção e escudo sem microgestão;
+- estratégias iniciais são apenas `balanced`, `aggressive` e `defensive`;
+- snapshots v1 incluem layout, placements, população, estratégia e avaliação, com hash determinístico;
+- mudanças relevantes invalidam/regeneram a fotografia defensiva;
+- promoções territoriais ganharam card de progresso, notificação e modal persistente com ACK;
+- raids continuam desabilitadas.
+
+### S1 — Simplificação da Progressão do Herói (concluída)
+
+- distribuição manual de STR/DEX/INT/VIT retirada do gameplay;
+- identidade mantida por nível + Maestrias + equipamento + skills;
+- itens/fórmulas migrados para bônus semânticos e balance gate CP-normalizado preservado;
+- plano canônico: `HERO_PROGRESSION_SIMPLIFICATION_PLAN.md`.
+
+### M5-D — World Grid / Mapa Territorial (fundação implementada; fechamento de gate pendente)
+
+- cada assentamento recebe coordenada fixa `(x,y)` em um mundo/shard;
+- settlements antigos sem coordenada são reconciliados no startup;
+- Sala de Guerra abre Mapa Territorial com pan/zoom/busca/lista;
+- contrato público não vaza Defense Power, guarnição nem recursos privados;
+- distância alimenta tempo/logística de M6/M7, não poder de combate;
+- plano canônico: `WORLD_COORDINATE_MAP_MASTER_PLAN.md`.
 
 ## Etapa M6 — Scouting
 

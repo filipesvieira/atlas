@@ -5,6 +5,7 @@ interface NotificationBellProps {
   notifications: ImportantNotification[];
   onMarkAllRead: () => void;
   onClear: () => void;
+  onOpenNotification?: (notification: ImportantNotification) => void;
 }
 
 const timeLabel = (timestamp: string) => {
@@ -14,7 +15,7 @@ const timeLabel = (timestamp: string) => {
   return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 };
 
-export function NotificationBell({ notifications, onMarkAllRead, onClear }: NotificationBellProps) {
+export function NotificationBell({ notifications, onMarkAllRead, onClear, onOpenNotification }: NotificationBellProps) {
   const unreadCount = notifications.filter((notification) => !notification.read).length;
 
   return (
@@ -54,8 +55,11 @@ export function NotificationBell({ notifications, onMarkAllRead, onClear }: Noti
               Nenhuma novidade por enquanto.
             </div>
           ) : notifications.map((notification) => (
-            <div
+            <button
+              type="button"
               key={notification.id}
+              onClick={() => onOpenNotification?.(notification)}
+              disabled={!notification.action}
               className={`flex gap-2 rounded-lg border-b border-slate-800/80 px-2.5 py-2.5 last:border-b-0 ${notification.read ? 'opacity-70' : 'bg-amber-950/20'}`}
             >
               <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-base">
@@ -68,7 +72,7 @@ export function NotificationBell({ notifications, onMarkAllRead, onClear }: Noti
                 </div>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">{notification.message}</p>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>

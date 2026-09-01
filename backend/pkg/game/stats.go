@@ -1,28 +1,27 @@
 package game
 
-import (
-	"math"
-)
+import "math"
 
 const (
 	// BaseHeroMovementSpeedMultiplier representa 100% da velocidade natural do
-	// herói. Bônus de botas são somados sobre este valor (ex.: +16,5% = 1,165x).
-	BaseHeroMovementSpeedMultiplier = 1.5
-	// MaxHeroMovementSpeedMultiplier impede combinações futuras de equipamentos
-	// de tornarem a simulação de movimentação instável.
-	MaxHeroMovementSpeedMultiplier = 2.5
-	// ManualHeroControlSpeedMultiplier recompensa o controle ativo por teclado
-	// ou clique. Ele é aplicado sobre a velocidade já calculada pelas botas.
+	// herói. Bônus de botas são somados sobre este valor.
+	BaseHeroMovementSpeedMultiplier  = 1.5
+	MaxHeroMovementSpeedMultiplier   = 2.5
 	ManualHeroControlSpeedMultiplier = 2.5
+
+	// S1: sobrevivência, recursos e carga passam a crescer com o nível em vez de
+	// depender de uma distribuição manual de atributos primários.
+	HeroBaseHealth       = 225
+	HeroHealthPerLevel   = 35
+	HeroBaseMana         = 90
+	HeroManaPerLevel     = 12
+	HeroBaseCapacity     = 1100
+	HeroCapacityPerLevel = 20
 )
 
-// DerivedStats encapsula todas as propriedades de combate calculadas
-// de forma autoritativa pelo backend para uso no combate e transmissão à UI.
+// DerivedStats contém apenas grandezas que têm significado direto para o
+// jogador. STR/DEX/INT/VIT foram retirados deste contrato na S1.
 type DerivedStats struct {
-	EffectiveSTR            int     `json:"effective_str"`
-	EffectiveDEX            int     `json:"effective_dex"`
-	EffectiveINT            int     `json:"effective_int"`
-	EffectiveVIT            int     `json:"effective_vit"`
 	TotalAttack             int     `json:"total_attack"`
 	TotalDefense            int     `json:"total_defense"`
 	MaxHealth               int     `json:"max_health"`
@@ -37,154 +36,164 @@ type DerivedStats struct {
 	PrimaryArchetype        string  `json:"primary_archetype"`
 	AttackSpeedSeconds      float64 `json:"attack_speed_seconds"`
 	AttackSpeedBonus        float64 `json:"attack_speed_bonus"`
+	ActiveMasteryKey        string  `json:"active_mastery_key"`
+	ActiveMasteryLevel      int     `json:"active_mastery_level"`
+	MeleePowerBonus         int     `json:"melee_power_bonus"`
+	RangedPowerBonus        int     `json:"ranged_power_bonus"`
+	MagicPowerBonus         int     `json:"magic_power_bonus"`
 }
 
-// CalculateDerivedStats calcula os atributos derivados do aventureiro a partir
-// dos atributos primários, equipamentos e posturas táticas.
+func masteryForWeapon(char *CharacterData, weaponType string) (string, int) {
+	if char == nil {
+		return "sword", 10
+	}
+	switch weaponType {
+	case WeaponTypeAxe:
+		return "axe", GetMasteryLevel(char.Masteries.AxeMastery)
+	case WeaponTypeClub:
+		return "club", GetMasteryLevel(char.Masteries.ClubMastery)
+	case WeaponTypeBow:
+		return "distance", GetMasteryLevel(char.Masteries.DistanceMastery)
+	case WeaponTypeWand:
+		return "magic", GetMasteryLevel(char.Masteries.MagicMastery)
+	default:
+		return "sword", GetMasteryLevel(char.Masteries.SwordMastery)
+	}
+}
+
+func masteryDamageMultiplier(level int) float64 {
+	progress := math.Max(0, float64(level-10))
+	return 1.0 + math.Min(0.65, progress*0.0125)
+}
+
+func masteryAttackSpeedReduction(level int) float64 {
+	progress := math.Max(0, float64(level-10))
+	return math.Min(0.20, progress*0.004)
+}
+
+func distanceMasteryCritBonus(level int) float64 {
+	progress := math.Max(0, float64(level-10))
+	return math.Min(10.0, progress*0.20)
+}
+
+func normalizedEquipmentItem(item *Item) *Item {
+	if item == nil {
+		return nil
+	}
+	normalized := RebalanceExistingItem(*item)
+	return &normalized
+}
+
+// CalculateDerivedStats é a fonte autoritativa da S1. O nível fornece a curva
+// básica do herói; equipamento fornece números explícitos; maestria da arma
+// equipada fornece especialização por uso.
 func CalculateDerivedStats(char *CharacterData, inv *InventoryData, stance string) DerivedStats {
 	if char == nil {
 		return DerivedStats{
-			EffectiveSTR: 5, EffectiveDEX: 5, EffectiveINT: 5, EffectiveVIT: 5,
-			MaxHealth: 235, MaxMana: 95, TotalCapacity: 1085, MaxSlots: 20,
-			CritChance: 5.41, ManaRegenPerSecond: 1.60,
-			SpeedMultiplier: 1.0, MovementSpeedMultiplier: BaseHeroMovementSpeedMultiplier, PrimaryArchetype: "melee",
-			AttackSpeedSeconds: 2.20, AttackSpeedBonus: 0.0,
+			MaxHealth:               HeroBaseHealth + HeroHealthPerLevel,
+			MaxMana:                 HeroBaseMana + HeroManaPerLevel,
+			TotalCapacity:           HeroBaseCapacity + HeroCapacityPerLevel,
+			MaxSlots:                20,
+			CritChance:              5.0,
+			ManaRegenPerSecond:      1.57,
+			SpeedMultiplier:         1.0,
+			MovementSpeedMultiplier: BaseHeroMovementSpeedMultiplier,
+			PrimaryArchetype:        "wanderer",
+			AttackSpeedSeconds:      2.40,
+			ActiveMasteryKey:        "sword",
+			ActiveMasteryLevel:      10,
 		}
 	}
 
-	rawSTR := char.STR
-	if rawSTR <= 0 {
-		rawSTR = 5
-	}
-	rawDEX := char.DEX
-	if rawDEX <= 0 {
-		rawDEX = 5
-	}
-	rawINT := char.INT
-	if rawINT <= 0 {
-		rawINT = 5
-	}
-	rawVIT := char.VIT
-	if rawVIT <= 0 {
-		rawVIT = 5
-	}
-
-	bonusSTR, bonusDEX, bonusINT, bonusHP, bonusMP := 0, 0, 0, 0, 0
-	bonusDefense, itemManaRegen := 0, 0
-	extraCritChance := 0.0
-
+	level := max(1, char.Level)
 	var eq EquipmentSlots
 	if inv != nil {
 		eq = inv.Equipment
 	}
-	if eq.Boots != nil {
-		// Também normaliza o item em memória para que sessões/testes que não
-		// passaram pelo carregador do banco aproveitem a compatibilidade legada.
-		normalizedBoots := RebalanceExistingItem(*eq.Boots)
-		eq.Boots = &normalizedBoots
+	// Normaliza todos os slots para que saves antigos com +STR/+DEX/+INT sejam
+	// interpretados como poder semântico já na primeira leitura S1.
+	eq.Head = normalizedEquipmentItem(eq.Head)
+	eq.Chest = normalizedEquipmentItem(eq.Chest)
+	eq.Legs = normalizedEquipmentItem(eq.Legs)
+	eq.Boots = normalizedEquipmentItem(eq.Boots)
+	eq.MainHand = normalizedEquipmentItem(eq.MainHand)
+	eq.OffHand = normalizedEquipmentItem(eq.OffHand)
+	eq.Necklace = normalizedEquipmentItem(eq.Necklace)
+	eq.Ring = normalizedEquipmentItem(eq.Ring)
+	eq.Ammo = normalizedEquipmentItem(eq.Ammo)
+	eq.Bag = normalizedEquipmentItem(eq.Bag)
+
+	bonusHP, bonusMP, bonusDefense, itemManaRegen := 0, 0, 0, 0
+	meleePower, rangedPower, magicPower := 0, 0, 0
+	extraCritChance := 0.0
+	attackSpeedBonus := 0.0
+	equippedList := []*Item{eq.Head, eq.Chest, eq.Legs, eq.Boots, eq.MainHand, eq.OffHand, eq.Necklace, eq.Ring, eq.Ammo, eq.Bag}
+	for _, item := range equippedList {
+		if item == nil {
+			continue
+		}
+		meleePower += item.MeleePowerBonus
+		rangedPower += item.RangedPowerBonus
+		magicPower += item.MagicPowerBonus
+		bonusHP += item.BonusHP
+		bonusMP += item.BonusMP
+		bonusDefense += item.Defense
+		extraCritChance += item.CritChance
+		itemManaRegen += item.ManaRegen
+		// AttackSpeedBonus já é semântico e fica reservado para conteúdo futuro;
+		// itens atuais não precisam recebê-lo artificialmente ao migrar DEX.
 	}
 
-	// A velocidade de movimento vem exclusivamente do slot de botas. DEX,
-	// armas e os demais equipamentos continuam afetando apenas seus atributos
-	// próprios, mantendo o papel das botas claro para o jogador.
 	movementSpeedMultiplier := BaseHeroMovementSpeedMultiplier
 	if eq.Boots != nil && eq.Boots.MovementSpeedBonus > 0 {
 		movementSpeedMultiplier += eq.Boots.MovementSpeedBonus / 100.0
 	}
 	movementSpeedMultiplier = math.Max(BaseHeroMovementSpeedMultiplier, math.Min(MaxHeroMovementSpeedMultiplier, movementSpeedMultiplier))
 
-	equippedList := []*Item{
-		eq.Head, eq.Chest, eq.Legs, eq.Boots,
-		eq.MainHand, eq.OffHand, eq.Necklace, eq.Ring,
-		eq.Ammo, eq.Bag,
-	}
+	maxHealth := HeroBaseHealth + level*HeroHealthPerLevel + bonusHP
+	maxMana := HeroBaseMana + level*HeroManaPerLevel + bonusMP
 
-	for _, item := range equippedList {
-		if item != nil {
-			bonusSTR += item.BonusSTR
-			bonusDEX += item.BonusDEX
-			bonusINT += item.BonusINT
-			bonusHP += item.BonusHP
-			bonusMP += item.BonusMP
-			bonusDefense += item.Defense
-			extraCritChance += item.CritChance
-			itemManaRegen += item.ManaRegen
-		}
-	}
-
-	effectiveSTR := rawSTR + bonusSTR
-	effectiveDEX := rawDEX + bonusDEX
-	effectiveINT := rawINT + bonusINT
-	effectiveVIT := rawVIT
-
-	// 1. MaxHealth & MaxMana
-	maxHealth := 100 + (effectiveVIT * 25) + (char.Level * 10) + bonusHP
-	maxMana := 30 + (effectiveINT * 12) + (char.Level * 5) + bonusMP
-
-	// 2. Capacidade Total de Carga (Cap oz) e Slots de Mochila
-	// Base de 1000 + Nível*10 + STR*15 + Bônus por Raridade da Mochila
-	bagCapBonus := 0
-	bagSlotsBonus := 0
+	bagCapBonus, bagSlotsBonus := 0, 0
 	if eq.Bag != nil {
 		switch eq.Bag.Rarity {
 		case "Comum":
-			bagCapBonus = 200
-			bagSlotsBonus = 4 // 24 slots
+			bagCapBonus, bagSlotsBonus = 200, 4
 		case "Incomum":
-			bagCapBonus = 350
-			bagSlotsBonus = 6 // 26 slots
+			bagCapBonus, bagSlotsBonus = 350, 6
 		case "Raro":
-			bagCapBonus = 500
-			bagSlotsBonus = 8 // 28 slots
+			bagCapBonus, bagSlotsBonus = 500, 8
 		case "Épico":
-			bagCapBonus = 650
-			bagSlotsBonus = 10 // 30 slots
+			bagCapBonus, bagSlotsBonus = 650, 10
 		case "Lendário":
-			bagCapBonus = 800
-			bagSlotsBonus = 12 // 32 slots
+			bagCapBonus, bagSlotsBonus = 800, 12
 		case "Mítico":
-			bagCapBonus = 1000
-			bagSlotsBonus = 14 // 34 slots
+			bagCapBonus, bagSlotsBonus = 1000, 14
 		case "Divino":
-			bagCapBonus = 1300
-			bagSlotsBonus = 16 // 36 slots
+			bagCapBonus, bagSlotsBonus = 1300, 16
 		default:
-			bagCapBonus = 200
-			bagSlotsBonus = 4
+			bagCapBonus, bagSlotsBonus = 200, 4
 		}
 	}
-	totalCapacity := 1000 + (char.Level * 10) + (effectiveSTR * 15) + bagCapBonus
+	totalCapacity := HeroBaseCapacity + level*HeroCapacityPerLevel + bagCapBonus
 	maxSlots := 20 + bagSlotsBonus
 
-	// 3. Chance de Crítico com Diminishing Returns & Hard Cap de 50%
-	// Crit_DEX = (EffectiveDEX / (EffectiveDEX + 300)) * 25.0%
-	// Crit_Final = Min(50.0%, 5.0% + Crit_DEX + EquipCrit)
-	critDEX := (float64(effectiveDEX) / (float64(effectiveDEX) + 300.0)) * 25.0
-	rawCritChance := 5.0 + critDEX + extraCritChance
-	critChance := math.Min(50.0, rawCritChance)
-	critChance = math.Round(critChance*100) / 100
-
-	// 4. Regeneração de Mana contínua por segundo (MP/s)
-	// Regen_INT = (EffectiveINT / (EffectiveINT + 300)) * 6.0 MP/s
-	// Regen_Final = 1.5 + Regen_INT + itemManaRegen
-	regenINT := (float64(effectiveINT) / (float64(effectiveINT) + 300.0)) * 6.0
-	manaRegenPerSecond := 1.5 + regenINT + float64(itemManaRegen)
-	manaRegenPerSecond = math.Round(manaRegenPerSecond*100) / 100
-
-	// 5. Arquétipo, Poder Ofensivo (Ataque) & Velocidade de Ataque
-	totalAtk := 0
-	speedMultiplier := 1.00
-	primaryArchetype := "melee"
-
+	primaryArchetype := "wanderer"
+	speedMultiplier := 1.0
+	weaponType := WeaponTypeSword
 	if eq.MainHand != nil {
-		wType := GetItemWeaponType(eq.MainHand)
+		weaponType = GetItemWeaponType(eq.MainHand)
+	}
+	masteryKey, masteryLevel := masteryForWeapon(char, weaponType)
+	masteryMultiplier := masteryDamageMultiplier(masteryLevel)
+
+	totalAtk := 5 + level/3
+	if eq.MainHand != nil {
 		physical := eq.MainHand.PhysicalAttack
 		magic := eq.MainHand.MagicAttack
 		if physical == 0 && magic == 0 {
 			physical = eq.MainHand.Attack
 		}
-
-		switch wType {
+		switch weaponType {
 		case WeaponTypeBow:
 			primaryArchetype = "distance"
 			speedMultiplier = 1.40
@@ -195,103 +204,65 @@ func CalculateDerivedStats(char *CharacterData, inv *InventoryData, stance strin
 					ammoAtk = eq.Ammo.Attack
 				}
 			}
-			baseDmg := math.Max(1, float64(physical+ammoAtk))
-			totalAtk = int(baseDmg * (1.0 + (float64(effectiveDEX) / 100.0)))
-
+			totalAtk = int(math.Round(math.Max(1, float64(physical+ammoAtk+rangedPower)) * masteryMultiplier))
 		case WeaponTypeWand:
 			primaryArchetype = "magic"
 			speedMultiplier = 1.25
 			if magic == 0 {
 				magic = eq.MainHand.Attack
 			}
-			baseDmg := math.Max(1, float64(magic))
-			totalAtk = int(baseDmg * (1.0 + (float64(effectiveINT) / 100.0)))
-
+			totalAtk = int(math.Round(math.Max(1, float64(magic+magicPower)) * masteryMultiplier))
 		default:
 			primaryArchetype = "melee"
-			speedMultiplier = 1.00
-			baseDmg := math.Max(1, float64(physical))
-			totalAtk = int(baseDmg * (1.0 + (float64(effectiveSTR) / 100.0)))
+			speedMultiplier = 1.0
+			totalAtk = int(math.Round(math.Max(1, float64(physical+meleePower)) * masteryMultiplier))
 		}
-	} else {
-		primaryArchetype = "wanderer"
-		speedMultiplier = 1.00
-		totalAtk = int(5.0 * (1.0 + (float64(effectiveSTR) / 100.0)))
 	}
 
-	// 5.1 Velocidade de Ataque Base por Categoria de Arma (Intervalo em segundos)
-	baseAttackSpeed := 2.20
+	baseAttackSpeed := 2.40
 	if eq.MainHand != nil {
-		wType := GetItemWeaponType(eq.MainHand)
 		isTwoHanded := eq.MainHand.Hands == 2
-		switch wType {
+		switch weaponType {
 		case WeaponTypeBow:
 			baseAttackSpeed = 2.10
 		case WeaponTypeWand:
 			if isTwoHanded {
-				baseAttackSpeed = 2.60 // Cajados arcanos pesados de 2 mãos
+				baseAttackSpeed = 2.60
 			} else {
-				baseAttackSpeed = 2.00 // Varinhas mágicas de 1 mão
+				baseAttackSpeed = 2.00
 			}
 		default:
 			if isTwoHanded {
-				baseAttackSpeed = 2.80 // Montantes e machados pesados de 2 mãos
+				baseAttackSpeed = 2.80
 			} else {
-				baseAttackSpeed = 2.20 // Espadas, machados e clavas de 1 mão
+				baseAttackSpeed = 2.20
 			}
 		}
-	} else {
-		baseAttackSpeed = 2.40 // Desarmado / Andarilho
 	}
+	masterySpeedReduction := masteryAttackSpeedReduction(masteryLevel)
+	equipSpeedMultiplier := math.Max(0.50, 1.0-(attackSpeedBonus/100.0))
+	attackSpeedSeconds := baseAttackSpeed * (1.0 - masterySpeedReduction) * equipSpeedMultiplier
+	attackSpeedSeconds = math.Round(math.Max(0.80, math.Min(4.00, attackSpeedSeconds))*100) / 100
 
-	// 5.2 Redução de Intervalo por Destreza (DEX) com Diminishing Returns suave (até -35%)
-	dexReduction := (float64(effectiveDEX) / (float64(effectiveDEX) + 280.0)) * 0.35
-
-	// 5.3 Bônus de Velocidade de Ataque dos Equipamentos
-	equipSpeedBonus := 0.0
-	equipSpeedMultiplier := math.Max(0.50, 1.0-(equipSpeedBonus/100.0))
-
-	// Intervalo Final de Ataque em segundos
-	attackSpeedSeconds := baseAttackSpeed * (1.0 - dexReduction) * equipSpeedMultiplier
-	attackSpeedSeconds = math.Max(0.80, math.Min(4.00, attackSpeedSeconds))
-	attackSpeedSeconds = math.Round(attackSpeedSeconds*100) / 100
-
-	// Bônus de Maestria de Arma
-	var masteryLevel int
-	if eq.MainHand != nil {
-		wType := GetItemWeaponType(eq.MainHand)
-		switch wType {
-		case WeaponTypeAxe:
-			masteryLevel = GetMasteryLevel(char.Masteries.AxeMastery)
-		case WeaponTypeBow:
-			masteryLevel = GetMasteryLevel(char.Masteries.DistanceMastery)
-		case WeaponTypeWand:
-			masteryLevel = GetMasteryLevel(char.Masteries.MagicMastery)
-		case WeaponTypeClub:
-			masteryLevel = GetMasteryLevel(char.Masteries.ClubMastery)
-		default:
-			masteryLevel = GetMasteryLevel(char.Masteries.SwordMastery)
-		}
-	} else {
-		masteryLevel = GetMasteryLevel(char.Masteries.SwordMastery)
+	critChance := 5.0 + extraCritChance
+	if primaryArchetype == "distance" {
+		critChance += distanceMasteryCritBonus(masteryLevel)
 	}
+	critChance = math.Round(math.Min(50.0, math.Max(0, critChance))*100) / 100
 
-	if masteryLevel > 10 {
-		totalAtk += (masteryLevel - 10) / 4
-	}
+	levelRegen := (float64(level) / (float64(level) + 60.0)) * 4.0
+	manaRegenPerSecond := math.Round((1.5+levelRegen+float64(itemManaRegen))*100) / 100
 
-	// 6. Defesa Física Total: (VIT * 0.5) + Equipamentos + Escudo
-	totalDef := int(float64(effectiveVIT) * 0.5)
-	totalDef += bonusDefense
-
-	if eq.OffHand != nil {
+	// Defesa não depende mais de VIT. Nível dá uma base pequena e equipamento/
+	// escudo são responsáveis pela maior parte da proteção.
+	totalDef := 5 + level/4 + bonusDefense
+	if eq.OffHand != nil && GetItemWeaponType(eq.OffHand) == WeaponTypeShield {
 		shieldLevel := GetMasteryLevel(char.Masteries.ShieldMastery)
 		if shieldLevel > 10 {
-			totalDef += (shieldLevel - 10) / 4
+			totalDef += (shieldLevel - 10) / 3
 		}
 	}
 
-	// 7. Modificadores de Postura Tática
 	switch stance {
 	case "offensive":
 		totalAtk = int(float64(totalAtk) * 1.35)
@@ -301,34 +272,19 @@ func CalculateDerivedStats(char *CharacterData, inv *InventoryData, stance strin
 		totalAtk = int(float64(totalAtk) * 0.75)
 	}
 
-	// 8. Cálculo de DPS básico esperado baseado no intervalo real de ataque.
-	//
-	// O combate agenda o ataque básico usando apenas attackSpeedSeconds. O
-	// speedMultiplier do arquétipo é um dado legado/descritivo e não altera o
-	// cooldown real; aplicá-lo aqui inflava o DPS de arcos (1,40x) e varinhas
-	// (1,25x). A variância normal do golpe tem média 1,0x, enquanto o crítico
-	// esperado acrescenta 50% do dano na proporção da chance de crítico.
 	critDamageMultiplier := 1.0 + (critChance/100.0)*0.50
 	currentDPS := int(math.Round((float64(totalAtk) / attackSpeedSeconds) * critDamageMultiplier))
 
 	return DerivedStats{
-		EffectiveSTR:            effectiveSTR,
-		EffectiveDEX:            effectiveDEX,
-		EffectiveINT:            effectiveINT,
-		EffectiveVIT:            effectiveVIT,
-		TotalAttack:             totalAtk,
-		TotalDefense:            totalDef,
-		MaxHealth:               maxHealth,
-		MaxMana:                 maxMana,
-		TotalCapacity:           totalCapacity,
-		MaxSlots:                maxSlots,
-		CritChance:              critChance,
-		ManaRegenPerSecond:      manaRegenPerSecond,
-		CurrentDPS:              currentDPS,
-		SpeedMultiplier:         speedMultiplier,
+		TotalAttack: totalAtk, TotalDefense: totalDef,
+		MaxHealth: maxHealth, MaxMana: maxMana,
+		TotalCapacity: totalCapacity, MaxSlots: maxSlots,
+		CritChance: critChance, ManaRegenPerSecond: manaRegenPerSecond,
+		CurrentDPS: currentDPS, SpeedMultiplier: speedMultiplier,
 		MovementSpeedMultiplier: movementSpeedMultiplier,
 		PrimaryArchetype:        primaryArchetype,
-		AttackSpeedSeconds:      attackSpeedSeconds,
-		AttackSpeedBonus:        equipSpeedBonus,
+		AttackSpeedSeconds:      attackSpeedSeconds, AttackSpeedBonus: attackSpeedBonus,
+		ActiveMasteryKey: masteryKey, ActiveMasteryLevel: masteryLevel,
+		MeleePowerBonus: meleePower, RangedPowerBonus: rangedPower, MagicPowerBonus: magicPower,
 	}
 }

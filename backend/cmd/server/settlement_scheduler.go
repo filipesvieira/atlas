@@ -52,6 +52,7 @@ func runSettlementSchedulerLeader(leadership *db.SettlementSchedulerLeadership) 
 			log.Printf("scheduler do assentamento: liderança perdida: %v", err)
 			return
 		}
+		processDueScoutingMissions(now.UTC())
 		candidates, err := db.ListSettlementAutomationCandidates(now.UTC(), 200)
 		if err != nil {
 			log.Printf("scheduler do assentamento: %v", err)
@@ -59,6 +60,38 @@ func runSettlementSchedulerLeader(leadership *db.SettlementSchedulerLeadership) 
 		}
 		for _, charID := range candidates {
 			processSettlementAutomationCandidate(charID, now.UTC())
+		}
+	}
+}
+
+func processDueScoutingMissions(now time.Time) {
+	events, err := db.ReconcileDueScoutingMissions(now, 100)
+	if err != nil {
+		log.Printf("scheduler: erro ao concluir missões de scouting: %v", err)
+		return
+	}
+	for _, event := range events {
+		if err := publishSettlementSchedulerEvent(settlementSchedulerEvent{
+			CharacterID:                event.AttackerCharacterID,
+			EventType:                  "SCOUTING_COMPLETED",
+			LogText:                    fmt.Sprintf("🐾 Seus batedores retornaram de %s. O relatório de Inteligência está disponível no Mapa Territorial.", event.TargetName),
+			ScoutingTargetSettlementID: event.TargetSettlementID,
+		}); err != nil {
+			log.Printf("scheduler: erro ao publicar retorno de scouting para %s: %v", event.AttackerCharacterID, err)
+		}
+		if !event.Detected || event.DefenderCharacterID == "" {
+			continue
+		}
+		message := "👁️ A contraespionagem detectou batedores estrangeiros próximos ao seu Reino."
+		if event.SourceIdentified {
+			message = "👁️ A contraespionagem identificou batedores estrangeiros próximos ao seu Reino."
+		}
+		if err := publishSettlementSchedulerEvent(settlementSchedulerEvent{
+			CharacterID: event.DefenderCharacterID,
+			EventType:   "SCOUTING_DETECTED",
+			LogText:     message,
+		}); err != nil {
+			log.Printf("scheduler: erro ao publicar detecção de scouting para %s: %v", event.DefenderCharacterID, err)
 		}
 	}
 }

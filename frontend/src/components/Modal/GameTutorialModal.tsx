@@ -51,7 +51,7 @@ const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     id: 'equipment',
     title: 'Equipamentos & Mãos (1H vs 2H)',
     badge: 'Capítulo 2',
-    subtitle: 'Domine a mecânica de slots, atributos e a escolha entre armas de 1 mão e 2 mãos.',
+    subtitle: 'Domine slots, poder dos equipamentos, maestrias e a escolha entre armas de 1 mão e 2 mãos.',
     slotKey: 'chest',
     sections: [
       {
@@ -61,14 +61,14 @@ const TUTORIAL_CHAPTERS: TutorialChapter[] = [
         tip: 'Se você busca dano ofensivo máximo, use armas de 2 Mãos. Se precisa de sobrevivência contra chefes difíceis, equipe 1 Mão + Escudo.',
       },
       {
-        title: 'Atributos & Poder',
+        title: 'Maestrias & Poder',
         icon: '📊',
-        text: 'STR aumenta o ataque físico e dano de armas corpo a corpo. DEX amplia dano à distância e agilidade. INT eleva o dano mágico e reserva de mana. HP e DEF garantem resistência vital.',
+        text: 'O nível aumenta vida, mana e capacidade automaticamente. A arma equipada define o estilo, a maestria cresce pelo uso e os equipamentos fornecem bônus diretos como Poder Melee, Poder de Distância, Poder Mágico, HP, MP e DEF.',
       },
       {
         title: 'Raridades dos Itens',
         icon: '✨',
-        text: 'Os equipamentos variam de Comum até Divino. Itens de raridade mais alta contam com bônus de atributos aleatórios, vampirismo (lifesteal), crítico e bônus de ouro.',
+        text: 'Os equipamentos variam de Comum até Divino. Itens de raridade mais alta contam com bônus de poder e utilidade, vampirismo (lifesteal), crítico e bônus de ouro.',
       },
     ],
   },

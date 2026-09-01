@@ -98,7 +98,7 @@ export function CharacterScreen({ token, isAdmin = false, onSelectCharacter, onL
     }
   };
 
-  const prepareTestCharacter = async (character: any, mode: 'progress' | 'city' | 'kingdom' | 'kingdom_stress' = 'progress') => {
+  const prepareTestCharacter = async (character: any, mode: 'progress' | 'city' | 'kingdom' | 'kingdom_stress' = 'progress', worldPreset: '' | 'QA_SELF' | 'QA_NEAR' | 'QA_MEDIUM' | 'QA_FAR' = '') => {
     if (!isAdmin || preparingId) return;
     setPreparingId(character.id);
     setError(null);
@@ -107,11 +107,11 @@ export function CharacterScreen({ token, isAdmin = false, onSelectCharacter, onL
       const res = await fetch(`${API_BASE_URL}/api/v1/admin/test-preset`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ character_id: character.id, mode }),
+        body: JSON.stringify({ character_id: character.id, mode, world_preset: worldPreset || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao aplicar preset de QA');
-      setNotice(`🧪 ${character.name}: ${data.preset_mode || mode} · ${data.settlement_stage || 'camp'} · ${data.residents_prepared || 0} moradores · ${data.resources_granted} recursos.`);
+      setNotice(`🧪 ${character.name}: ${data.preset_mode || mode} · ${data.settlement_stage || 'camp'} · (${data.world_x ?? '?'},${data.world_y ?? '?'}) · ${data.residents_prepared || 0} moradores · ${data.resources_granted} recursos.`);
       await fetchCharacters();
     } catch (err: any) {
       setError(err?.message || 'Erro ao preparar personagem de testes');
@@ -207,6 +207,22 @@ export function CharacterScreen({ token, isAdmin = false, onSelectCharacter, onL
                           disabled={preparingId === char.id}
                           className="pixel-btn pixel-btn-purple px-2 py-1 text-[10px] font-pixel-body"
                           title={`Aplicar preset ${mode}`}
+                        >
+                          {preparingId === char.id ? '…' : label}
+                        </button>
+                      ))}
+                      {([
+                        ['QA_SELF', '🗺️ 0,0'],
+                        ['QA_NEAR', '🗺️ Perto'],
+                        ['QA_MEDIUM', '🗺️ Médio'],
+                        ['QA_FAR', '🗺️ Longe'],
+                      ] as const).map(([worldPreset, label]) => (
+                        <button
+                          key={worldPreset}
+                          onClick={(event) => { event.stopPropagation(); prepareTestCharacter(char, 'kingdom', worldPreset); }}
+                          disabled={preparingId === char.id}
+                          className="pixel-btn px-2 py-1 text-[10px] font-pixel-body"
+                          title={`Posicionar em ${worldPreset} no mundo QA territorial`}
                         >
                           {preparingId === char.id ? '…' : label}
                         </button>

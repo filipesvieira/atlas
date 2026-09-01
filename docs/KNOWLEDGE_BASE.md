@@ -162,7 +162,7 @@ atlas/
 ### Grid de Combate (24x18)
 - A arena autoritativa usa uma grade regional de **24 colunas por 18 linhas**; o frontend converte as coordenadas para a projeção isométrica e interpola o deslocamento.
 - A posição do herói, os pontos de spawn e as rotas não são mais fixos em uma única coluna. Os spawns são distribuídos pela definição da arena, incluindo os quatro cantos quando aplicável.
-- Floresta e Vila do Shereque possuem terreno, obstáculos e colisão próprios; arenas continuam 24x18, enquanto o assentamento usa a geometria territorial V4 independente até 44x32.
+- Floresta e Vila do Shereque possuem terreno, obstáculos e colisão próprios; arenas continuam 24x18, enquanto o assentamento usa a geometria territorial V5 independente até 52x38.
 - Regiões ainda não convertidas preservam o renderer legado até receberem geometria e terreno equivalentes.
 
 ### Máquina de Estados dos Monstros (`State`)
@@ -743,3 +743,30 @@ Documento completo: [`docs/ARENA_TERRAIN_SYSTEM.md`](ARENA_TERRAIN_SYSTEM.md).
 - Interação canônica de prédio: hover=explica, clique=usa, drag >=6px=move. Muralha/Portão são clicáveis e não arrastáveis.
 - Sala de Guerra é o hub conceitual do Centro de Comando. M5-C implementa Defense Power/Readiness/Snapshot; M6 scouting; M7 raid.
 - Ver `docs/KINGDOM_VS_KINGDOM_MASTER_PLAN.md`.
+
+### M5-C — defesa e progressão visível
+
+- `SettlementStageProgress` expõe percentual gradual, próximo estágio e requisitos; promoções usam ACK persistente.
+- `EvaluateSettlementDefense` calcula Defense Power/Readiness de forma determinística e explicável.
+- guarnição é automática: Quartel define capacidade, população limita guardas ativos e os pioneiros formam reserva civil.
+- estratégia defensiva possui apenas três presets (`balanced`, `aggressive`, `defensive`).
+- `settlement_defense_snapshots` usa snapshot v1 + hash determinístico e é regenerado após invalidação.
+- raids permanecem desabilitadas; M6 é scouting e M7 é raid.
+- simplificação dos atributos primários está isolada em `HERO_PROGRESSION_SIMPLIFICATION_PLAN.md`.
+- o Mapa Territorial `(x,y)` está isolado em `WORLD_COORDINATE_MAP_MASTER_PLAN.md`.
+
+### S1 — simplificação efetiva da progressão do herói (2026-09-01)
+
+- STR/DEX/INT/VIT não participam mais de dano, HP, mana, crítico, cadência, capacidade ou recuperação.
+- não existe ganho novo de pontos manuais nem comando `ALLOCATE_STAT`.
+- nível sustenta progressão base; maestrias expressam especialização por uso; equipamentos usam bônus semânticos.
+- colunas legadas podem existir no banco durante compatibilidade, mas não são fonte de verdade de gameplay.
+- itens antigos são normalizados na leitura para `MeleePowerBonus`, `RangedPowerBonus` e `MagicPowerBonus`.
+
+### M5-D — World Grid / Mapa Territorial (2026-09-01)
+
+- cada settlement pertence a um `world_id` e possui `(world_x, world_y)` fixo após atribuição.
+- alocação usa sequence + espiral quadrada determinística e constraint de unicidade.
+- startup reconcilia settlements legados ainda sem coordenada.
+- `REQUEST_TERRITORIAL_MAP` retorna apenas dados públicos necessários ao mapa.
+- M5-D não libera scouting nem raids; essas responsabilidades permanecem em M6 e M7.

@@ -10,7 +10,7 @@ import (
 
 // CurrentItemBalanceVersion identifica instâncias geradas após a revisão da
 // progressão faseada. Itens antigos preservam os atributos gravados no save.
-const CurrentItemBalanceVersion = 3
+const CurrentItemBalanceVersion = 4
 
 const (
 	WeaponTypeSword  = "sword"
@@ -23,20 +23,24 @@ const (
 )
 
 type Item struct {
-	ID                 string    `json:"id"`
-	Name               string    `json:"name"`
-	Attack             int       `json:"attack"`
-	PhysicalAttack     int       `json:"physical_attack"`
-	MagicAttack        int       `json:"magic_attack"`
-	Defense            int       `json:"defense"`
-	Hands              int       `json:"hands"` // 1 or 2
-	ValueGold          int64     `json:"value_gold"`
-	Rarity             string    `json:"rarity"`
-	Weight             float64   `json:"weight"`
-	RequiredLevel      int       `json:"required_level"`
+	ID             string  `json:"id"`
+	Name           string  `json:"name"`
+	Attack         int     `json:"attack"`
+	PhysicalAttack int     `json:"physical_attack"`
+	MagicAttack    int     `json:"magic_attack"`
+	Defense        int     `json:"defense"`
+	Hands          int     `json:"hands"` // 1 or 2
+	ValueGold      int64   `json:"value_gold"`
+	Rarity         string  `json:"rarity"`
+	Weight         float64 `json:"weight"`
+	RequiredLevel  int     `json:"required_level"`
+	// Campos legados somente para desserializar saves anteriores à S1.
 	BonusSTR           int       `json:"bonus_str,omitempty"`
 	BonusDEX           int       `json:"bonus_dex,omitempty"`
 	BonusINT           int       `json:"bonus_int,omitempty"`
+	MeleePowerBonus    int       `json:"melee_power_bonus,omitempty"`
+	RangedPowerBonus   int       `json:"ranged_power_bonus,omitempty"`
+	MagicPowerBonus    int       `json:"magic_power_bonus,omitempty"`
 	BonusHP            int       `json:"bonus_hp,omitempty"`
 	BonusMP            int       `json:"bonus_mp,omitempty"`
 	GoldBonus          float64   `json:"gold_bonus,omitempty"`
@@ -105,9 +109,9 @@ type LootTemplate struct {
 	BaseDef                int
 	BaseWeight             float64
 	Hands                  int
-	BaseSTR                int
-	BaseDEX                int
-	BaseINT                int
+	BaseMeleePower         int
+	BaseRangedPower        int
+	BaseMagicPower         int
 	BaseHP                 int
 	BaseMP                 int
 	GoldBonus              float64
@@ -120,115 +124,115 @@ type LootTemplate struct {
 var lootTemplates = []LootTemplate{
 	// ==================== TIER 1 (NÍVEL 1+) ====================
 	{Key: "espada_do_aprendiz", Name: "Espada do Aprendiz", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 1, Tier: 1, BaseAtk: 8, BaseMagic: 0, BaseDef: 0, BaseWeight: 15.0, Hands: 1},
-	{Key: "montante_de_madeira", Name: "Montante de Madeira", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 1, Tier: 1, BaseAtk: 14, BaseMagic: 0, BaseDef: 0, BaseWeight: 24.0, Hands: 2, BaseSTR: 1, CritChance: 3.0},
+	{Key: "montante_de_madeira", Name: "Montante de Madeira", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 1, Tier: 1, BaseAtk: 14, BaseMagic: 0, BaseDef: 0, BaseWeight: 24.0, Hands: 2, BaseMeleePower: 2, CritChance: 3.0},
 	{Key: "machadinha_de_madeira", Name: "Machadinha de Madeira", Slot: SlotMainHand, WeaponType: WeaponTypeAxe, RequiredLevel: 1, Tier: 1, BaseAtk: 9, BaseMagic: 0, BaseDef: 0, BaseWeight: 18.0, Hands: 1},
 	{Key: "clava_de_madeira", Name: "Clava de Madeira", Slot: SlotMainHand, WeaponType: WeaponTypeClub, RequiredLevel: 1, Tier: 1, BaseAtk: 9, BaseMagic: 0, BaseDef: 1, BaseWeight: 20.0, Hands: 1},
 	{Key: "arco_curvo", Name: "Arco Curvo", Slot: SlotMainHand, WeaponType: WeaponTypeBow, RequiredLevel: 1, Tier: 1, BaseAtk: 14, BaseMagic: 0, BaseDef: 0, BaseWeight: 12.0, Hands: 2, CritChance: 3.0},
 	{Key: "varinha_do_aprendiz", Name: "Varinha do Aprendiz", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 10, BaseDef: 0, BaseWeight: 8.0, Hands: 1},
 	{Key: "cajado_de_pirulito", Name: "Cajado de Pirulito", VisualKey: "candy_lollipop_staff", SetKey: "biscoito_encantado", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 12, BaseDef: 0, BaseWeight: 12.0, Hands: 2},
 	// Conjuntos temáticos de chefe: identidade visual completa sem bônus oculto de conjunto nesta versão.
-	{Key: "machadinha_do_urso_ranzinza", Name: "Machadinha do Urso Ranzinza", VisualKey: "grumpy_bear_axe", SetKey: "urso_ranzinza", Slot: SlotMainHand, WeaponType: WeaponTypeAxe, RequiredLevel: 5, Tier: 1, BaseAtk: 15, BaseDef: 1, BaseWeight: 22.0, BaseSTR: 2, Hands: 1},
-	{Key: "elmo_do_urso_ranzinza", Name: "Capuz do Urso Ranzinza", VisualKey: "grumpy_bear_helm", SetKey: "urso_ranzinza", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseDef: 5, BaseWeight: 13.0, BaseHP: 10, BaseSTR: 1},
-	{Key: "peitoral_do_urso_ranzinza", Name: "Colete do Urso Ranzinza", VisualKey: "grumpy_bear_chest", SetKey: "urso_ranzinza", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseDef: 7, BaseWeight: 30.0, BaseHP: 15, BaseSTR: 1},
-	{Key: "calcas_do_urso_ranzinza", Name: "Calças do Urso Ranzinza", VisualKey: "grumpy_bear_legs", SetKey: "urso_ranzinza", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseDef: 4, BaseWeight: 17.0, BaseHP: 8, BaseSTR: 1},
+	{Key: "machadinha_do_urso_ranzinza", Name: "Machadinha do Urso Ranzinza", VisualKey: "grumpy_bear_axe", SetKey: "urso_ranzinza", Slot: SlotMainHand, WeaponType: WeaponTypeAxe, RequiredLevel: 5, Tier: 1, BaseAtk: 15, BaseDef: 1, BaseWeight: 22.0, BaseMeleePower: 4, Hands: 1},
+	{Key: "elmo_do_urso_ranzinza", Name: "Capuz do Urso Ranzinza", VisualKey: "grumpy_bear_helm", SetKey: "urso_ranzinza", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseDef: 5, BaseWeight: 13.0, BaseHP: 10, BaseMeleePower: 2},
+	{Key: "peitoral_do_urso_ranzinza", Name: "Colete do Urso Ranzinza", VisualKey: "grumpy_bear_chest", SetKey: "urso_ranzinza", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseDef: 7, BaseWeight: 30.0, BaseHP: 15, BaseMeleePower: 2},
+	{Key: "calcas_do_urso_ranzinza", Name: "Calças do Urso Ranzinza", VisualKey: "grumpy_bear_legs", SetKey: "urso_ranzinza", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseDef: 4, BaseWeight: 17.0, BaseHP: 8, BaseMeleePower: 2},
 	{Key: "botas_do_urso_ranzinza", Name: "Botas do Urso Ranzinza", VisualKey: "grumpy_bear_boots", SetKey: "urso_ranzinza", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseDef: 3, BaseWeight: 9.0, BaseHP: 5, BaseMovementSpeedBonus: 6.0},
 	{Key: "broquel_do_urso_ranzinza", Name: "Broquel do Urso Ranzinza", VisualKey: "grumpy_bear_shield", SetKey: "urso_ranzinza", Slot: SlotOffHand, WeaponType: WeaponTypeShield, RequiredLevel: 5, Tier: 1, BaseDef: 9, BaseWeight: 19.0, BaseHP: 12, Hands: 1},
-	{Key: "tiara_da_feiona", Name: "Tiara da Feiona", VisualKey: "feiona_tiara", SetKey: "feiona", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseMagic: 2, BaseDef: 4, BaseWeight: 5.0, BaseINT: 1, BaseMP: 10},
-	{Key: "vestido_da_feiona", Name: "Vestido da Feiona", VisualKey: "feiona_chest", SetKey: "feiona", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseMagic: 2, BaseDef: 5, BaseWeight: 14.0, BaseINT: 1, BaseMP: 15},
-	{Key: "saia_da_feiona", Name: "Saia da Feiona", VisualKey: "feiona_legs", SetKey: "feiona", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseDef: 3, BaseWeight: 8.0, BaseINT: 1, BaseMP: 8},
-	{Key: "sapatilhas_da_feiona", Name: "Sapatilhas da Feiona", VisualKey: "feiona_boots", SetKey: "feiona", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseDef: 2, BaseWeight: 4.0, BaseDEX: 1, BaseMovementSpeedBonus: 8.0},
-	{Key: "cetro_da_feiona", Name: "Cetro da Feiona", VisualKey: "feiona_staff", SetKey: "feiona", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 5, Tier: 1, BaseMagic: 16, BaseWeight: 10.0, BaseINT: 2, BaseMP: 12, Hands: 1},
+	{Key: "tiara_da_feiona", Name: "Tiara da Feiona", VisualKey: "feiona_tiara", SetKey: "feiona", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseMagic: 2, BaseDef: 4, BaseWeight: 5.0, BaseMagicPower: 2, BaseMP: 10},
+	{Key: "vestido_da_feiona", Name: "Vestido da Feiona", VisualKey: "feiona_chest", SetKey: "feiona", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseMagic: 2, BaseDef: 5, BaseWeight: 14.0, BaseMagicPower: 2, BaseMP: 15},
+	{Key: "saia_da_feiona", Name: "Saia da Feiona", VisualKey: "feiona_legs", SetKey: "feiona", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseDef: 3, BaseWeight: 8.0, BaseMagicPower: 2, BaseMP: 8},
+	{Key: "sapatilhas_da_feiona", Name: "Sapatilhas da Feiona", VisualKey: "feiona_boots", SetKey: "feiona", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 5, Tier: 1, BaseDef: 2, BaseWeight: 4.0, BaseRangedPower: 2, BaseMovementSpeedBonus: 8.0},
+	{Key: "cetro_da_feiona", Name: "Cetro da Feiona", VisualKey: "feiona_staff", SetKey: "feiona", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 5, Tier: 1, BaseMagic: 16, BaseWeight: 10.0, BaseMagicPower: 4, BaseMP: 12, Hands: 1},
 	{Key: "broquel_da_feiona", Name: "Broquel da Feiona", VisualKey: "feiona_shield", SetKey: "feiona", Slot: SlotOffHand, WeaponType: WeaponTypeShield, RequiredLevel: 5, Tier: 1, BaseMagic: 2, BaseDef: 7, BaseWeight: 9.0, BaseMP: 8, Hands: 1},
 	{Key: "capacete_de_couro", Name: "Capacete de Couro", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 3, BaseWeight: 12.0, Hands: 0},
 	{Key: "tunica_de_couro", Name: "Túnica de Couro", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 4, BaseWeight: 25.0, Hands: 0, BaseHP: 5},
 	{Key: "calca_de_couro_pioneiro", Name: "Calça de Couro do Pioneiro", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseDef: 2, BaseWeight: 11.0},
-	{Key: "botas_de_couro_pioneiro", Name: "Botas de Couro do Pioneiro", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseDef: 1, BaseWeight: 5.5, BaseDEX: 1, BaseMovementSpeedBonus: 6.0},
+	{Key: "botas_de_couro_pioneiro", Name: "Botas de Couro do Pioneiro", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseDef: 1, BaseWeight: 5.5, BaseRangedPower: 2, BaseMovementSpeedBonus: 6.0},
 	{Key: "calca_de_tecido", Name: "Calça de Tecido", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 2, BaseWeight: 10.0, Hands: 0},
-	{Key: "sandalias_ageis", Name: "Sandálias Ágeis", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 1, BaseWeight: 5.0, Hands: 0, BaseDEX: 1, BaseMovementSpeedBonus: 8.0},
+	{Key: "sandalias_ageis", Name: "Sandálias Ágeis", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 1, BaseWeight: 5.0, Hands: 0, BaseRangedPower: 2, BaseMovementSpeedBonus: 8.0},
 	{Key: "broquel_de_madeira", Name: "Broquel de Madeira", Slot: SlotOffHand, WeaponType: WeaponTypeShield, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 6, BaseWeight: 14.0, Hands: 1, BaseHP: 5},
 	{Key: "pequena_bolsa", Name: "Pequena Bolsa", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 5.0, Hands: 0},
 	{Key: "flechas_de_madeira", Name: "Flechas de Madeira", Slot: SlotAmmo, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 4, BaseMagic: 0, BaseDef: 0, BaseWeight: 1.5, Hands: 0},
-	{Key: "amuleto_do_lobo", Name: "Amuleto do Lobo", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 1, BaseMagic: 0, BaseDef: 1, BaseWeight: 1.5, Hands: 0, BaseSTR: 1},
+	{Key: "amuleto_do_lobo", Name: "Amuleto do Lobo", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 1, BaseMagic: 0, BaseDef: 1, BaseWeight: 1.5, Hands: 0, BaseMeleePower: 2},
 	{Key: "anel_de_cobre", Name: "Anel de Cobre", Slot: SlotRing, WeaponType: WeaponTypeNone, RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 1, BaseWeight: 0.8, Hands: 0, BaseHP: 10},
 
 	// ==================== TIER 2 (NÍVEL 5+) ====================
-	{Key: "sabre_de_bronze", Name: "Sabre de Bronze", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 8, Tier: 2, BaseAtk: 16, BaseMagic: 0, BaseDef: 1, BaseWeight: 22.0, Hands: 1, BaseSTR: 1},
-	{Key: "montante_de_bronze", Name: "Montante de Bronze", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 8, Tier: 2, BaseAtk: 28, BaseMagic: 0, BaseDef: 1, BaseWeight: 45.0, Hands: 2, BaseSTR: 3, CritChance: 4.0},
-	{Key: "machado_orc", Name: "Machado Orc", Slot: SlotMainHand, WeaponType: WeaponTypeAxe, RequiredLevel: 8, Tier: 2, BaseAtk: 18, BaseMagic: 0, BaseDef: 0, BaseWeight: 45.0, Hands: 1, BaseSTR: 1},
-	{Key: "maca_de_batalha", Name: "Maça de Batalha", Slot: SlotMainHand, WeaponType: WeaponTypeClub, RequiredLevel: 8, Tier: 2, BaseAtk: 17, BaseMagic: 0, BaseDef: 2, BaseWeight: 38.0, Hands: 1, BaseSTR: 1},
-	{Key: "arco_longo", Name: "Arco Longo", Slot: SlotMainHand, WeaponType: WeaponTypeBow, RequiredLevel: 8, Tier: 2, BaseAtk: 26, BaseMagic: 0, BaseDef: 1, BaseWeight: 22.0, Hands: 2, BaseDEX: 2, CritChance: 4.0},
-	{Key: "cajado_runico", Name: "Cajado Rúnico", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 30, BaseDef: 0, BaseWeight: 18.5, Hands: 2, BaseMP: 25, BaseINT: 2, ManaRegen: 1},
+	{Key: "sabre_de_bronze", Name: "Sabre de Bronze", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 8, Tier: 2, BaseAtk: 16, BaseMagic: 0, BaseDef: 1, BaseWeight: 22.0, Hands: 1, BaseMeleePower: 2},
+	{Key: "montante_de_bronze", Name: "Montante de Bronze", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 8, Tier: 2, BaseAtk: 28, BaseMagic: 0, BaseDef: 1, BaseWeight: 45.0, Hands: 2, BaseMeleePower: 6, CritChance: 4.0},
+	{Key: "machado_orc", Name: "Machado Orc", Slot: SlotMainHand, WeaponType: WeaponTypeAxe, RequiredLevel: 8, Tier: 2, BaseAtk: 18, BaseMagic: 0, BaseDef: 0, BaseWeight: 45.0, Hands: 1, BaseMeleePower: 2},
+	{Key: "maca_de_batalha", Name: "Maça de Batalha", Slot: SlotMainHand, WeaponType: WeaponTypeClub, RequiredLevel: 8, Tier: 2, BaseAtk: 17, BaseMagic: 0, BaseDef: 2, BaseWeight: 38.0, Hands: 1, BaseMeleePower: 2},
+	{Key: "arco_longo", Name: "Arco Longo", Slot: SlotMainHand, WeaponType: WeaponTypeBow, RequiredLevel: 8, Tier: 2, BaseAtk: 26, BaseMagic: 0, BaseDef: 1, BaseWeight: 22.0, Hands: 2, BaseRangedPower: 4, CritChance: 4.0},
+	{Key: "cajado_runico", Name: "Cajado Rúnico", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 30, BaseDef: 0, BaseWeight: 18.5, Hands: 2, BaseMP: 25, BaseMagicPower: 4, ManaRegen: 1},
 	{Key: "coifa_de_prata", Name: "Coifa de Prata", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 7, BaseWeight: 25.0, Hands: 0, BaseHP: 10},
 	{Key: "cota_de_malha", Name: "Cota de Malha", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 10, BaseWeight: 75.0, Hands: 0, BaseHP: 15},
-	{Key: "calca_de_couro", Name: "Calça de Couro", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 5, BaseWeight: 18.0, Hands: 0, BaseSTR: 1},
-	{Key: "botas_de_couro", Name: "Botas de Couro", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 3, BaseWeight: 9.0, Hands: 0, BaseDEX: 1, BaseMovementSpeedBonus: 10.0},
+	{Key: "calca_de_couro", Name: "Calça de Couro", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 5, BaseWeight: 18.0, Hands: 0, BaseMeleePower: 2},
+	{Key: "botas_de_couro", Name: "Botas de Couro", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 3, BaseWeight: 9.0, Hands: 0, BaseRangedPower: 2, BaseMovementSpeedBonus: 10.0},
 	{Key: "escudo_de_madeira", Name: "Escudo de Madeira", Slot: SlotOffHand, WeaponType: WeaponTypeShield, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 9, BaseWeight: 30.0, Hands: 1, BaseHP: 10},
 	{Key: "mochila_de_aventureiro", Name: "Mochila de Aventureiro", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 1, BaseWeight: 15.0, Hands: 0, BaseHP: 15, GoldBonus: 5.0},
 	{Key: "flechas_de_aco", Name: "Flechas de Aço", Slot: SlotAmmo, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 9, BaseMagic: 0, BaseDef: 0, BaseWeight: 2.0, Hands: 0},
 	{Key: "colar_de_prata", Name: "Colar de Prata", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 2, BaseMagic: 0, BaseDef: 2, BaseWeight: 1.5, Hands: 0, BaseMP: 15},
-	{Key: "anel_de_prata", Name: "Anel de Prata", Slot: SlotRing, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 2, BaseDef: 2, BaseWeight: 0.8, Hands: 0, BaseINT: 2},
+	{Key: "anel_de_prata", Name: "Anel de Prata", Slot: SlotRing, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 2, BaseDef: 2, BaseWeight: 0.8, Hands: 0, BaseMagicPower: 4},
 
 	// ==================== TIER 2: PLANALTO CENTRAL ====================
-	{Key: "martelo_constitucional", Name: "Martelo Constitucional", Slot: SlotMainHand, WeaponType: WeaponTypeClub, RequiredLevel: 8, Tier: 2, BaseAtk: 18, BaseMagic: 0, BaseDef: 2, BaseWeight: 42.0, Hands: 1, BaseSTR: 2, BaseHP: 15},
-	{Key: "caneta_esferografica_suprema", Name: "Caneta Esferográfica Suprema", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 22, BaseDef: 1, BaseWeight: 8.0, Hands: 1, BaseINT: 2, BaseMP: 20, ManaRegen: 1},
-	{Key: "megafone_do_povo", Name: "Megafone do Povo", Slot: SlotMainHand, WeaponType: WeaponTypeBow, RequiredLevel: 8, Tier: 2, BaseAtk: 28, BaseMagic: 0, BaseDef: 1, BaseWeight: 16.0, Hands: 2, BaseDEX: 3, CritChance: 4.0},
-	{Key: "boina_tatica_da_pulica", Name: "Boina Tática da Puliça", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 1, BaseMagic: 0, BaseDef: 8, BaseWeight: 15.0, Hands: 0, BaseHP: 12, BaseDEX: 1},
-	{Key: "toga_da_inviolabilidade", Name: "Toga da Inviolabilidade", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 2, BaseDef: 12, BaseWeight: 35.0, Hands: 0, BaseHP: 20, BaseMP: 15, BaseINT: 1},
-	{Key: "calca_social_engomada", Name: "Calça Social Engomada", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 6, BaseWeight: 12.0, Hands: 0, BaseSTR: 1, BaseINT: 1},
-	{Key: "coturno_da_lei", Name: "Coturno da Lei", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 4, BaseWeight: 14.0, Hands: 0, BaseHP: 10, BaseDEX: 1, BaseMovementSpeedBonus: 8.0},
-	{Key: "cordao_da_estrela_rubra", Name: "Cordão da Estrela Rubra", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 2, BaseMagic: 0, BaseDef: 2, BaseWeight: 1.2, Hands: 0, BaseHP: 15, BaseSTR: 1, Lifesteal: 1.5},
-	{Key: "anel_do_supremo_relator", Name: "Anel do Supremo Relator", Slot: SlotRing, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 3, BaseDef: 2, BaseWeight: 0.6, Hands: 0, BaseMP: 20, BaseINT: 2, GoldBonus: 5.0},
+	{Key: "martelo_constitucional", Name: "Martelo Constitucional", Slot: SlotMainHand, WeaponType: WeaponTypeClub, RequiredLevel: 8, Tier: 2, BaseAtk: 18, BaseMagic: 0, BaseDef: 2, BaseWeight: 42.0, Hands: 1, BaseMeleePower: 4, BaseHP: 15},
+	{Key: "caneta_esferografica_suprema", Name: "Caneta Esferográfica Suprema", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 22, BaseDef: 1, BaseWeight: 8.0, Hands: 1, BaseMagicPower: 4, BaseMP: 20, ManaRegen: 1},
+	{Key: "megafone_do_povo", Name: "Megafone do Povo", Slot: SlotMainHand, WeaponType: WeaponTypeBow, RequiredLevel: 8, Tier: 2, BaseAtk: 28, BaseMagic: 0, BaseDef: 1, BaseWeight: 16.0, Hands: 2, BaseRangedPower: 6, CritChance: 4.0},
+	{Key: "boina_tatica_da_pulica", Name: "Boina Tática da Puliça", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 1, BaseMagic: 0, BaseDef: 8, BaseWeight: 15.0, Hands: 0, BaseHP: 12, BaseRangedPower: 2},
+	{Key: "toga_da_inviolabilidade", Name: "Toga da Inviolabilidade", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 2, BaseDef: 12, BaseWeight: 35.0, Hands: 0, BaseHP: 20, BaseMP: 15, BaseMagicPower: 2},
+	{Key: "calca_social_engomada", Name: "Calça Social Engomada", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 6, BaseWeight: 12.0, Hands: 0, BaseMeleePower: 2, BaseMagicPower: 2},
+	{Key: "coturno_da_lei", Name: "Coturno da Lei", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 4, BaseWeight: 14.0, Hands: 0, BaseHP: 10, BaseRangedPower: 2, BaseMovementSpeedBonus: 8.0},
+	{Key: "cordao_da_estrela_rubra", Name: "Cordão da Estrela Rubra", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 2, BaseMagic: 0, BaseDef: 2, BaseWeight: 1.2, Hands: 0, BaseHP: 15, BaseMeleePower: 2, Lifesteal: 1.5},
+	{Key: "anel_do_supremo_relator", Name: "Anel do Supremo Relator", Slot: SlotRing, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 3, BaseDef: 2, BaseWeight: 0.6, Hands: 0, BaseMP: 20, BaseMagicPower: 4, GoldBonus: 5.0},
 	{Key: "pasta_executiva_presidencial", Name: "Pasta Executiva Presidencial", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 0, BaseMagic: 0, BaseDef: 2, BaseWeight: 8.0, Hands: 0, BaseHP: 25, GoldBonus: 10.0},
 	{Key: "virotes_da_notificacao", Name: "Virotes da Notificação", Slot: SlotAmmo, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 10, BaseMagic: 0, BaseDef: 0, BaseWeight: 1.8, Hands: 0},
 
 	// ==================== TIER 3 (NÍVEL 12+) ====================
-	{Key: "espada_de_aco", Name: "Espada de Aço", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 15, Tier: 3, BaseAtk: 30, BaseMagic: 0, BaseDef: 2, BaseWeight: 35.5, Hands: 1, BaseSTR: 3},
-	{Key: "espada_grande_de_aco", Name: "Espada Grande de Aço", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 15, Tier: 3, BaseAtk: 50, BaseMagic: 0, BaseDef: 2, BaseWeight: 60.0, Hands: 2, BaseSTR: 5, CritChance: 5.0},
-	{Key: "machado_de_guerra", Name: "Machado de Guerra", Slot: SlotMainHand, WeaponType: WeaponTypeAxe, RequiredLevel: 15, Tier: 3, BaseAtk: 33, BaseMagic: 0, BaseDef: 0, BaseWeight: 55.0, Hands: 1, BaseSTR: 3},
-	{Key: "martelo_de_guerra", Name: "Martelo de Guerra", Slot: SlotMainHand, WeaponType: WeaponTypeClub, RequiredLevel: 15, Tier: 3, BaseAtk: 32, BaseMagic: 0, BaseDef: 3, BaseWeight: 58.0, Hands: 1, BaseSTR: 3},
-	{Key: "arco_do_cacador", Name: "Arco do Caçador", Slot: SlotMainHand, WeaponType: WeaponTypeBow, RequiredLevel: 15, Tier: 3, BaseAtk: 48, BaseMagic: 0, BaseDef: 2, BaseWeight: 26.0, Hands: 2, BaseDEX: 5, CritChance: 5.0},
-	{Key: "cetro_do_esqueletico", Name: "Cetro do Esquelético", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 56, BaseDef: 2, BaseWeight: 24.0, Hands: 2, BaseMP: 50, BaseINT: 5, ManaRegen: 2},
-	{Key: "elmo_runico", Name: "Elmo Rúnico", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 2, BaseMagic: 0, BaseDef: 13, BaseWeight: 32.0, Hands: 0, BaseHP: 20, BaseSTR: 2},
+	{Key: "espada_de_aco", Name: "Espada de Aço", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 15, Tier: 3, BaseAtk: 30, BaseMagic: 0, BaseDef: 2, BaseWeight: 35.5, Hands: 1, BaseMeleePower: 6},
+	{Key: "espada_grande_de_aco", Name: "Espada Grande de Aço", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 15, Tier: 3, BaseAtk: 50, BaseMagic: 0, BaseDef: 2, BaseWeight: 60.0, Hands: 2, BaseMeleePower: 10, CritChance: 5.0},
+	{Key: "machado_de_guerra", Name: "Machado de Guerra", Slot: SlotMainHand, WeaponType: WeaponTypeAxe, RequiredLevel: 15, Tier: 3, BaseAtk: 33, BaseMagic: 0, BaseDef: 0, BaseWeight: 55.0, Hands: 1, BaseMeleePower: 6},
+	{Key: "martelo_de_guerra", Name: "Martelo de Guerra", Slot: SlotMainHand, WeaponType: WeaponTypeClub, RequiredLevel: 15, Tier: 3, BaseAtk: 32, BaseMagic: 0, BaseDef: 3, BaseWeight: 58.0, Hands: 1, BaseMeleePower: 6},
+	{Key: "arco_do_cacador", Name: "Arco do Caçador", Slot: SlotMainHand, WeaponType: WeaponTypeBow, RequiredLevel: 15, Tier: 3, BaseAtk: 48, BaseMagic: 0, BaseDef: 2, BaseWeight: 26.0, Hands: 2, BaseRangedPower: 10, CritChance: 5.0},
+	{Key: "cetro_do_esqueletico", Name: "Cetro do Esquelético", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 56, BaseDef: 2, BaseWeight: 24.0, Hands: 2, BaseMP: 50, BaseMagicPower: 10, ManaRegen: 2},
+	{Key: "elmo_runico", Name: "Elmo Rúnico", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 2, BaseMagic: 0, BaseDef: 13, BaseWeight: 32.0, Hands: 0, BaseHP: 20, BaseMeleePower: 4},
 	{Key: "peitoral_de_platina", Name: "Peitoral de Platina", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 0, BaseDef: 18, BaseWeight: 110.0, Hands: 0, BaseHP: 30},
-	{Key: "grevas_de_aco", Name: "Grevas de Aço", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 0, BaseDef: 10, BaseWeight: 45.0, Hands: 0, BaseSTR: 2},
-	{Key: "botas_de_ferro", Name: "Botas de Ferro", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 0, BaseDef: 6, BaseWeight: 22.0, Hands: 0, BaseSTR: 2, BaseHP: 10, BaseMovementSpeedBonus: 9.0},
+	{Key: "grevas_de_aco", Name: "Grevas de Aço", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 0, BaseDef: 10, BaseWeight: 45.0, Hands: 0, BaseMeleePower: 4},
+	{Key: "botas_de_ferro", Name: "Botas de Ferro", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 0, BaseDef: 6, BaseWeight: 22.0, Hands: 0, BaseMeleePower: 4, BaseHP: 10, BaseMovementSpeedBonus: 9.0},
 	{Key: "escudo_de_batalha", Name: "Escudo de Batalha", Slot: SlotOffHand, WeaponType: WeaponTypeShield, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 0, BaseDef: 16, BaseWeight: 55.0, Hands: 1, BaseHP: 25},
-	{Key: "bolsa_runica", Name: "Bolsa Rúnica", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 2, BaseDef: 2, BaseWeight: 8.0, Hands: 0, BaseMP: 30, BaseINT: 3, GoldBonus: 10.0},
+	{Key: "bolsa_runica", Name: "Bolsa Rúnica", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 2, BaseDef: 2, BaseWeight: 8.0, Hands: 0, BaseMP: 30, BaseMagicPower: 6, GoldBonus: 10.0},
 	{Key: "virotes_perfurantes", Name: "Virotes Perfurantes", Slot: SlotAmmo, WeaponType: WeaponTypeNone, RequiredLevel: 8, Tier: 2, BaseAtk: 14, BaseMagic: 0, BaseDef: 0, BaseWeight: 3.5, Hands: 0},
-	{Key: "colar_de_rubi", Name: "Colar de Rubi", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 4, BaseMagic: 0, BaseDef: 2, BaseWeight: 1.2, Hands: 0, BaseSTR: 2, BaseHP: 20},
-	{Key: "anel_de_ouro", Name: "Anel de Ouro", Slot: SlotRing, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 4, BaseDef: 3, BaseWeight: 0.8, Hands: 0, BaseINT: 3, BaseMP: 25},
+	{Key: "colar_de_rubi", Name: "Colar de Rubi", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 4, BaseMagic: 0, BaseDef: 2, BaseWeight: 1.2, Hands: 0, BaseMeleePower: 4, BaseHP: 20},
+	{Key: "anel_de_ouro", Name: "Anel de Ouro", Slot: SlotRing, WeaponType: WeaponTypeNone, RequiredLevel: 15, Tier: 3, BaseAtk: 0, BaseMagic: 4, BaseDef: 3, BaseWeight: 0.8, Hands: 0, BaseMagicPower: 6, BaseMP: 25},
 
 	// ==================== TIER 4 (NÍVEL 20+) ====================
-	{Key: "katana_da_furia", Name: "Katana da Fúria", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 25, Tier: 4, BaseAtk: 52, BaseMagic: 0, BaseDef: 3, BaseWeight: 28.0, Hands: 1, BaseSTR: 5, CritChance: 3.0},
-	{Key: "lamina_colossal", Name: "Lâmina Colossal", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 25, Tier: 4, BaseAtk: 84, BaseMagic: 0, BaseDef: 4, BaseWeight: 65.0, Hands: 2, BaseSTR: 9, CritChance: 6.0},
-	{Key: "machado_do_urso_ranzinza", Name: "Machado do Urso Ranzinza", VisualKey: "grumpy_bear_axe", SetKey: "urso_ranzinza", Slot: SlotMainHand, WeaponType: WeaponTypeAxe, RequiredLevel: 25, Tier: 4, BaseAtk: 56, BaseMagic: 0, BaseDef: 2, BaseWeight: 60.0, Hands: 1, BaseSTR: 6},
-	{Key: "marreta_bionica", Name: "Marreta Biônica", Slot: SlotMainHand, WeaponType: WeaponTypeClub, RequiredLevel: 25, Tier: 4, BaseAtk: 55, BaseMagic: 0, BaseDef: 4, BaseWeight: 45.0, Hands: 1, BaseSTR: 5, Lifesteal: 2.0},
-	{Key: "arco_dos_ventos", Name: "Arco dos Ventos", Slot: SlotMainHand, WeaponType: WeaponTypeBow, RequiredLevel: 25, Tier: 4, BaseAtk: 80, BaseMagic: 0, BaseDef: 4, BaseWeight: 20.0, Hands: 2, BaseDEX: 8, CritChance: 7.0},
-	{Key: "varinha_das_reliquias", Name: "Varinha das Relíquias", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 25, Tier: 4, BaseAtk: 0, BaseMagic: 58, BaseDef: 5, BaseWeight: 16.0, Hands: 1, BaseMP: 50, BaseINT: 6, ManaRegen: 2},
-	{Key: "coroa_de_ouro", Name: "Coroa de Ouro", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 5, BaseMagic: 0, BaseDef: 20, BaseWeight: 18.0, Hands: 0, BaseHP: 40, BaseINT: 3},
-	{Key: "robe_mistico", Name: "Robe Místico", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 6, BaseMagic: 0, BaseDef: 22, BaseWeight: 30.0, Hands: 0, BaseMP: 50, BaseINT: 5},
-	{Key: "saiote_dos_magos", Name: "Saiote dos Magos", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 3, BaseMagic: 0, BaseDef: 14, BaseWeight: 14.0, Hands: 0, BaseMP: 30, BaseINT: 4},
-	{Key: "botas_de_aco_runico", Name: "Botas de Aço Rúnico", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 0, BaseMagic: 0, BaseDef: 10, BaseWeight: 22.0, Hands: 0, BaseDEX: 5, BaseHP: 20, BaseMovementSpeedBonus: 14.0},
-	{Key: "orbe_protetor", Name: "Orbe Protetor", Slot: SlotOffHand, WeaponType: WeaponTypeShield, RequiredLevel: 25, Tier: 4, BaseAtk: 4, BaseMagic: 8, BaseDef: 22, BaseWeight: 10.0, Hands: 1, BaseMP: 30, BaseINT: 3},
-	{Key: "mochila_dragonica", Name: "Mochila Dragônica", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 2, BaseMagic: 0, BaseDef: 3, BaseWeight: 15.0, Hands: 0, BaseHP: 50, BaseSTR: 4, GoldBonus: 15.0},
+	{Key: "katana_da_furia", Name: "Katana da Fúria", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 25, Tier: 4, BaseAtk: 52, BaseMagic: 0, BaseDef: 3, BaseWeight: 28.0, Hands: 1, BaseMeleePower: 10, CritChance: 3.0},
+	{Key: "lamina_colossal", Name: "Lâmina Colossal", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 25, Tier: 4, BaseAtk: 84, BaseMagic: 0, BaseDef: 4, BaseWeight: 65.0, Hands: 2, BaseMeleePower: 18, CritChance: 6.0},
+	{Key: "machado_do_urso_ranzinza", Name: "Machado do Urso Ranzinza", VisualKey: "grumpy_bear_axe", SetKey: "urso_ranzinza", Slot: SlotMainHand, WeaponType: WeaponTypeAxe, RequiredLevel: 25, Tier: 4, BaseAtk: 56, BaseMagic: 0, BaseDef: 2, BaseWeight: 60.0, Hands: 1, BaseMeleePower: 12},
+	{Key: "marreta_bionica", Name: "Marreta Biônica", Slot: SlotMainHand, WeaponType: WeaponTypeClub, RequiredLevel: 25, Tier: 4, BaseAtk: 55, BaseMagic: 0, BaseDef: 4, BaseWeight: 45.0, Hands: 1, BaseMeleePower: 10, Lifesteal: 2.0},
+	{Key: "arco_dos_ventos", Name: "Arco dos Ventos", Slot: SlotMainHand, WeaponType: WeaponTypeBow, RequiredLevel: 25, Tier: 4, BaseAtk: 80, BaseMagic: 0, BaseDef: 4, BaseWeight: 20.0, Hands: 2, BaseRangedPower: 16, CritChance: 7.0},
+	{Key: "varinha_das_reliquias", Name: "Varinha das Relíquias", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 25, Tier: 4, BaseAtk: 0, BaseMagic: 58, BaseDef: 5, BaseWeight: 16.0, Hands: 1, BaseMP: 50, BaseMagicPower: 12, ManaRegen: 2},
+	{Key: "coroa_de_ouro", Name: "Coroa de Ouro", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 5, BaseMagic: 0, BaseDef: 20, BaseWeight: 18.0, Hands: 0, BaseHP: 40, BaseMagicPower: 6},
+	{Key: "robe_mistico", Name: "Robe Místico", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 6, BaseMagic: 0, BaseDef: 22, BaseWeight: 30.0, Hands: 0, BaseMP: 50, BaseMagicPower: 10},
+	{Key: "saiote_dos_magos", Name: "Saiote dos Magos", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 3, BaseMagic: 0, BaseDef: 14, BaseWeight: 14.0, Hands: 0, BaseMP: 30, BaseMagicPower: 8},
+	{Key: "botas_de_aco_runico", Name: "Botas de Aço Rúnico", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 0, BaseMagic: 0, BaseDef: 10, BaseWeight: 22.0, Hands: 0, BaseRangedPower: 10, BaseHP: 20, BaseMovementSpeedBonus: 14.0},
+	{Key: "orbe_protetor", Name: "Orbe Protetor", Slot: SlotOffHand, WeaponType: WeaponTypeShield, RequiredLevel: 25, Tier: 4, BaseAtk: 4, BaseMagic: 8, BaseDef: 22, BaseWeight: 10.0, Hands: 1, BaseMP: 30, BaseMagicPower: 6},
+	{Key: "mochila_dragonica", Name: "Mochila Dragônica", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 2, BaseMagic: 0, BaseDef: 3, BaseWeight: 15.0, Hands: 0, BaseHP: 50, BaseMeleePower: 8, GoldBonus: 15.0},
 	{Key: "flechas_incendiarias", Name: "Flechas Incendiárias", Slot: SlotAmmo, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 22, BaseMagic: 0, BaseDef: 0, BaseWeight: 2.0, Hands: 0},
-	{Key: "amuleto_dragonico", Name: "Amuleto Dragônico", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 6, BaseMagic: 4, BaseDef: 4, BaseWeight: 2.0, Hands: 0, BaseSTR: 4, BaseDEX: 4, BaseHP: 40},
+	{Key: "amuleto_dragonico", Name: "Amuleto Dragônico", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 25, Tier: 4, BaseAtk: 6, BaseMagic: 4, BaseDef: 4, BaseWeight: 2.0, Hands: 0, BaseMeleePower: 8, BaseRangedPower: 8, BaseHP: 40},
 
 	// ==================== TIER 5 (NÍVEL 35+) ====================
-	{Key: "lamina_de_greiscu", Name: "Lâmina de Greiscu", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 40, Tier: 5, BaseAtk: 80, BaseMagic: 0, BaseDef: 5, BaseWeight: 42.0, Hands: 1, BaseSTR: 10, Lifesteal: 5.0},
-	{Key: "espada_mitica_do_vingador", Name: "Espada Mítica do Vingador", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 40, Tier: 5, BaseAtk: 145, BaseMagic: 0, BaseDef: 12, BaseWeight: 50.0, Hands: 2, BaseSTR: 15, CritChance: 8.0},
-	{Key: "machado_de_guerra_mitico", Name: "Machado de Guerra Mítico", Slot: SlotMainHand, WeaponType: WeaponTypeAxe, RequiredLevel: 40, Tier: 5, BaseAtk: 88, BaseMagic: 0, BaseDef: 0, BaseWeight: 65.0, Hands: 1, BaseSTR: 10},
-	{Key: "maca_celestial", Name: "Maça Celestial", Slot: SlotMainHand, WeaponType: WeaponTypeClub, RequiredLevel: 40, Tier: 5, BaseAtk: 85, BaseMagic: 0, BaseDef: 6, BaseWeight: 50.0, Hands: 1, BaseSTR: 8, BaseHP: 60},
-	{Key: "arco_apocaliptico", Name: "Arco Apocalíptico", Slot: SlotMainHand, WeaponType: WeaponTypeBow, RequiredLevel: 40, Tier: 5, BaseAtk: 135, BaseMagic: 0, BaseDef: 5, BaseWeight: 24.0, Hands: 2, BaseDEX: 14, CritChance: 10.0},
-	{Key: "cajado_da_eternidade", Name: "Cajado da Eternidade", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 40, Tier: 5, BaseAtk: 0, BaseMagic: 145, BaseDef: 8, BaseWeight: 20.0, Hands: 2, BaseMP: 140, BaseINT: 15, ManaRegen: 5},
-	{Key: "elmo_do_zodiaco", Name: "Elmo do Zodíaco", VisualKey: "zodiac_helm", SetKey: "zodiaco", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 4, BaseMagic: 0, BaseDef: 28, BaseWeight: 28.0, Hands: 0, BaseHP: 60, BaseSTR: 5},
-	{Key: "armadura_de_ouro", Name: "Armadura de Ouro", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 8, BaseMagic: 0, BaseDef: 35, BaseWeight: 130.0, Hands: 0, BaseHP: 80, BaseSTR: 6},
-	{Key: "grevas_celestiais", Name: "Grevas Celestiais", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 4, BaseMagic: 0, BaseDef: 24, BaseWeight: 35.0, Hands: 0, BaseHP: 50, BaseSTR: 5},
-	{Key: "botas_celestiais", Name: "Botas Celestiais", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 0, BaseMagic: 0, BaseDef: 15, BaseWeight: 18.0, Hands: 0, BaseDEX: 8, BaseHP: 40, BaseMovementSpeedBonus: 20.0},
+	{Key: "lamina_de_greiscu", Name: "Lâmina de Greiscu", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 40, Tier: 5, BaseAtk: 80, BaseMagic: 0, BaseDef: 5, BaseWeight: 42.0, Hands: 1, BaseMeleePower: 20, Lifesteal: 5.0},
+	{Key: "espada_mitica_do_vingador", Name: "Espada Mítica do Vingador", Slot: SlotMainHand, WeaponType: WeaponTypeSword, RequiredLevel: 40, Tier: 5, BaseAtk: 145, BaseMagic: 0, BaseDef: 12, BaseWeight: 50.0, Hands: 2, BaseMeleePower: 30, CritChance: 8.0},
+	{Key: "machado_de_guerra_mitico", Name: "Machado de Guerra Mítico", Slot: SlotMainHand, WeaponType: WeaponTypeAxe, RequiredLevel: 40, Tier: 5, BaseAtk: 88, BaseMagic: 0, BaseDef: 0, BaseWeight: 65.0, Hands: 1, BaseMeleePower: 20},
+	{Key: "maca_celestial", Name: "Maça Celestial", Slot: SlotMainHand, WeaponType: WeaponTypeClub, RequiredLevel: 40, Tier: 5, BaseAtk: 85, BaseMagic: 0, BaseDef: 6, BaseWeight: 50.0, Hands: 1, BaseMeleePower: 16, BaseHP: 60},
+	{Key: "arco_apocaliptico", Name: "Arco Apocalíptico", Slot: SlotMainHand, WeaponType: WeaponTypeBow, RequiredLevel: 40, Tier: 5, BaseAtk: 135, BaseMagic: 0, BaseDef: 5, BaseWeight: 24.0, Hands: 2, BaseRangedPower: 28, CritChance: 10.0},
+	{Key: "cajado_da_eternidade", Name: "Cajado da Eternidade", Slot: SlotMainHand, WeaponType: WeaponTypeWand, RequiredLevel: 40, Tier: 5, BaseAtk: 0, BaseMagic: 145, BaseDef: 8, BaseWeight: 20.0, Hands: 2, BaseMP: 140, BaseMagicPower: 30, ManaRegen: 5},
+	{Key: "elmo_do_zodiaco", Name: "Elmo do Zodíaco", VisualKey: "zodiac_helm", SetKey: "zodiaco", Slot: SlotHead, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 4, BaseMagic: 0, BaseDef: 28, BaseWeight: 28.0, Hands: 0, BaseHP: 60, BaseMeleePower: 10},
+	{Key: "armadura_de_ouro", Name: "Armadura de Ouro", Slot: SlotChest, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 8, BaseMagic: 0, BaseDef: 35, BaseWeight: 130.0, Hands: 0, BaseHP: 80, BaseMeleePower: 12},
+	{Key: "grevas_celestiais", Name: "Grevas Celestiais", Slot: SlotLegs, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 4, BaseMagic: 0, BaseDef: 24, BaseWeight: 35.0, Hands: 0, BaseHP: 50, BaseMeleePower: 10},
+	{Key: "botas_celestiais", Name: "Botas Celestiais", Slot: SlotBoots, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 0, BaseMagic: 0, BaseDef: 15, BaseWeight: 18.0, Hands: 0, BaseRangedPower: 16, BaseHP: 40, BaseMovementSpeedBonus: 20.0},
 	{Key: "escudo_do_zodiaco", Name: "Escudo do Zodíaco", VisualKey: "zodiac_shield", SetKey: "zodiaco", Slot: SlotOffHand, WeaponType: WeaponTypeShield, RequiredLevel: 40, Tier: 5, BaseAtk: 5, BaseMagic: 0, BaseDef: 34, BaseWeight: 80.0, Hands: 1, BaseHP: 80},
-	{Key: "mochila_do_zodiaco", Name: "Mochila do Zodíaco", VisualKey: "zodiac_bag", SetKey: "zodiaco", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 5, BaseMagic: 5, BaseDef: 5, BaseWeight: 10.0, Hands: 0, BaseHP: 80, BaseMP: 60, BaseSTR: 5, BaseDEX: 5, BaseINT: 5, GoldBonus: 25.0},
+	{Key: "mochila_do_zodiaco", Name: "Mochila do Zodíaco", VisualKey: "zodiac_bag", SetKey: "zodiaco", Slot: SlotBag, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 5, BaseMagic: 5, BaseDef: 5, BaseWeight: 10.0, Hands: 0, BaseHP: 80, BaseMP: 60, BaseMeleePower: 10, BaseRangedPower: 10, BaseMagicPower: 10, GoldBonus: 25.0},
 	{Key: "flechas_divinas", Name: "Flechas Divinas", Slot: SlotAmmo, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 38, BaseMagic: 0, BaseDef: 0, BaseWeight: 2.0, Hands: 0},
-	{Key: "amuleto_do_zodiaco", Name: "Amuleto do Zodíaco", VisualKey: "zodiac_amulet", SetKey: "zodiaco", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 12, BaseMagic: 8, BaseDef: 8, BaseWeight: 2.5, Hands: 0, BaseSTR: 8, BaseDEX: 8, BaseINT: 8, BaseHP: 80},
+	{Key: "amuleto_do_zodiaco", Name: "Amuleto do Zodíaco", VisualKey: "zodiac_amulet", SetKey: "zodiaco", Slot: SlotNecklace, WeaponType: WeaponTypeNone, RequiredLevel: 40, Tier: 5, BaseAtk: 12, BaseMagic: 8, BaseDef: 8, BaseWeight: 2.5, Hands: 0, BaseMeleePower: 16, BaseRangedPower: 16, BaseMagicPower: 16, BaseHP: 80},
 
 	// Skill Books
 	{Key: "tome_golpe_giratorio", Name: "Tome: Golpe Giratório", Slot: SlotSkillBook, WeaponType: WeaponTypeNone, SkillKey: "whirlwind", RequiredLevel: 1, Tier: 1, BaseAtk: 0, BaseMagic: 0, BaseDef: 0, BaseWeight: 25.0, Hands: 0},
@@ -355,9 +359,9 @@ func applyRarityBudget(template *LootTemplate, rarity string, r *rand.Rand) *Ite
 	pAtk := scaleStat(template.BaseAtk, profile.StatMultiplier)
 	mAtk := scaleStat(template.BaseMagic, profile.StatMultiplier)
 	def := scaleStat(template.BaseDef, profile.StatMultiplier)
-	bStr := scaleStat(template.BaseSTR, profile.BonusMultiplier)
-	bDex := scaleStat(template.BaseDEX, profile.BonusMultiplier)
-	bInt := scaleStat(template.BaseINT, profile.BonusMultiplier)
+	meleePower := scaleStat(template.BaseMeleePower, profile.BonusMultiplier)
+	rangedPower := scaleStat(template.BaseRangedPower, profile.BonusMultiplier)
+	magicPower := scaleStat(template.BaseMagicPower, profile.BonusMultiplier)
 	bHP := scaleStat(template.BaseHP, profile.BonusMultiplier)
 	bMP := scaleStat(template.BaseMP, profile.BonusMultiplier)
 	goldB := scaleFloat(template.GoldBonus, profile.PassiveMultiplier)
@@ -403,12 +407,15 @@ func applyRarityBudget(template *LootTemplate, rarity string, r *rand.Rand) *Ite
 		def += flat / 2
 		bHP += flat * 3
 		bMP += flat * 3
-		if template.BaseSTR >= template.BaseDEX && template.BaseSTR >= template.BaseINT {
-			bStr += flat
-		} else if template.BaseDEX >= template.BaseINT {
-			bDex += flat
-		} else {
-			bInt += flat
+		// A raridade reforça uma especialização explícita já existente.
+		// Sem especialização, o acessório não ganha poder melee por desempate.
+		switch {
+		case template.BaseMeleePower > 0 && template.BaseMeleePower >= template.BaseRangedPower && template.BaseMeleePower >= template.BaseMagicPower:
+			meleePower += flat
+		case template.BaseRangedPower > 0 && template.BaseRangedPower >= template.BaseMagicPower:
+			rangedPower += flat
+		case template.BaseMagicPower > 0:
+			magicPower += flat
 		}
 	}
 
@@ -431,9 +438,9 @@ func applyRarityBudget(template *LootTemplate, rarity string, r *rand.Rand) *Ite
 		Rarity:             rarity,
 		Weight:             template.BaseWeight,
 		RequiredLevel:      template.RequiredLevel,
-		BonusSTR:           bStr,
-		BonusDEX:           bDex,
-		BonusINT:           bInt,
+		MeleePowerBonus:    meleePower,
+		RangedPowerBonus:   rangedPower,
+		MagicPowerBonus:    magicPower,
 		BonusHP:            bHP,
 		BonusMP:            bMP,
 		GoldBonus:          goldB,
@@ -460,7 +467,7 @@ func CalculateItemPower(item *Item) int {
 	}
 	power := float64(item.PhysicalAttack+item.MagicAttack)*2.0 +
 		float64(item.Defense)*2.2 +
-		float64(item.BonusSTR+item.BonusDEX+item.BonusINT)*6.0 +
+		float64(item.MeleePowerBonus+item.RangedPowerBonus+item.MagicPowerBonus)*3.0 +
 		float64(item.BonusHP)/8.0 + float64(item.BonusMP)/10.0 +
 		item.CritChance*3.0 + item.Lifesteal*4.0 +
 		float64(item.ManaRegen)*8.0 + item.GoldBonus*0.35 + item.MovementSpeedBonus*4.0
@@ -617,6 +624,21 @@ func lootTableForMonster(monsterName string) ([]string, string) {
 func RebalanceExistingItem(existing Item) Item {
 	if existing.Source == "" {
 		existing.Source = ItemSourceLegacyDrop
+	}
+
+	// S1: os bônus STR/DEX/INT persistidos passam a ter significado explícito.
+	// O valor 2:1 mantém aproximadamente o orçamento de ItemPower histórico,
+	// sem voltar a introduzir atributos primários no cálculo do personagem.
+	if existing.BonusSTR != 0 || existing.BonusDEX != 0 || existing.BonusINT != 0 {
+		existing.MeleePowerBonus += existing.BonusSTR * 2
+		existing.RangedPowerBonus += existing.BonusDEX * 2
+		existing.MagicPowerBonus += existing.BonusINT * 2
+		existing.BonusSTR = 0
+		existing.BonusDEX = 0
+		existing.BonusINT = 0
+		if existing.BalanceVersion < CurrentItemBalanceVersion {
+			existing.BalanceVersion = CurrentItemBalanceVersion
+		}
 	}
 
 	// O bônus de movimento foi adicionado depois que parte dos itens já estava

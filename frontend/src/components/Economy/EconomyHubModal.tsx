@@ -321,9 +321,9 @@ function CraftedEquipmentTooltip({ recipe, item, children }: { recipe?: RecipeDe
   const magicAttack = isRecipe ? source.base_magic || 0 : source.magic_attack || 0;
   const defense = isRecipe ? source.base_def || 0 : source.defense || 0;
   const weight = isRecipe ? source.base_weight || 0 : source.weight || 0;
-  const bonusStr = isRecipe ? source.base_str : source.bonus_str;
-  const bonusDex = isRecipe ? source.base_dex : source.bonus_dex;
-  const bonusInt = isRecipe ? source.base_int : source.bonus_int;
+  const meleePower = isRecipe ? source.base_melee_power : source.melee_power_bonus;
+  const rangedPower = isRecipe ? source.base_ranged_power : source.ranged_power_bonus;
+  const magicPower = isRecipe ? source.base_magic_power : source.magic_power_bonus;
   const bonusHp = isRecipe ? source.base_hp : source.bonus_hp;
   const bonusMp = isRecipe ? source.base_mp : source.bonus_mp;
   const critChance = isRecipe ? source.crit_chance : source.crit_chance;
@@ -363,9 +363,9 @@ function CraftedEquipmentTooltip({ recipe, item, children }: { recipe?: RecipeDe
             <span className="text-emerald-300">🎒 Slots: +{bagSlots}</span>
           )}
           <div className="flex flex-wrap gap-1 text-[9px]">
-            {bonusStr ? <span className="rounded border border-amber-800/60 bg-amber-950/80 px-1 text-amber-300">+{bonusStr} STR</span> : null}
-            {bonusDex ? <span className="rounded border border-emerald-800/60 bg-emerald-950/80 px-1 text-emerald-300">+{bonusDex} DEX</span> : null}
-            {bonusInt ? <span className="rounded border border-sky-800/60 bg-sky-950/80 px-1 text-sky-300">+{bonusInt} INT</span> : null}
+            {meleePower ? <span className="rounded border border-amber-800/60 bg-amber-950/80 px-1 text-amber-300">+{meleePower} Poder Melee</span> : null}
+            {rangedPower ? <span className="rounded border border-emerald-800/60 bg-emerald-950/80 px-1 text-emerald-300">+{rangedPower} Poder Distância</span> : null}
+            {magicPower ? <span className="rounded border border-sky-800/60 bg-sky-950/80 px-1 text-sky-300">+{magicPower} Poder Mágico</span> : null}
             {bonusHp ? <span className="rounded border border-rose-800/60 bg-rose-950/80 px-1 text-rose-300">+{bonusHp} HP</span> : null}
             {bonusMp ? <span className="rounded border border-blue-800/60 bg-blue-950/80 px-1 text-blue-300">+{bonusMp} MP</span> : null}
             {critChance ? <span className="rounded border border-purple-800/60 bg-purple-950/80 px-1 text-purple-300">+{critChance.toFixed(1)}% Crit</span> : null}
@@ -587,19 +587,19 @@ export function EquipmentStatsCard({ recipe }: { recipe: RecipeDefinition }) {
 
       {/* Bônus de Atributos Secundários */}
       <div className="flex flex-wrap gap-1.5 text-[10px] font-pixel-body">
-        {recipe.base_str !== undefined && recipe.base_str > 0 && (
+        {recipe.base_melee_power !== undefined && recipe.base_melee_power > 0 && (
           <span className="px-2 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800/50">
-            💪 STR: +{recipe.base_str}
+            ⚔️ Poder Melee: +{recipe.base_melee_power}
           </span>
         )}
-        {recipe.base_dex !== undefined && recipe.base_dex > 0 && (
+        {recipe.base_ranged_power !== undefined && recipe.base_ranged_power > 0 && (
           <span className="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/50">
-            🎯 DEX: +{recipe.base_dex}
+            🏹 Poder Distância: +{recipe.base_ranged_power}
           </span>
         )}
-        {recipe.base_int !== undefined && recipe.base_int > 0 && (
+        {recipe.base_magic_power !== undefined && recipe.base_magic_power > 0 && (
           <span className="px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800/50">
-            🧠 INT: +{recipe.base_int}
+            🔮 Poder Mágico: +{recipe.base_magic_power}
           </span>
         )}
         {recipe.base_hp !== undefined && recipe.base_hp > 0 && (
@@ -959,12 +959,31 @@ export function EconomyHubModal(props: Props) {
             <div className="settlement-panel-header">
               <div>
                 <h3 className="settlement-panel-title text-violet-300">{stageProgress.current.icon} {stageProgress.current.name} → {stageProgress.next.icon} {stageProgress.next.name}</h3>
-                <p className="settlement-panel-subtitle">A expansão territorial é permanente. Cidade e Reino exigirão a infraestrutura defensiva da M5.</p>
+                <p className="settlement-panel-subtitle">{stageProgress.next.summary || 'Continue desenvolvendo sua comunidade para liberar o próximo estágio territorial.'}</p>
               </div>
               <span className={`rounded border px-2 py-1 text-[9px] font-pixel-heading ${stageProgress.ready ? 'border-emerald-600/50 bg-emerald-950/40 text-emerald-300' : 'border-violet-700/50 bg-slate-950/50 text-violet-200'}`}>
-                {stageProgress.ready ? 'PRONTO PARA PROMOVER' : 'PROGRESSÃO'}
+                {stageProgress.ready ? 'PRONTO PARA PROMOVER' : `${stageProgress.completion_percent || 0}%`}
               </span>
             </div>
+
+            <div className="mb-3">
+              <div className="mb-1 flex justify-between text-[9px] font-pixel-heading text-violet-200/80">
+                <span>{stageProgress.completed_requirements || 0}/{stageProgress.total_requirements || stageProgress.requirements.length} requisitos completos</span>
+                <span>{stageProgress.current.territory_width}×{stageProgress.current.territory_height} → {stageProgress.next.territory_width}×{stageProgress.next.territory_height}</span>
+              </div>
+              <div className="h-2.5 overflow-hidden rounded border border-violet-800/60 bg-slate-950/70">
+                <div className="h-full bg-violet-500 transition-all duration-500" style={{ width: `${Math.max(0, Math.min(100, stageProgress.completion_percent || 0))}%` }} />
+              </div>
+            </div>
+
+            {stageProgress.next.highlights?.length ? (
+              <div className="mb-3 grid gap-1.5 sm:grid-cols-3">
+                {stageProgress.next.highlights.slice(0, 3).map((highlight) => (
+                  <div key={highlight} className="settlement-choice border-violet-900/50 bg-slate-950/30 px-2.5 py-2 text-[9px] text-violet-100/80">✦ {highlight}</div>
+                ))}
+              </div>
+            ) : null}
+
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {stageProgress.requirements.map((requirement) => (
                 <div key={`${requirement.kind}:${requirement.key}`} className={`settlement-choice px-2.5 py-2 text-[10px] ${requirement.met ? 'border-emerald-800/50 bg-emerald-950/20 text-emerald-200' : 'border-slate-800 bg-slate-950/35 text-slate-400'}`}>

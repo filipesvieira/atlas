@@ -178,9 +178,9 @@ export interface RecipeDefinition {
   base_magic?: number;
   base_def?: number;
   base_weight?: number;
-  base_str?: number;
-  base_dex?: number;
-  base_int?: number;
+  base_melee_power?: number;
+  base_ranged_power?: number;
+  base_magic_power?: number;
   base_hp?: number;
   base_mp?: number;
   crit_chance?: number;

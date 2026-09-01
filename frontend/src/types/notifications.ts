@@ -8,4 +8,7 @@ export interface ImportantNotification {
   message: string;
   timestamp: string;
   read: boolean;
+  action?:
+    | { type: 'open_territorial_report'; settlement_id: string }
+    | { type: 'open_territorial_intelligence' };
 }

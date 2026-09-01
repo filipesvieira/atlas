@@ -5,108 +5,53 @@ import (
 	"testing"
 )
 
-func TestCalculateDerivedStats_DEXCurveAndCritCap(t *testing.T) {
-	// 1. Testar DEX 392 sem equipamento -> ~19.16%
-	char := &CharacterData{
-		Level: 105,
-		STR:   83,
-		DEX:   392,
-		INT:   36,
-		VIT:   5,
-	}
-	inv := &InventoryData{Equipment: EquipmentSlots{}}
-	stats := CalculateDerivedStats(char, inv, "balanced")
+func TestCalculateDerivedStats_PrimaryAttributesAreLegacyOnly(t *testing.T) {
+	low := &CharacterData{Level: 25, STR: 5, DEX: 5, INT: 5, VIT: 5}
+	high := &CharacterData{Level: 25, STR: 5000, DEX: 5000, INT: 5000, VIT: 5000}
+	inv := &InventoryData{Equipment: EquipmentSlots{MainHand: &Item{WeaponType: "sword", Hands: 1, PhysicalAttack: 30}}}
 
-	if stats.CritChance < 19.0 || stats.CritChance > 19.3 {
-		t.Fatalf("CritChance esperada para 392 DEX ~= 19.16%%, obtido: %.2f%%", stats.CritChance)
-	}
-
-	// 2. Testar que com DEX extrema (ex: 5000) e múltiplos itens o crítico NUNCA excede o Hard Cap de 50.0%
-	charExtreme := &CharacterData{
-		Level: 100,
-		DEX:   5000,
-	}
-	invOverkill := &InventoryData{
-		Equipment: EquipmentSlots{
-			MainHand: &Item{CritChance: 40.0},
-			Ammo:     &Item{CritChance: 30.0},
-		},
-	}
-	extremeStats := CalculateDerivedStats(charExtreme, invOverkill, "balanced")
-	if extremeStats.CritChance > 50.0 {
-		t.Fatalf("CritChance excedeu o Hard Cap de 50%%: %.2f%%", extremeStats.CritChance)
+	a := CalculateDerivedStats(low, inv, "balanced")
+	b := CalculateDerivedStats(high, inv, "balanced")
+	if a.TotalAttack != b.TotalAttack || a.TotalDefense != b.TotalDefense || a.MaxHealth != b.MaxHealth || a.MaxMana != b.MaxMana || a.TotalCapacity != b.TotalCapacity || a.CritChance != b.CritChance || a.AttackSpeedSeconds != b.AttackSpeedSeconds {
+		t.Fatalf("atributos legados ainda alteram gameplay: low=%+v high=%+v", a, b)
 	}
 }
 
-func TestCalculateDerivedStats_AttributeBrackets(t *testing.T) {
-	brackets := []int{5, 25, 50, 100, 200, 392, 500}
-	for _, val := range brackets {
-		char := &CharacterData{
-			Level: 50,
-			STR:   val,
-			DEX:   val,
-			INT:   val,
-			VIT:   val,
-		}
-		inv := &InventoryData{Equipment: EquipmentSlots{}}
-		stats := CalculateDerivedStats(char, inv, "balanced")
-
-		if stats.EffectiveDEX != val {
-			t.Errorf("EffectiveDEX incorreto para %d: %d", val, stats.EffectiveDEX)
-		}
-		if stats.CritChance > 50.0 {
-			t.Errorf("CritChance excedeu 50%% para %d DEX: %.2f%%", val, stats.CritChance)
-		}
-		if stats.ManaRegenPerSecond <= 0 {
-			t.Errorf("ManaRegenPerSecond inválido para %d INT: %.2f", val, stats.ManaRegenPerSecond)
-		}
+func TestCalculateDerivedStats_DistanceMasteryOwnsCritAndCadence(t *testing.T) {
+	inv := &InventoryData{Equipment: EquipmentSlots{MainHand: &Item{WeaponType: "bow", Hands: 2, PhysicalAttack: 30}}}
+	novice := CalculateDerivedStats(&CharacterData{Level: 25}, inv, "balanced")
+	veteran := CalculateDerivedStats(&CharacterData{Level: 25, Masteries: MasteriesData{DistanceMastery: 10000}}, inv, "balanced")
+	if veteran.CritChance <= novice.CritChance {
+		t.Fatalf("maestria de distância deveria elevar crítico: novice=%.2f veteran=%.2f", novice.CritChance, veteran.CritChance)
+	}
+	if veteran.AttackSpeedSeconds >= novice.AttackSpeedSeconds {
+		t.Fatalf("maestria da arma deveria melhorar cadência: novice=%.2fs veteran=%.2fs", novice.AttackSpeedSeconds, veteran.AttackSpeedSeconds)
+	}
+	if veteran.TotalAttack <= novice.TotalAttack {
+		t.Fatalf("maestria deveria elevar dano: novice=%d veteran=%d", novice.TotalAttack, veteran.TotalAttack)
 	}
 }
 
-func TestCalculateDerivedStats_AttackSpeedScaling(t *testing.T) {
-	// 1. Unarmed
-	char := &CharacterData{Level: 1, DEX: 5}
-	inv := &InventoryData{Equipment: EquipmentSlots{}}
-	stats := CalculateDerivedStats(char, inv, "balanced")
-	if stats.AttackSpeedSeconds < 2.30 || stats.AttackSpeedSeconds > 2.45 {
-		t.Fatalf("Velocidade esperada para desarmado ~2.40s, obtido: %.2fs", stats.AttackSpeedSeconds)
+func TestCalculateDerivedStats_AttackSpeedUsesWeaponProfile(t *testing.T) {
+	char := &CharacterData{Level: 1}
+	unarmed := CalculateDerivedStats(char, &InventoryData{Equipment: EquipmentSlots{}}, "balanced")
+	if unarmed.AttackSpeedSeconds != 2.40 {
+		t.Fatalf("cadência desarmada esperada 2.40s, obtido %.2fs", unarmed.AttackSpeedSeconds)
 	}
-
-	// 2. 1H Sword vs 2H Greatsword
-	inv1H := &InventoryData{Equipment: EquipmentSlots{
-		MainHand: &Item{WeaponType: "sword", Hands: 1, PhysicalAttack: 20},
-	}}
-	inv2H := &InventoryData{Equipment: EquipmentSlots{
-		MainHand: &Item{WeaponType: "sword", Hands: 2, PhysicalAttack: 45},
-	}}
-	stats1H := CalculateDerivedStats(char, inv1H, "balanced")
-	stats2H := CalculateDerivedStats(char, inv2H, "balanced")
-
-	if stats1H.AttackSpeedSeconds >= stats2H.AttackSpeedSeconds {
-		t.Fatalf("Arma de 1 mão (%.2fs) deve ser mais rápida que arma de 2 mãos (%.2fs)", stats1H.AttackSpeedSeconds, stats2H.AttackSpeedSeconds)
-	}
-
-	// 3. DEX Scaling: High DEX should reduce attack interval
-	charHighDEX := &CharacterData{Level: 50, DEX: 200}
-	statsHighDEX := CalculateDerivedStats(charHighDEX, inv1H, "balanced")
-	if statsHighDEX.AttackSpeedSeconds >= stats1H.AttackSpeedSeconds {
-		t.Fatalf("DEX 200 (%.2fs) deve atacar mais rápido que DEX 5 (%.2fs)", statsHighDEX.AttackSpeedSeconds, stats1H.AttackSpeedSeconds)
+	oneHand := CalculateDerivedStats(char, &InventoryData{Equipment: EquipmentSlots{MainHand: &Item{WeaponType: "sword", Hands: 1, PhysicalAttack: 20}}}, "balanced")
+	twoHand := CalculateDerivedStats(char, &InventoryData{Equipment: EquipmentSlots{MainHand: &Item{WeaponType: "sword", Hands: 2, PhysicalAttack: 45}}}, "balanced")
+	if oneHand.AttackSpeedSeconds >= twoHand.AttackSpeedSeconds {
+		t.Fatalf("arma 1H (%.2fs) deve ser mais rápida que 2H (%.2fs)", oneHand.AttackSpeedSeconds, twoHand.AttackSpeedSeconds)
 	}
 }
 
 func TestCalculateDerivedStats_DPSUsesRealAttackInterval(t *testing.T) {
-	char := &CharacterData{Level: 1, DEX: 5, INT: 5}
-	inv := &InventoryData{Equipment: EquipmentSlots{
-		MainHand: &Item{WeaponType: "wand", Hands: 1, MagicAttack: 20},
-	}}
-
+	char := &CharacterData{Level: 1}
+	inv := &InventoryData{Equipment: EquipmentSlots{MainHand: &Item{WeaponType: "wand", Hands: 1, MagicAttack: 20}}}
 	stats := CalculateDerivedStats(char, inv, "balanced")
-
-	// A varinha causa 21 de ataque, ataca a cada 1,99s e tem ~5,41% de
-	// crítico. O DPS esperado arredonda para 11. O antigo multiplicador de
-	// arquétipo produziria 14 e não correspondia ao cooldown real.
-	if stats.CurrentDPS != 11 {
-		t.Fatalf("DPS de varinha deveria refletir o intervalo real de ataque: esperado 11, obtido %d (stats=%+v)", stats.CurrentDPS, stats)
+	expected := int((float64(stats.TotalAttack)/stats.AttackSpeedSeconds)*(1+(stats.CritChance/100)*0.50) + 0.5)
+	if stats.CurrentDPS != expected {
+		t.Fatalf("DPS deve refletir ataque/cadência/crítico: esperado %d obtido %d", expected, stats.CurrentDPS)
 	}
 }
 

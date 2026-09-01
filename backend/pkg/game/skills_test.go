@@ -91,7 +91,7 @@ func TestArcaneNovaHitsUpToFourTargets(t *testing.T) {
 	}
 	result := def.Execute(&SkillContext{
 		Character:       &CharacterData{Level: 10},
-		DerivedStats:    &DerivedStats{EffectiveINT: 10},
+		DerivedStats:    &DerivedStats{TotalAttack: 20, MaxMana: 120},
 		Monsters:        monsters,
 		MagicMasteryLvl: 10,
 	})
@@ -179,7 +179,7 @@ func TestSkillRegistry_IceShardSlowApplication(t *testing.T) {
 	}
 	ctx := &SkillContext{
 		Character:    &CharacterData{Level: 30},
-		DerivedStats: &DerivedStats{EffectiveINT: 50},
+		DerivedStats: &DerivedStats{TotalAttack: 70, MaxMana: 300},
 		Monsters:     mobs,
 		Random:       rand.New(rand.NewSource(42)),
 		WeaponType:   WeaponTypeWand,
@@ -207,7 +207,7 @@ func TestSkillRegistry_DivineHealConditionalTrigger(t *testing.T) {
 	// 1. HP Cheio (100%): CanExecute deve ser false
 	fullHPCtx := &SkillContext{
 		Character:    &CharacterData{Health: 500, MaxHealth: 500, Level: 20},
-		DerivedStats: &DerivedStats{EffectiveINT: 40},
+		DerivedStats: &DerivedStats{TotalAttack: 60, MaxMana: 260},
 	}
 	if def.CanExecute != nil && def.CanExecute(fullHPCtx) {
 		t.Error("Divine Heal NÃO deveria executar quando HP está em 100%")
@@ -216,7 +216,7 @@ func TestSkillRegistry_DivineHealConditionalTrigger(t *testing.T) {
 	// 2. HP Ferido (60%): CanExecute deve ser true
 	hurtCtx := &SkillContext{
 		Character:    &CharacterData{Health: 300, MaxHealth: 500, Level: 20},
-		DerivedStats: &DerivedStats{EffectiveINT: 40},
+		DerivedStats: &DerivedStats{TotalAttack: 60, MaxMana: 260},
 	}
 	if def.CanExecute != nil && !def.CanExecute(hurtCtx) {
 		t.Error("Divine Heal DEVERIA executar quando HP está em 60%")

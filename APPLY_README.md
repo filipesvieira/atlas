@@ -1,61 +1,63 @@
-# Aplicação — M5-B.1 Kingdom Scale & Usability Hardening
+# APPLY — M5-D Visual Map V2
 
-Base utilizada: `repomix-output(20260830-162535).xml`.
+Base: Repomix `repomix-output(20260901-032946).xml` enviado em 2026-09-01.
 
-## 1. Banco
+Este pacote contém arquivos completos, somente os alterados/novos desta implementação.
+Copie-os sobre o repositório preservando os caminhos.
 
-Aplique a nova migration depois das migrations já existentes:
+## Alteração principal
 
-```text
-000036_settlement_territory_v5.sql
-```
+O Mapa Territorial deixa de usar cards HTML absolutos sobre uma grade e passa a usar um renderer Canvas próprio:
 
-Ela:
-- amplia o mundo do assentamento para 52x38;
-- desloca somente saves `layout_version = 4` por `+4 X / +3 Y`;
-- define `layout_version = 5`;
-- invalida snapshots defensivos antigos.
+- cada coordenada `(x,y)` ocupa uma célula inteira;
+- terreno procedural usa a paleta visual canônica do jogo;
+- estágios territoriais possuem miniaturas pixel-art desenhadas com primitivas isométricas existentes;
+- pan, zoom, busca, seleção, hover, tooltip e lista lateral permanecem;
+- zoom é ancorado no cursor;
+- modal aproveita melhor telas desktop/Tauri;
+- nenhuma regra do backend, distância ou informação privada foi alterada.
 
-Não reaplique manualmente migrations já registradas pelo migrator.
+## Ordem de aplicação
 
-## 2. Backend
+1. `frontend/src/game/world/TerritorialMapRenderer.ts` (novo)
+2. `frontend/src/components/Camp/TerritorialMapPanel.tsx`
+3. `frontend/src/components/Camp/TerritorialMapModal.tsx`
+4. documentos em `docs/`
 
-No repositório real:
+## Validação executada neste pacote
+
+- `go test ./pkg/game` — PASS
+- `go test -race ./pkg/game` — PASS
+- `node tools/audit-content.mjs` — PASS
+- `node tools/audit-camp-content.mjs` — PASS
+- `node tools/audit-economy.mjs` — PASS
+- `node tools/audit-resource-usage.mjs` — PASS
+- `node tools/audit-settlement-viewport.mjs` — PASS
+- transpile sintático dos 3 arquivos TS/TSX alterados — PASS
+- type-check isolado de `TerritorialMapRenderer.ts` com `tsc` — PASS
+
+## Gate no repositório real
+
+O Repomix não inclui `node_modules`/tipos React nem `go.sum` completo. Depois de aplicar no repositório real:
 
 ```bash
 cd backend
 go test -race ./...
-go run ./cmd/pvpbalance -scenario mechanics_equal_cp -seeds 100
-```
 
-## 3. Frontend
-
-```bash
-cd frontend
-npm install
+cd ../frontend
 npm run build
 ```
 
-## 4. Auditores
+Depois valide manualmente:
 
-A partir da raiz:
-
-```bash
-node tools/audit-content.mjs
-node tools/audit-camp-content.mjs
-node tools/audit-economy.mjs
-node tools/audit-resource-usage.mjs
-node tools/audit-settlement-viewport.mjs
-```
-
-## 5. QA manual recomendado
-
-- Cidade 40x28 e Reino 52x38 em janela e fullscreen;
-- Assentamento → PvE → Assentamento, verificando zoom/bordas;
-- hover/click/drag das construções;
-- Muralha e Portão clicáveis e não arrastáveis;
-- Cozinha/Alquimia/Armazém deep-linkando para suas funções;
-- F8 no Reino/Stress para observar FPS e frame time;
-- QA Reino com todas as estruturas M5-B.
-
-Próxima etapa: **M5-C**. Scouting permanece M6 e raids reais M7.
+- abrir mapa pelo botão global;
+- abrir pelo Centro de Comando;
+- pan/zoom e zoom com roda do mouse;
+- duplo clique para foco;
+- busca por nome e `x,y`;
+- seleção/lista lateral;
+- cluster de assentamentos próximos sem sobreposição;
+- presets QA;
+- criação de personagem novo;
+- assentamento legado reconciliado;
+- ausência de Defense Power/guarnição/recursos privados no payload público.

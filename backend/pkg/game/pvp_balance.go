@@ -67,14 +67,14 @@ func pvpBalanceItem(templateKey string) *Item {
 		PhysicalAttack: template.BaseAtk, MagicAttack: template.BaseMagic,
 		Attack: max(template.BaseAtk, template.BaseMagic), Defense: template.BaseDef,
 		Weight: template.BaseWeight, Hands: template.Hands,
-		BonusSTR: template.BaseSTR, BonusDEX: template.BaseDEX, BonusINT: template.BaseINT,
+		MeleePowerBonus: template.BaseMeleePower, RangedPowerBonus: template.BaseRangedPower, MagicPowerBonus: template.BaseMagicPower,
 		BonusHP: template.BaseHP, BonusMP: template.BaseMP, CritChance: template.CritChance,
 		ManaRegen: template.ManaRegen, MovementSpeedBonus: template.BaseMovementSpeedBonus,
 	}
 }
 
-func starterPvPBalanceProfile(key string, primaryBonus int) (PvPBalanceProfile, error) {
-	char := &CharacterData{ID: key, Name: key, Level: 20, STR: 100, DEX: 100, INT: 100, VIT: 100, ActiveStance: "balanced"}
+func starterPvPBalanceProfile(key string, masteryTries int) (PvPBalanceProfile, error) {
+	char := &CharacterData{ID: key, Name: key, Level: 20, ActiveStance: "balanced"}
 	inventory := &InventoryData{}
 	archetype := ""
 	skills := []string{}
@@ -82,24 +82,24 @@ func starterPvPBalanceProfile(key string, primaryBonus int) (PvPBalanceProfile, 
 	switch key {
 	case "melee_shield":
 		archetype = "melee"
-		char.STR += primaryBonus
+		char.Masteries.SwordMastery += masteryTries
 		inventory.Equipment.MainHand = pvpBalanceItem("espada_do_aprendiz")
 		inventory.Equipment.OffHand = pvpBalanceItem("broquel_de_madeira")
 		skills = []string{"whirlwind", "brutal_strike"}
 	case "melee_2h":
 		archetype = "melee"
-		char.STR += primaryBonus
+		char.Masteries.SwordMastery += masteryTries
 		inventory.Equipment.MainHand = pvpBalanceItem("montante_de_madeira")
 		skills = []string{"whirlwind", "brutal_strike"}
 	case "distance":
 		archetype = "distance"
-		char.DEX += primaryBonus
+		char.Masteries.DistanceMastery += masteryTries
 		inventory.Equipment.MainHand = pvpBalanceItem("arco_curvo")
 		inventory.Equipment.Ammo = pvpBalanceItem("flechas_de_madeira")
 		skills = []string{"multishot", "sniper_shot"}
 	case "magic":
 		archetype = "magic"
-		char.INT += primaryBonus
+		char.Masteries.MagicMastery += masteryTries
 		inventory.Equipment.MainHand = pvpBalanceItem("varinha_do_aprendiz")
 		skills = []string{"fireball", "ice_shard"}
 	default:
@@ -152,14 +152,14 @@ func PvPBalanceProfiles(scenario string) ([]PvPBalanceProfile, error) {
 			mechanicsEqualCPPvPBalanceProfile("magic"),
 		}, nil
 	case PvPBalanceScenarioStarterBaseline, PvPBalanceScenarioStarterArchetype:
-		bonus := 0
+		masteryTries := 0
 		if scenario == PvPBalanceScenarioStarterArchetype {
-			bonus = 100
+			masteryTries = 10000
 		}
 		keys := []string{"melee_shield", "melee_2h", "distance", "magic"}
 		profiles := make([]PvPBalanceProfile, 0, len(keys))
 		for _, key := range keys {
-			profile, err := starterPvPBalanceProfile(key, bonus)
+			profile, err := starterPvPBalanceProfile(key, masteryTries)
 			if err != nil {
 				return nil, err
 			}

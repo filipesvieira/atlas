@@ -129,11 +129,11 @@ func offlineKillXP(playerLevel, monsterLevel, maxHealth int, isBoss bool) int64 
 	return CalculateKillXP(playerLevel, monsterLevel, maxHealth, isBoss)
 }
 
-func offlineCombatEfficiency(playerDefense, maxHealth int, dps, lifesteal float64, vitality int, stance string, monster Monster) float64 {
+func offlineCombatEfficiency(playerDefense, maxHealth int, dps, lifesteal float64, stance string, monster Monster) float64 {
 	monsterLevel := math.Max(1, float64(monster.Level))
 	mitigation := float64(playerDefense) / (float64(playerDefense) + 20.0*monsterLevel)
 	incomingDPS := (float64(monster.Attack) / 1.5) * (1.0 - mitigation)
-	sustainDPS := dps*(lifesteal/100.0) + float64(vitality)*0.012
+	sustainDPS := dps * (lifesteal / 100.0)
 	reserveDPS := float64(maxHealth) / 120.0
 	pressureRatio := incomingDPS / math.Max(0.1, sustainDPS+reserveDPS)
 	efficiency := 1.0
@@ -147,11 +147,11 @@ func offlineCombatEfficiency(playerDefense, maxHealth int, dps, lifesteal float6
 }
 
 // offlineCampRecoverySeconds calcula o tempo de descanso na fogueira do acampamento
-// escalonado dinamicamente pela Vida Máxima (HP), Nível e Vitalidade (VIT) do herói,
+// escalonado dinamicamente pela Vida Máxima (HP) e Nível do herói,
 // garantindo que níveis baixos se recuperem rapidamente (30-45s) e níveis altos (1000-4000+ HP)
 // tenham um tempo justo e equilibrado (60-150s), valorizando o jogo online e upgrades de base.
-func offlineCampRecoverySeconds(maxHealth, level, vit int) float64 {
-	hpRegenPerSec := math.Max(6.0, 6.0+float64(vit)*0.15+float64(level)*0.08)
+func offlineCampRecoverySeconds(maxHealth, level int) float64 {
+	hpRegenPerSec := math.Max(6.0, 6.0+float64(level)*0.20)
 	return math.Max(30.0, math.Min(180.0, float64(maxHealth)/hpRegenPerSec))
 }
 
@@ -512,7 +512,7 @@ func CalculateOfflineProgress(input OfflineSimulationInput) OfflineResult {
 
 		waveEfficiencies := make([]float64, len(wave))
 		for i, monster := range wave {
-			efficiency := offlineCombatEfficiency(stats.TotalDefense, maxHealth, math.Max(1, float64(stats.CurrentDPS)), lifesteal, input.Character.VIT, input.ActiveStance, monster)
+			efficiency := offlineCombatEfficiency(stats.TotalDefense, maxHealth, math.Max(1, float64(stats.CurrentDPS)), lifesteal, input.ActiveStance, monster)
 			waveEfficiencies[i] = efficiency
 		}
 
@@ -526,12 +526,12 @@ func CalculateOfflineProgress(input OfflineSimulationInput) OfflineResult {
 			}
 			remainingSeconds -= waveResult.elapsedSeconds
 			if waveResult.defeated {
-				campRecoverySeconds := offlineCampRecoverySeconds(maxHealth, simulatedLevel, input.Character.VIT)
+				campRecoverySeconds := offlineCampRecoverySeconds(maxHealth, simulatedLevel)
 				shouldAutoResume := input.Character != nil && input.Character.AutoResumeExpedition
 
 				if shouldAutoResume && remainingSeconds > campRecoverySeconds {
 					// Herói é derrotado nesta fase específica; retorna ao acampamento,
-					// descansa o tempo escalonado por seu HP/Nível/VIT para regenerar a vida ao máximo
+					// descansa o tempo escalonado por seu HP/Nível para regenerar a vida ao máximo
 					// e reinicia a expedição na fase 1!
 					remainingSeconds -= campRecoverySeconds
 					currentHealth = float64(maxHealth)

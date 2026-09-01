@@ -75,6 +75,8 @@ export function App() {
   const [isPrologueOpen, setIsPrologueOpen] = useState(false);
   const [ownProfileRequest, setOwnProfileRequest] = useState(0);
   const [arenaRequest, setArenaRequest] = useState(0);
+  const [territorialMapRequest, setTerritorialMapRequest] = useState(0);
+  const [territorialMapTargetSettlementID, setTerritorialMapTargetSettlementID] = useState<string | null>(null);
   const [isPvPObservabilityOpen, setIsPvPObservabilityOpen] = useState(false);
   const [selectingCharacterId, setSelectingCharacterId] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
@@ -238,6 +240,14 @@ export function App() {
 
   const clearNotifications = useCallback(() => setNotifications([]), []);
 
+  const openNotification = useCallback((notification: ImportantNotification) => {
+    if (!notification.action) return;
+    setTerritorialMapTargetSettlementID(
+      notification.action.type === 'open_territorial_report' ? notification.action.settlement_id : null,
+    );
+    setTerritorialMapRequest((request) => request + 1);
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {selectingCharacterId && (
@@ -295,6 +305,18 @@ export function App() {
                 ⚔️ Arena
               </button>
 
+              <button
+                type="button"
+                onClick={() => {
+                  setTerritorialMapTargetSettlementID(null);
+                  setTerritorialMapRequest((request) => request + 1);
+                }}
+                className="pixel-btn pixel-btn-dark px-3 py-1.5 text-[10px] text-cyan-200 hover:border-cyan-500"
+                title="Abrir Mapa Territorial"
+              >
+                🗺️ Território
+              </button>
+
               {account?.role === 'admin' && (
                 <button
                   type="button"
@@ -310,6 +332,7 @@ export function App() {
                 notifications={notifications}
                 onMarkAllRead={markNotificationsRead}
                 onClear={clearNotifications}
+                onOpenNotification={openNotification}
               />
 
               {/* Botão de Ícone do Livro para o Guia do Jogo */}
@@ -345,6 +368,8 @@ export function App() {
               character={character}
               ownProfileRequest={ownProfileRequest}
               arenaRequest={arenaRequest}
+              territorialMapRequest={territorialMapRequest}
+              territorialMapTargetSettlementID={territorialMapTargetSettlementID}
               onCharacterUpdate={handleCharacterUpdate}
               onImportantNotification={pushNotification}
             />

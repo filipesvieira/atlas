@@ -4,8 +4,8 @@ import (
 	"testing"
 )
 
-// TestCharacterization_StatsAndCapacity congela o comportamento base de cálculo
-// de atributos derivados, capacidades e slots para garantir zero regressão.
+// TestCharacterization_StatsAndCapacity congela o contrato S1: nível, equipamento
+// e maestrias governam os derivados; atributos primários legados são ignorados.
 func TestCharacterization_StatsAndCapacity(t *testing.T) {
 	char := &CharacterData{
 		Level: 10,
@@ -28,19 +28,19 @@ func TestCharacterization_StatsAndCapacity(t *testing.T) {
 
 	stats := CalculateDerivedStats(char, inv, "balanced")
 
-	// 1. MaxHealth: 100 + (VIT * 25) + (Level * 10) = 100 + 300 + 100 = 500
-	if stats.MaxHealth != 500 {
-		t.Errorf("MaxHealth esperado 500, obtido %d", stats.MaxHealth)
+	// 1. MaxHealth: base 225 + nível 10 * 35 = 575.
+	if stats.MaxHealth != 575 {
+		t.Errorf("MaxHealth esperado 575, obtido %d", stats.MaxHealth)
 	}
 
-	// 2. MaxMana: 30 + (INT * 12) + (Level * 5) = 30 + 120 + 50 = 200
-	if stats.MaxMana != 200 {
-		t.Errorf("MaxMana esperado 200, obtido %d", stats.MaxMana)
+	// 2. MaxMana: base 90 + nível 10 * 12 = 210.
+	if stats.MaxMana != 210 {
+		t.Errorf("MaxMana esperado 210, obtido %d", stats.MaxMana)
 	}
 
-	// 3. Capacidade Total: 1000 + (Level*10) + (STR*15) + Bônus Raro (500) = 1000 + 100 + 300 + 500 = 1900
-	if stats.TotalCapacity != 1900 {
-		t.Errorf("TotalCapacity esperado 1900, obtido %d", stats.TotalCapacity)
+	// 3. Capacidade: base 1100 + nível 10 * 20 + mochila rara 500 = 1800.
+	if stats.TotalCapacity != 1800 {
+		t.Errorf("TotalCapacity esperado 1800, obtido %d", stats.TotalCapacity)
 	}
 
 	// 4. Slots Totais: 20 base + 8 (Raro) = 28
@@ -48,14 +48,14 @@ func TestCharacterization_StatsAndCapacity(t *testing.T) {
 		t.Errorf("MaxSlots esperado 28, obtido %d", stats.MaxSlots)
 	}
 
-	// 5. TotalAttack: Base(12) * (1.0 + STR(20)/100) = 12 * 1.2 = 14
-	if stats.TotalAttack != 14 {
-		t.Errorf("TotalAttack esperado 14, obtido %d", stats.TotalAttack)
+	// 5. Ataque vem da arma/maestria, sem multiplicador de STR.
+	if stats.TotalAttack != 12 {
+		t.Errorf("TotalAttack esperado 12, obtido %d", stats.TotalAttack)
 	}
 
-	// 6. TotalDefense: VIT*0.5 (6) + 8 = 14
-	if stats.TotalDefense != 14 {
-		t.Errorf("TotalDefense esperado 14, obtido %d", stats.TotalDefense)
+	// 6. Defesa: base 5 + nível/4 (2) + armadura 8 = 15.
+	if stats.TotalDefense != 15 {
+		t.Errorf("TotalDefense esperado 15, obtido %d", stats.TotalDefense)
 	}
 }
 

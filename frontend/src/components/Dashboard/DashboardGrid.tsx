@@ -12,6 +12,9 @@ import { useGameSocket } from '../../hooks/useGameSocket';
 import { useGameCatalog } from '../../hooks/useGameCatalog';
 import { EconomyHubModal, type EconomyHubTab } from '../Economy/EconomyHubModal';
 import { KingdomCommandCenterModal } from '../Camp/KingdomCommandCenterModal';
+import { TerritorialMapModal } from '../Camp/TerritorialMapModal';
+import { SettlementProgressCard } from '../Camp/SettlementProgressCard';
+import { SettlementPromotionModal } from '../Camp/SettlementPromotionModal';
 import { getBuildingInteraction, type KingdomCommandSection } from '../../game/camp/BuildingInteractionRegistry';
 import type { ImportantNotification } from '../../types/notifications';
 import { CommunicationConsole } from '../Social/CommunicationConsole';
@@ -22,11 +25,13 @@ interface DashboardGridProps {
   character: any;
   ownProfileRequest?: number;
   arenaRequest?: number;
+  territorialMapRequest?: number;
+  territorialMapTargetSettlementID?: string | null;
   onCharacterUpdate?: (char: any) => void;
   onImportantNotification?: (notification: ImportantNotification) => void;
 }
 
-export function DashboardGrid({ token, character: initialChar, ownProfileRequest = 0, arenaRequest = 0, onCharacterUpdate, onImportantNotification }: DashboardGridProps) {
+export function DashboardGrid({ token, character: initialChar, ownProfileRequest = 0, arenaRequest = 0, territorialMapRequest = 0, territorialMapTargetSettlementID = null, onCharacterUpdate, onImportantNotification }: DashboardGridProps) {
   const [isDepotOpen, setIsDepotOpen] = useState(false);
   const legacySkinMigrationRef = useRef<Set<string>>(new Set());
   const [isCampModalOpen, setIsCampModalOpen] = useState(false);
@@ -34,12 +39,14 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
   const [isEconomyOpen, setIsEconomyOpen] = useState(false);
   const [economyInitialTab, setEconomyInitialTab] = useState<EconomyHubTab>('work');
   const [isKingdomCommandOpen, setIsKingdomCommandOpen] = useState(false);
+  const [isTerritorialMapOpen, setIsTerritorialMapOpen] = useState(false);
   const [kingdomCommandSection, setKingdomCommandSection] = useState<KingdomCommandSection>('overview');
   const [showAdvancedStats, setShowAdvancedStats] = useState(false);
   const [isWorldFocusMode, setIsWorldFocusMode] = useState(false);
   const [backpackOpenRequest, setBackpackOpenRequest] = useState(0);
   const [mapOpenRequest, setMapOpenRequest] = useState(0);
   const lastOwnProfileRequestRef = useRef(0);
+  const lastTerritorialMapRequestRef = useRef(0);
   const lastPvPSettlementSyncRef = useRef<string | null>(null);
   const { catalog } = useGameCatalog();
 
@@ -55,6 +62,12 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
 		autoPotionSettings,
 		autoPotionState,
     economy,
+    territorialMap,
+    territorialMapLoading,
+    territorialMapError,
+    settlementScouting,
+    settlementScoutingLoading,
+    settlementScoutingError,
     activeBuffs,
     craftPreview,
     lastCraftBatchResult,
@@ -120,7 +133,6 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
     changeRegion,
     setStance,
     toggleSkill,
-    allocateStat,
     bulkSell,
     startBuildingUpgrade,
     moveCampBuilding,
@@ -136,6 +148,11 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
     craftItem,
     consumeFood,
     requestEconomySync,
+    requestTerritorialMap,
+    requestSettlementScouting,
+    startSettlementScouting,
+    updateSettlementDefenseStrategy,
+    acknowledgeSettlementPromotion,
     claimPendingCraft,
     claimPendingResources,
     createHeroDesire,
@@ -164,6 +181,8 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
       case 'kingdom':
         setKingdomCommandSection(action.section);
         setIsKingdomCommandOpen(true);
+        requestTerritorialMap(20);
+        requestSettlementScouting();
         return;
       case 'camp':
       case 'info':
@@ -184,6 +203,14 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
       requestPublicProfile(char.id);
     }
   }, [ownProfileRequest, char?.id, requestPublicProfile]);
+
+  useEffect(() => {
+    if (territorialMapRequest <= 0 || territorialMapRequest === lastTerritorialMapRequestRef.current) return;
+    lastTerritorialMapRequestRef.current = territorialMapRequest;
+    setIsTerritorialMapOpen(true);
+    requestTerritorialMap(20);
+    requestSettlementScouting();
+  }, [territorialMapRequest]);
 
   // O término do duelo é entregue pelo stream social. Após o servidor devolver
   // a sessão ao acampamento, buscamos uma única vez o estado normal e a
@@ -323,84 +350,33 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
               </div>
             </div>
 
-            {/* Painel de Atributos Primários & Pontos Disponíveis */}
+            {/* S1: progressão automática por nível + maestria por uso */}
             <div className={`${showAdvancedStats ? 'block' : 'hidden'} pt-2 border-t border-slate-800/80 space-y-1.5`}>
               <div className="flex justify-between items-center text-[11px] font-pixel-body">
-                <span className="text-slate-300 font-bold font-pixel-heading text-[10px]">Atributos Primários</span>
-                <span className={`font-bold font-pixel-heading px-1.5 py-0.5 rounded text-[10px] ${char.unspent_points > 0 ? 'bg-amber-500 text-slate-950 animate-pulse' : 'bg-slate-950 text-slate-500 border border-slate-800'}`}>
-                  {char.unspent_points || 0} Pontos
+                <span className="text-slate-300 font-bold font-pixel-heading text-[10px]">Especialização do Herói</span>
+                <span className="font-bold font-pixel-heading px-1.5 py-0.5 rounded text-[10px] bg-slate-950 text-amber-300 border border-amber-900/60">
+                  Maestria Nv. {derivedStats?.active_mastery_level ?? 10}
                 </span>
               </div>
-
               <div className="grid grid-cols-2 gap-1.5 text-[10px] font-pixel-body">
-                {/* FOR / STR */}
-                <div
-                  className="flex justify-between items-center bg-slate-950/80 px-2 py-1.5 rounded border border-slate-800"
-                  title="FOR: +1.5 Ataque Físico Melee por ponto, +15 Capacidade (Cap) por ponto base."
-                >
-                  <span className="text-slate-300 flex items-center gap-1">⚔️ FOR: <strong className="text-amber-400 font-pixel-heading text-[11px]">{char.str || 5}</strong></span>
-                  {char.unspent_points > 0 && (
-                    <button
-                      onClick={() => allocateStat('str')}
-                      className="pixel-btn pixel-btn-gold px-2 py-0.5 text-[10px]"
-                      title="+1.5 Dano Melee, +15 Cap"
-                    >
-                      +
-                    </button>
-                  )}
+                <div className="flex justify-between items-center bg-slate-950/80 px-2 py-1.5 rounded border border-slate-800">
+                  <span className="text-slate-400">🎓 Maestria ativa</span>
+                  <strong className="text-amber-300 font-pixel-heading uppercase">{derivedStats?.active_mastery_key || '—'}</strong>
                 </div>
-
-                {/* DES / DEX */}
-                <div
-                  className="flex justify-between items-center bg-slate-950/80 px-2 py-1.5 rounded border border-slate-800"
-                  title="DES: +1.5 Ataque à Distância, +Crítico assintótico com Diminishing Returns (até 50% Hard Cap)."
-                >
-                  <span className="text-slate-300 flex items-center gap-1">🏹 DES: <strong className="text-emerald-400 font-pixel-heading text-[11px]">{char.dex || 5}</strong></span>
-                  {char.unspent_points > 0 && (
-                    <button
-                      onClick={() => allocateStat('dex')}
-                      className="pixel-btn pixel-btn-gold px-2 py-0.5 text-[10px]"
-                      title="+1.5 Dano Distância, +Crítico Assintótico"
-                    >
-                      +
-                    </button>
-                  )}
+                <div className="flex justify-between items-center bg-slate-950/80 px-2 py-1.5 rounded border border-slate-800">
+                  <span className="text-slate-400">🎯 Crítico</span>
+                  <strong className="text-purple-300 font-pixel-heading">{(derivedStats?.crit_chance ?? 0).toFixed(1)}%</strong>
                 </div>
-
-                {/* INT / INT */}
-                <div
-                  className="flex justify-between items-center bg-slate-950/80 px-2 py-1.5 rounded border border-slate-800"
-                  title="INT: +2.0 Ataque Mágico, +12 Max Mana, +Regeneração contínua de MP (até 6.0 MP/s)."
-                >
-                  <span className="text-slate-300 flex items-center gap-1">🔮 INT: <strong className="text-sky-400 font-pixel-heading text-[11px]">{char.int_stat || 5}</strong></span>
-                  {char.unspent_points > 0 && (
-                    <button
-                      onClick={() => allocateStat('int')}
-                      className="pixel-btn pixel-btn-gold px-2 py-0.5 text-[10px]"
-                      title="+2.0 Dano Mágico, +12 Max Mana, +Regen MP"
-                    >
-                      +
-                    </button>
-                  )}
+                <div className="flex justify-between items-center bg-slate-950/80 px-2 py-1.5 rounded border border-slate-800">
+                  <span className="text-slate-400">⏱️ Cadência</span>
+                  <strong className="text-cyan-300 font-pixel-heading">{(derivedStats?.attack_speed_seconds ?? 0).toFixed(2)}s</strong>
                 </div>
-
-                {/* VIT / VIT */}
-                <div
-                  className="flex justify-between items-center bg-slate-950/80 px-2 py-1.5 rounded border border-slate-800"
-                  title="VIT: +25 Max HP, +0.5 Defesa Física por ponto base."
-                >
-                  <span className="text-slate-300 flex items-center gap-1">❤️ VIT: <strong className="text-rose-400 font-pixel-heading text-[11px]">{char.vit || 5}</strong></span>
-                  {char.unspent_points > 0 && (
-                    <button
-                      onClick={() => allocateStat('vit')}
-                      className="pixel-btn pixel-btn-gold px-2 py-0.5 text-[10px]"
-                      title="+25 Max HP, +0.5 Defesa"
-                    >
-                      +
-                    </button>
-                  )}
+                <div className="flex justify-between items-center bg-slate-950/80 px-2 py-1.5 rounded border border-slate-800">
+                  <span className="text-slate-400">🎒 Capacidade</span>
+                  <strong className="text-sky-300 font-pixel-heading">{derivedStats?.total_capacity ?? 0}</strong>
                 </div>
               </div>
+              <p className="text-[9px] text-slate-500 font-pixel-body">Troque de arma para mudar a especialização. A maestria correspondente evolui automaticamente pelo uso.</p>
             </div>
           </div>
         </div>
@@ -457,6 +433,10 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
 
         {/* Painel Direito: Controles & Estatísticas do Personagem (3 Colunas) */}
         <div className="md:col-span-3 xl:col-span-2 flex flex-col gap-2.5 xl:gap-3">
+          <SettlementProgressCard
+            settlement={economy?.settlement || null}
+            onOpen={() => { setEconomyInitialTab('residents'); setIsEconomyOpen(true); }}
+          />
           {/* Card de Ação Principal: Controle da Expedição */}
           <div className="pixel-card-gold rounded-xl p-2.5 space-y-1.5">
             <div className="pixel-card-header pixel-card-header-gold">
@@ -604,8 +584,38 @@ export function DashboardGrid({ token, character: initialChar, ownProfileRequest
           camp={camp}
           settlement={economy?.settlement || null}
           buildingDefinitions={catalog.campBuildings || []}
+          onUpdateStrategy={updateSettlementDefenseStrategy}
+          territorialMap={territorialMap}
+          territorialMapLoading={territorialMapLoading}
+          territorialMapError={territorialMapError}
+          scouting={settlementScouting}
+          scoutingLoading={settlementScoutingLoading}
+          scoutingError={settlementScoutingError}
+          onRequestTerritorialMap={requestTerritorialMap}
+          onRequestScouting={requestSettlementScouting}
+          onStartScouting={startSettlementScouting}
         />
       )}
+      <TerritorialMapModal
+        isOpen={isTerritorialMapOpen}
+        onClose={() => setIsTerritorialMapOpen(false)}
+        map={territorialMap}
+        ownLocation={economy?.settlement?.world}
+        loading={territorialMapLoading}
+        error={territorialMapError}
+        scouting={settlementScouting}
+        scoutingLoading={settlementScoutingLoading}
+        scoutingError={settlementScoutingError}
+        onRefresh={requestTerritorialMap}
+        onRefreshScouting={requestSettlementScouting}
+        onStartScouting={startSettlementScouting}
+        focusSettlementID={territorialMapTargetSettlementID}
+      />
+      <SettlementPromotionModal
+        promotion={economy?.settlement?.pending_promotion || null}
+        onAcknowledge={acknowledgeSettlementPromotion}
+        onOpenSettlement={() => { setEconomyInitialTab('residents'); setIsEconomyOpen(true); }}
+      />
       <PlayerInteractionLayer
         pendingDuelChallenges={pendingDuelChallenges}
         pvpMatchNotice={pvpMatchNotice}

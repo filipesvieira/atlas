@@ -31,6 +31,20 @@ func TestLegacyItemMigrationOnlyAddsSource(t *testing.T) {
 	}
 }
 
+func TestS1LegacyPrimaryItemBonusesBecomeSemanticPower(t *testing.T) {
+	legacy := Item{ID: "legacy-stats", BonusSTR: 4, BonusDEX: 3, BonusINT: 2, BalanceVersion: 3}
+	migrated := RebalanceExistingItem(legacy)
+	if migrated.BonusSTR != 0 || migrated.BonusDEX != 0 || migrated.BonusINT != 0 {
+		t.Fatalf("atributos primários legados permaneceram ativos: %+v", migrated)
+	}
+	if migrated.MeleePowerBonus != 8 || migrated.RangedPowerBonus != 6 || migrated.MagicPowerBonus != 4 {
+		t.Fatalf("conversão semântica inesperada: %+v", migrated)
+	}
+	if migrated.BalanceVersion != CurrentItemBalanceVersion {
+		t.Fatalf("balance version deveria migrar para %d, obtido %d", CurrentItemBalanceVersion, migrated.BalanceVersion)
+	}
+}
+
 func TestLegacyBootMigrationRestoresMovementSpeed(t *testing.T) {
 	legacyByKey := Item{TemplateKey: "botas_de_couro", Rarity: "Raro"}
 	migratedByKey := RebalanceExistingItem(legacyByKey)

@@ -1,6 +1,7 @@
 package game
 
 import (
+	"math"
 	"strings"
 	"time"
 )
@@ -29,6 +30,9 @@ type SettlementStageDefinition struct {
 	Key               string         `json:"key"`
 	Name              string         `json:"name"`
 	Icon              string         `json:"icon"`
+	Summary           string         `json:"summary,omitempty"`
+	PromotionHeadline string         `json:"promotion_headline,omitempty"`
+	Highlights        []string       `json:"highlights,omitempty"`
 	MinProsperity     int64          `json:"min_prosperity"`
 	MinPopulation     int            `json:"min_population"`
 	RequiredBuildings map[string]int `json:"required_buildings"`
@@ -45,27 +49,51 @@ type SettlementStageRequirementProgress struct {
 }
 
 type SettlementStageProgress struct {
-	Current      SettlementStageDefinition            `json:"current"`
-	Next         *SettlementStageDefinition           `json:"next,omitempty"`
-	Requirements []SettlementStageRequirementProgress `json:"requirements"`
-	Ready        bool                                 `json:"ready"`
+	Current               SettlementStageDefinition            `json:"current"`
+	Next                  *SettlementStageDefinition           `json:"next,omitempty"`
+	Requirements          []SettlementStageRequirementProgress `json:"requirements"`
+	Ready                 bool                                 `json:"ready"`
+	CompletionPercent     int                                  `json:"completion_percent"`
+	CompletedRequirements int                                  `json:"completed_requirements"`
+	TotalRequirements     int                                  `json:"total_requirements"`
+}
+
+type SettlementPromotionNotice struct {
+	HistoryID  string                    `json:"history_id"`
+	FromStage  SettlementStageDefinition `json:"from_stage"`
+	ToStage    SettlementStageDefinition `json:"to_stage"`
+	PromotedAt time.Time                 `json:"promoted_at"`
+	Prosperity int64                     `json:"prosperity"`
+	Population int                       `json:"population"`
 }
 
 type SettlementDefenseFoundation struct {
-	RaidsEnabled  bool       `json:"raids_enabled"`
-	Strategy      string     `json:"strategy"`
-	ShieldUntil   *time.Time `json:"shield_until,omitempty"`
-	Revision      int64      `json:"revision"`
-	SnapshotReady bool       `json:"snapshot_ready"`
+	RaidsEnabled        bool                              `json:"raids_enabled"`
+	Strategy            string                            `json:"strategy"`
+	ShieldUntil         *time.Time                        `json:"shield_until,omitempty"`
+	Revision            int64                             `json:"revision"`
+	SnapshotReady       bool                              `json:"snapshot_ready"`
+	DefensePower        int                               `json:"defense_power"`
+	Readiness           int                               `json:"readiness"`
+	ReadinessKey        string                            `json:"readiness_key"`
+	Components          []SettlementDefenseComponent      `json:"components,omitempty"`
+	Garrison            SettlementGarrisonState           `json:"garrison"`
+	Recovery            SettlementRecoveryState           `json:"recovery"`
+	Engineering         SettlementEngineeringState        `json:"engineering"`
+	Protection          SettlementEconomicProtectionState `json:"protection"`
+	Arcane              SettlementArcaneDefenseState      `json:"arcane"`
+	SnapshotVersion     int                               `json:"snapshot_version,omitempty"`
+	SnapshotHash        string                            `json:"snapshot_hash,omitempty"`
+	SnapshotGeneratedAt *time.Time                        `json:"snapshot_generated_at,omitempty"`
 }
 
 var settlementStageDefinitions = []SettlementStageDefinition{
-	{Key: SettlementStageCamp, Name: "Acampamento", Icon: "🏕️", RequiredBuildings: map[string]int{}, TerritoryWidth: 24, TerritoryHeight: 18},
-	{Key: SettlementStageOutpost, Name: "Posto", Icon: "⛺", MinProsperity: 75, MinPopulation: 9, RequiredBuildings: map[string]int{"campfire": 2, "adventurer_hut": 1, "warehouse": 1}, TerritoryWidth: 28, TerritoryHeight: 20},
-	{Key: SettlementStageHamlet, Name: "Vilarejo", Icon: "🛖", MinProsperity: 250, MinPopulation: 11, RequiredBuildings: map[string]int{"campfire": 2, "adventurer_hut": 2, "warehouse": 2}, TerritoryWidth: 32, TerritoryHeight: 22},
-	{Key: SettlementStageVillage, Name: "Vila", Icon: "🏘️", MinProsperity: 600, MinPopulation: 13, RequiredBuildings: map[string]int{"campfire": 3, "adventurer_hut": 2, "warehouse": 2, "workbench": 1}, TerritoryWidth: 36, TerritoryHeight: 24},
-	{Key: SettlementStageCity, Name: "Cidade", Icon: "🏙️", MinProsperity: 1150, MinPopulation: 15, RequiredBuildings: map[string]int{"adventurer_hut": 3, "warehouse": 3, "wall": 1, "watchtower": 1}, TerritoryWidth: 40, TerritoryHeight: 28},
-	{Key: SettlementStageKingdom, Name: "Reino", Icon: "🏰", MinProsperity: 1500, MinPopulation: 16, RequiredBuildings: map[string]int{"wall": 2, "gate": 2, "barracks": 2, "vault": 1, "war_room": 1}, TerritoryWidth: 52, TerritoryHeight: 38},
+	{Key: SettlementStageCamp, Name: "Acampamento", Icon: "🏕️", Summary: "Um refúgio improvisado onde a comunidade aprende a sobreviver.", PromotionHeadline: "A jornada começou", Highlights: []string{"Território 24×18", "Fogueira e estruturas básicas", "Primeiros pioneiros"}, RequiredBuildings: map[string]int{}, TerritoryWidth: 24, TerritoryHeight: 18},
+	{Key: SettlementStageOutpost, Name: "Posto", Icon: "⛺", Summary: "O refúgio deixou de ser temporário e ganhou infraestrutura permanente.", PromotionHeadline: "Seu Acampamento virou um Posto!", Highlights: []string{"Território 28×20", "Mais espaço para construções", "Comunidade mais estável"}, MinProsperity: 75, MinPopulation: 9, RequiredBuildings: map[string]int{"campfire": 2, "adventurer_hut": 1, "warehouse": 1}, TerritoryWidth: 28, TerritoryHeight: 20},
+	{Key: SettlementStageHamlet, Name: "Vilarejo", Icon: "🛖", Summary: "Moradores passam a enxergar o local como um lar, não apenas um abrigo.", PromotionHeadline: "Nasceu um Vilarejo!", Highlights: []string{"Território 32×22", "Mais moradores", "Economia comunitária ganha importância"}, MinProsperity: 250, MinPopulation: 11, RequiredBuildings: map[string]int{"campfire": 2, "adventurer_hut": 2, "warehouse": 2}, TerritoryWidth: 32, TerritoryHeight: 22},
+	{Key: SettlementStageVillage, Name: "Vila", Icon: "🏘️", Summary: "A comunidade já possui produção, moradia e identidade próprias.", PromotionHeadline: "O Vilarejo cresceu e tornou-se uma Vila!", Highlights: []string{"Território 36×24", "Fortificações básicas começam a importar", "Preparação para urbanização"}, MinProsperity: 600, MinPopulation: 13, RequiredBuildings: map[string]int{"campfire": 3, "adventurer_hut": 2, "warehouse": 2, "workbench": 1}, TerritoryWidth: 36, TerritoryHeight: 24},
+	{Key: SettlementStageCity, Name: "Cidade", Icon: "🏙️", Summary: "Uma cidade murada, com comando, guarnição e economia organizada.", PromotionHeadline: "Sua Vila tornou-se uma Cidade!", Highlights: []string{"Território 40×28", "Muralha e Torre de Vigia", "Quartel, Cofre e Sala de Guerra"}, MinProsperity: 1150, MinPopulation: 15, RequiredBuildings: map[string]int{"adventurer_hut": 3, "warehouse": 3, "wall": 1, "watchtower": 1}, TerritoryWidth: 40, TerritoryHeight: 28},
+	{Key: SettlementStageKingdom, Name: "Reino", Icon: "🏰", Summary: "Um território soberano, preparado para inteligência, diplomacia e conflitos entre reinos.", PromotionHeadline: "Um Reino foi erguido!", Highlights: []string{"Território 52×38", "Perímetro reforçado e distrito militar", "Sala de Guerra vira o centro estratégico"}, MinProsperity: 1500, MinPopulation: 16, RequiredBuildings: map[string]int{"wall": 2, "gate": 2, "barracks": 2, "vault": 1, "war_room": 1}, TerritoryWidth: 52, TerritoryHeight: 38},
 }
 
 func SettlementStageDefinitions() []SettlementStageDefinition {
@@ -73,11 +101,27 @@ func SettlementStageDefinitions() []SettlementStageDefinition {
 	for i, definition := range settlementStageDefinitions {
 		out[i] = definition
 		out[i].RequiredBuildings = map[string]int{}
+		out[i].Highlights = append([]string(nil), definition.Highlights...)
 		for key, level := range definition.RequiredBuildings {
 			out[i].RequiredBuildings[key] = level
 		}
 	}
 	return out
+}
+
+func SettlementStageDefinitionFor(key string) SettlementStageDefinition {
+	for _, definition := range settlementStageDefinitions {
+		if definition.Key == key {
+			copy := definition
+			copy.RequiredBuildings = map[string]int{}
+			copy.Highlights = append([]string(nil), definition.Highlights...)
+			for buildingKey, level := range definition.RequiredBuildings {
+				copy.RequiredBuildings[buildingKey] = level
+			}
+			return copy
+		}
+	}
+	return SettlementStageDefinitionFor(SettlementStageCamp)
 }
 
 func SettlementStageKnown(key string) bool {
@@ -140,6 +184,7 @@ func SettlementStageProgressFor(currentKey string, prosperity int64, population 
 	progress := SettlementStageProgress{Current: current, Requirements: []SettlementStageRequirementProgress{}}
 	if index+1 >= len(settlementStageDefinitions) {
 		progress.Ready = true
+		progress.CompletionPercent = 100
 		return progress
 	}
 	next := settlementStageDefinitions[index+1]
@@ -159,6 +204,22 @@ func SettlementStageProgressFor(currentKey string, prosperity int64, population 
 		ready = ready && met
 	}
 	progress.Ready = ready
+	progress.TotalRequirements = len(progress.Requirements)
+	completionSum := 0.0
+	for _, requirement := range progress.Requirements {
+		if requirement.Met {
+			progress.CompletedRequirements++
+		}
+		if requirement.Required <= 0 {
+			completionSum += 1
+			continue
+		}
+		ratio := float64(requirement.Current) / float64(requirement.Required)
+		completionSum += math.Max(0, math.Min(1, ratio))
+	}
+	if progress.TotalRequirements > 0 {
+		progress.CompletionPercent = int(math.Round(completionSum * 100 / float64(progress.TotalRequirements)))
+	}
 	return progress
 }
 
@@ -226,7 +287,9 @@ type SettlementState struct {
 	Name                   string                      `json:"name"`
 	StageKey               string                      `json:"stage_key"`
 	StageProgress          SettlementStageProgress     `json:"stage_progress"`
+	PendingPromotion       *SettlementPromotionNotice  `json:"pending_promotion,omitempty"`
 	Territory              CampBuildBounds             `json:"territory"`
+	World                  WorldLocation               `json:"world"`
 	Defense                SettlementDefenseFoundation `json:"defense"`
 	Population             int                         `json:"population"`
 	PopulationCapacity     int                         `json:"population_capacity"`

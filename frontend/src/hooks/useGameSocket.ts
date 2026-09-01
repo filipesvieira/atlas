@@ -17,9 +17,9 @@ export interface Item {
   special_effect: string;
   value_gold?: number;
   required_level?: number;
-  bonus_str?: number;
-  bonus_dex?: number;
-  bonus_int?: number;
+  melee_power_bonus?: number;
+  ranged_power_bonus?: number;
+  magic_power_bonus?: number;
   bonus_hp?: number;
   bonus_mp?: number;
   gold_bonus?: number;
@@ -61,10 +61,6 @@ export interface InventoryData {
 }
 
 export interface DerivedStats {
-  effective_str: number;
-  effective_dex: number;
-  effective_int: number;
-  effective_vit: number;
   total_attack: number;
   total_defense: number;
   max_health: number;
@@ -79,6 +75,11 @@ export interface DerivedStats {
   primary_archetype: string;
   attack_speed_seconds?: number;
   attack_speed_bonus?: number;
+  active_mastery_key?: string;
+  active_mastery_level?: number;
+  melee_power_bonus?: number;
+  ranged_power_bonus?: number;
+  magic_power_bonus?: number;
 }
 
 export interface ResourceAmount {
@@ -251,6 +252,9 @@ export interface SettlementStageDefinition {
   key: string;
   name: string;
   icon: string;
+  summary?: string;
+  promotion_headline?: string;
+  highlights?: string[];
   min_prosperity: number;
   min_population: number;
   required_buildings: Record<string, number>;
@@ -271,14 +275,136 @@ export interface SettlementStageProgress {
   next?: SettlementStageDefinition;
   requirements: SettlementStageRequirementProgress[];
   ready: boolean;
+  completion_percent?: number;
+  completed_requirements?: number;
+  total_requirements?: number;
 }
 
+export interface SettlementPromotionNotice {
+  history_id: string;
+  from_stage: SettlementStageDefinition;
+  to_stage: SettlementStageDefinition;
+  promoted_at: string;
+  prosperity: number;
+  population: number;
+}
+
+export interface SettlementDefenseComponent { key: string; name: string; icon: string; score: number; details?: string[]; }
 export interface SettlementDefenseFoundation {
   raids_enabled: boolean;
   strategy: string;
   shield_until?: string;
   revision: number;
   snapshot_ready: boolean;
+  defense_power?: number;
+  readiness?: number;
+  readiness_key?: string;
+  components?: SettlementDefenseComponent[];
+  garrison?: { capacity: number; active_guards: number; civilian_reserve: number; training_percent: number; assignment_mode: string };
+  recovery?: { defender_recovery_percent: number; injury_reduction_percent: number };
+  engineering?: { repair_percent: number; trap_slots: number };
+  protection?: { storage_percent: number; treasury_percent: number };
+  arcane?: { shield_percent: number; stability_percent: number };
+  snapshot_version?: number;
+  snapshot_hash?: string;
+  snapshot_generated_at?: string;
+}
+
+export interface WorldLocation {
+  world_id: string;
+  world_key: string;
+  world_name: string;
+  x: number;
+  y: number;
+  assigned_at: string;
+}
+
+export interface TerritorialKingdomSummary {
+  settlement_id: string;
+  name: string;
+  stage_key: string;
+  x: number;
+  y: number;
+  distance: number;
+  is_self: boolean;
+  protected: boolean;
+}
+
+export interface TerritorialMapSnapshot {
+  contract_version: number;
+  world_id: string;
+  world_key: string;
+  world_name: string;
+  center: { x: number; y: number };
+  radius: number;
+  kingdoms: TerritorialKingdomSummary[];
+  generated_at: string;
+}
+
+export interface ScoutingNumericEstimate {
+  min: number;
+  max: number;
+}
+
+export interface SettlementScoutingMission {
+  id: string;
+  target_settlement_id: string;
+  target_name: string;
+  target_stage_key: string;
+  target_x: number;
+  target_y: number;
+  distance: number;
+  state: string;
+  gold_cost: number;
+  tracker_level: number;
+  coordination_percent: number;
+  started_at: string;
+  completes_at: string;
+  completed_at?: string;
+}
+
+export interface SettlementScoutingReport {
+  mission_id: string;
+  target_settlement_id: string;
+  target_name: string;
+  target_stage_key: string;
+  target_x: number;
+  target_y: number;
+  distance: number;
+  quality: number;
+  confidence_key: string;
+  defense_power: ScoutingNumericEstimate;
+  wall_level: ScoutingNumericEstimate;
+  watchtower_level: ScoutingNumericEstimate;
+  garrison: ScoutingNumericEstimate;
+  resonator_presence: string;
+  storage_exposure_key: string;
+  treasury_exposure_key: string;
+  detected: boolean;
+  generated_at: string;
+  expires_at: string;
+}
+
+export interface SettlementScoutingAlert {
+  mission_id: string;
+  detected_at: string;
+  source_identified: boolean;
+  source_name?: string;
+  source_x?: number;
+  source_y?: number;
+  detection_percent: number;
+}
+
+export interface SettlementScoutingState {
+  rules_version: number;
+  unlocked: boolean;
+  slots: number;
+  tracker_level: number;
+  coordination_percent: number;
+  active: SettlementScoutingMission[];
+  reports: SettlementScoutingReport[];
+  alerts: SettlementScoutingAlert[];
+  generated_at: string;
 }
 
 export interface SettlementState {
@@ -286,7 +412,9 @@ export interface SettlementState {
   name: string;
   stage_key: string;
   stage_progress?: SettlementStageProgress;
+  pending_promotion?: SettlementPromotionNotice;
   territory?: { min_x: number; min_y: number; max_x: number; max_y: number };
+  world?: WorldLocation;
   defense?: SettlementDefenseFoundation;
   population: number;
   population_capacity: number;
@@ -632,6 +760,7 @@ export interface CombatMessage {
   pvp_competitive?: PvPCompetitiveOverview;
   pvp_cosmetics?: PvPCosmeticCollection;
   error?: string;
+  scouting_target_settlement_id?: string;
   character?: {
     id: string;
     name: string;
@@ -678,7 +807,6 @@ export interface CombatMessage {
     level: number;
     experience: number;
     gold_bank: number;
-    unspent_points: number;
   };
   inventory?: InventoryData;
   camp?: CampState;
@@ -746,6 +874,8 @@ export interface CombatMessage {
   overflow_chest?: Item[];
   auto_sell_preview?: AutoSellEvaluationResult;
   economy?: EconomyState;
+  territorial_map?: TerritorialMapSnapshot;
+  settlement_scouting?: SettlementScoutingState;
   active_buffs?: ActiveBuff[];
   gathering_result?: GatheringResult;
   craft_preview?: CraftPreview;
@@ -782,14 +912,9 @@ function importantNotificationForMessage(msg: CombatMessage, previousCharacter: 
 
   const character = msg.character;
   if (character && previousCharacter && character.level > (previousCharacter.level || 0)) {
-    const availablePoints = character.unspent_points || 0;
-    const points = availablePoints > 0 ? ` ${availablePoints} ponto(s) aguardam distribuição.` : '';
-    return notification('progress', '🌟', 'Você subiu de nível', `Nível ${previousCharacter.level} → ${character.level}.${points}`);
+    return notification('progress', '🌟', 'Você subiu de nível', `Nível ${previousCharacter.level} → ${character.level}. Seus atributos derivados cresceram automaticamente.`);
   }
 
-  if (character && previousCharacter && (character.unspent_points || 0) > (previousCharacter.unspent_points || 0)) {
-    return notification('progress', '✨', 'Pontos disponíveis', `${character.unspent_points || 0} ponto(s) de atributo aguardam distribuição.`);
-  }
 
   if (msg.type === 'SKILL_LEARNED') {
     return notification('skill', '📚', 'Nova habilidade aprendida', rawMessage || 'Uma nova habilidade foi aprendida permanentemente.');
@@ -800,6 +925,20 @@ function importantNotificationForMessage(msg: CombatMessage, previousCharacter: 
     const worker = result?.resident_name || 'O trabalhador';
     const cycles = result?.completed_cycles ? ` ${result.completed_cycles} ciclo(s)` : '';
     return notification('gathering', '🏡', msg.type === 'GATHERING_AUTO_CLAIMED' ? 'Trabalhador retornou' : 'Coleta concluída', rawMessage || `${worker} voltou${cycles} e entregou a produção no Depósito.`);
+  }
+
+  if (msg.type === 'SCOUTING_COMPLETED') {
+    return {
+      ...notification('reward', '🐾', 'Relatório de Inteligência pronto', rawMessage || 'Seus batedores retornaram. Abra o Mapa Territorial para consultar as estimativas.'),
+      ...(msg.scouting_target_settlement_id ? { action: { type: 'open_territorial_report' as const, settlement_id: msg.scouting_target_settlement_id } } : {}),
+    };
+  }
+
+  if (msg.type === 'SCOUTING_DETECTED') {
+    return {
+      ...notification('warning', '👁️', 'Batedores detectados', rawMessage || 'A contraespionagem identificou atividade estrangeira próxima ao seu Reino.'),
+      action: { type: 'open_territorial_intelligence' as const },
+    };
   }
 
   if (msg.type === 'HERO_DESIRE_ATTEMPT_COMPLETED' && msg.craft_result?.item) {
@@ -863,6 +1002,12 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
     revision: number;
   } | null>(null);
   const [economy, setEconomy] = useState<EconomyState | null>(null);
+  const [territorialMap, setTerritorialMap] = useState<TerritorialMapSnapshot | null>(null);
+  const [territorialMapLoading, setTerritorialMapLoading] = useState(false);
+  const [territorialMapError, setTerritorialMapError] = useState<string | null>(null);
+  const [settlementScouting, setSettlementScouting] = useState<SettlementScoutingState | null>(null);
+  const [settlementScoutingLoading, setSettlementScoutingLoading] = useState(false);
+  const [settlementScoutingError, setSettlementScoutingError] = useState<string | null>(null);
   const [activeBuffs, setActiveBuffs] = useState<ActiveBuff[]>([]);
   const [craftPreview, setCraftPreview] = useState<CraftPreview | null>(null);
   const [lastCraftBatchResult, setLastCraftBatchResult] = useState<CraftBatchResult | null>(null);
@@ -909,8 +1054,11 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
   const lastInventoryRevisionRef = useRef<number>(0);
   const lastCampRevisionRef = useRef<number>(0);
   const lastResourceRevisionRef = useRef<number>(0);
+  const lastPromotionNotificationRef = useRef<string>('');
   const activeCharacterRef = useRef<string>(characterId);
   const previousCharacterRef = useRef<any>(initialChar || null);
+  const territorialMapRequestRef = useRef<string | null>(null);
+  const settlementScoutingRequestRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (activeCharacterRef.current === characterId) return;
@@ -1126,6 +1274,32 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 			setEconomy(msg.economy);
 			setActiveBuffs(msg.economy.active_buffs || []);
 		  }
+          if (msg.territorial_map) {
+            setTerritorialMap(msg.territorial_map);
+            if (!territorialMapRequestRef.current || msg.request_id === territorialMapRequestRef.current) {
+              territorialMapRequestRef.current = null;
+              setTerritorialMapLoading(false);
+              setTerritorialMapError(null);
+            }
+          }
+          if (msg.settlement_scouting) {
+            setSettlementScouting(msg.settlement_scouting);
+            if (!settlementScoutingRequestRef.current || msg.request_id === settlementScoutingRequestRef.current) {
+              settlementScoutingRequestRef.current = null;
+              setSettlementScoutingLoading(false);
+              setSettlementScoutingError(null);
+            }
+          }
+          if (msg.error && territorialMapRequestRef.current && msg.request_id === territorialMapRequestRef.current) {
+            territorialMapRequestRef.current = null;
+            setTerritorialMapLoading(false);
+            setTerritorialMapError(msg.error);
+          }
+          if (msg.error && settlementScoutingRequestRef.current && msg.request_id === settlementScoutingRequestRef.current) {
+            settlementScoutingRequestRef.current = null;
+            setSettlementScoutingLoading(false);
+            setSettlementScoutingError(msg.error);
+          }
 		  if (msg.active_buffs) setActiveBuffs(msg.active_buffs);
 			  if (msg.craft_preview) {
 				setCraftPreview(msg.craft_preview);
@@ -1242,6 +1416,20 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
             onCombatEventRef.current(msg);
           }
 
+          const promotion = msg.economy?.settlement?.pending_promotion;
+          if (promotion && promotion.history_id && promotion.history_id !== lastPromotionNotificationRef.current && onImportantNotificationRef.current) {
+            lastPromotionNotificationRef.current = promotion.history_id;
+            onImportantNotificationRef.current({
+              id: `settlement-promotion:${promotion.history_id}`,
+              category: 'progress',
+              icon: promotion.to_stage.icon || '🏘️',
+              title: promotion.to_stage.promotion_headline || `Seu assentamento evoluiu para ${promotion.to_stage.name}`,
+              message: promotion.to_stage.summary || `Nova hierarquia alcançada: ${promotion.to_stage.name}.`,
+              timestamp: promotion.promoted_at || msg.timestamp || new Date().toISOString(),
+              read: false,
+            });
+          }
+
           const importantNotification = importantNotificationForMessage(msg, previousCharacter);
           if (importantNotification && onImportantNotificationRef.current) {
             onImportantNotificationRef.current(importantNotification);
@@ -1332,12 +1520,6 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
   const toggleSkill = (skill: string) => {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ action: 'TOGGLE_SKILL', skill }));
-    }
-  };
-
-  const allocateStat = (stat: string) => {
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({ action: 'ALLOCATE_STAT', stat }));
     }
   };
 
@@ -1542,6 +1724,57 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 	}
   };
 
+  const requestTerritorialMap = (radius: number = 12) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      const requestID = makeRequestId('territory');
+      territorialMapRequestRef.current = requestID;
+      setTerritorialMapLoading(true);
+      setTerritorialMapError(null);
+      socketRef.current.send(JSON.stringify({ action: 'REQUEST_TERRITORIAL_MAP', radius: Math.max(1, Math.min(40, radius)), request_id: requestID }));
+      return;
+    }
+    setTerritorialMapLoading(false);
+    setTerritorialMapError('Conexão com o servidor indisponível.');
+  };
+
+  const requestSettlementScouting = () => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      const requestID = makeRequestId('scouting');
+      settlementScoutingRequestRef.current = requestID;
+      setSettlementScoutingLoading(true);
+      setSettlementScoutingError(null);
+      socketRef.current.send(JSON.stringify({ action: 'REQUEST_SETTLEMENT_SCOUTING', request_id: requestID }));
+      return;
+    }
+    setSettlementScoutingLoading(false);
+    setSettlementScoutingError('Conexão com o servidor indisponível.');
+  };
+
+  const startSettlementScouting = (targetSettlementID: string) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      const requestID = makeRequestId('scoutingstart');
+      settlementScoutingRequestRef.current = requestID;
+      setSettlementScoutingLoading(true);
+      setSettlementScoutingError(null);
+      socketRef.current.send(JSON.stringify({ action: 'START_SETTLEMENT_SCOUTING', target_settlement_id: targetSettlementID, request_id: requestID }));
+      return;
+    }
+    setSettlementScoutingLoading(false);
+    setSettlementScoutingError('Conexão com o servidor indisponível.');
+  };
+
+  const updateSettlementDefenseStrategy = (strategy: 'balanced' | 'aggressive' | 'defensive') => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ action: 'UPDATE_SETTLEMENT_DEFENSE_STRATEGY', defense_strategy: strategy, request_id: makeRequestId('defstrategy') }));
+    }
+  };
+
+  const acknowledgeSettlementPromotion = () => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ action: 'ACK_SETTLEMENT_PROMOTION', request_id: makeRequestId('stageack') }));
+    }
+  };
+
   const claimPendingCraft = (itemId: string) => {
 	if (socketRef.current?.readyState === WebSocket.OPEN) {
 	  socketRef.current.send(JSON.stringify({ action: 'CLAIM_PENDING_CRAFT', item_id: itemId, request_id: makeRequestId('claimcraft') }));
@@ -1686,6 +1919,12 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
     overflowChest,
     autoSellPreview,
     economy,
+    territorialMap,
+    territorialMapLoading,
+    territorialMapError,
+    settlementScouting,
+    settlementScoutingLoading,
+    settlementScoutingError,
     activeBuffs,
     craftPreview,
     lastCraftBatchResult,
@@ -1757,7 +1996,6 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
     changeRegion,
     setStance,
     toggleSkill,
-    allocateStat,
     bulkSell,
     startBuildingUpgrade,
     moveCampBuilding,
@@ -1780,6 +2018,11 @@ export function useGameSocket(token: string, characterId: string, initialChar?: 
 	craftItem,
 	consumeFood,
 	requestEconomySync,
+    requestTerritorialMap,
+    requestSettlementScouting,
+    startSettlementScouting,
+    updateSettlementDefenseStrategy,
+    acknowledgeSettlementPromotion,
 	claimPendingCraft,
 	claimPendingResources,
 	createHeroDesire,

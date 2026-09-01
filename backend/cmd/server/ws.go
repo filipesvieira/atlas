@@ -81,9 +81,11 @@ type ClientAction struct {
 	TileX               int                      `json:"tile_x"`
 	TileY               int                      `json:"tile_y"`
 	Rotation            int                      `json:"rotation"`
+	Radius              int                      `json:"radius"`
 	Channel             string                   `json:"channel"`
 	Text                string                   `json:"text"`
 	TargetCharacterID   string                   `json:"target_character_id"`
+	TargetSettlementID  string                   `json:"target_settlement_id"`
 	MessageID           string                   `json:"message_id"`
 	Reason              string                   `json:"reason"`
 	DuelChallengeID     string                   `json:"duel_challenge_id"`
@@ -92,6 +94,7 @@ type ClientAction struct {
 	PvPStrategyVersion  int                      `json:"pvp_strategy_version"`
 	PvPCosmeticType     string                   `json:"pvp_cosmetic_type"`
 	PvPCosmeticKey      string                   `json:"pvp_cosmetic_key"`
+	DefenseStrategy     string                   `json:"defense_strategy"`
 	SkinKey             string                   `json:"skin_key"`
 }
 

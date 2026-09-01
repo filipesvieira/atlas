@@ -273,6 +273,9 @@ func ensureSettlementRows(charID string) error {
 			}
 		}
 	}
+	if _, err := ensureSettlementWorldLocationTx(tx, settlementID, time.Now().UTC()); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -404,20 +407,28 @@ func GetSettlementState(charID string) (*game.SettlementState, error) {
 	if err := ensureSettlementRows(charID); err != nil {
 		return nil, err
 	}
-	if err := reconcileSettlementStage(charID, time.Now().UTC()); err != nil {
+	now := time.Now().UTC()
+	if err := reconcileSettlementStage(charID, now); err != nil {
+		return nil, err
+	}
+	if err := reconcileSettlementDefenseSnapshot(charID, now); err != nil {
 		return nil, err
 	}
 	state := &game.SettlementState{Residents: []game.SettlementResident{}, Desires: []game.HeroDesire{}, Armory: []game.SettlementArmoryItem{}}
 	if err := DB.QueryRow(`
-		SELECT id,name,stage_key,reputation,prosperity,revision,
-		       treasury_balance,treasury_reserved_payroll,treasury_lifetime_income,
-		       treasury_lifetime_expenses,treasury_auto_fund_enabled,
-		       treasury_personal_gold_reserve,economy_version
-		FROM settlements WHERE character_id=$1`, charID).Scan(
+		SELECT settlement.id,settlement.name,settlement.stage_key,settlement.reputation,settlement.prosperity,settlement.revision,
+		       settlement.treasury_balance,settlement.treasury_reserved_payroll,settlement.treasury_lifetime_income,
+		       settlement.treasury_lifetime_expenses,settlement.treasury_auto_fund_enabled,
+		       settlement.treasury_personal_gold_reserve,settlement.economy_version,
+		       world.id::text,world.key,world.name,settlement.world_x,settlement.world_y,settlement.world_assigned_at
+		FROM settlements settlement
+		JOIN worlds world ON world.id=settlement.world_id
+		WHERE settlement.character_id=$1`, charID).Scan(
 		&state.ID, &state.Name, &state.StageKey, &state.Reputation, &state.Prosperity, &state.Revision,
 		&state.Treasury.Balance, &state.Treasury.ReservedPayroll, &state.Treasury.LifetimeIncome,
 		&state.Treasury.LifetimeExpenses, &state.Treasury.AutoFundEnabled,
-		&state.Treasury.PersonalGoldReserve, &state.Treasury.EconomyVersion); err != nil {
+		&state.Treasury.PersonalGoldReserve, &state.Treasury.EconomyVersion,
+		&state.World.WorldID, &state.World.WorldKey, &state.World.WorldName, &state.World.X, &state.World.Y, &state.World.AssignedAt); err != nil {
 		return nil, err
 	}
 	state.Treasury.PayrollUnlocked = state.Prosperity >= game.SettlementPayrollUnlockProsperity
@@ -459,18 +470,16 @@ func GetSettlementState(charID string) (*game.SettlementState, error) {
 	}
 	state.StageProgress = game.SettlementStageProgressFor(state.StageKey, state.Prosperity, state.Population, buildingLevels)
 	state.Territory = game.SettlementBuildBounds(state.StageKey)
-	var shieldUntil sql.NullTime
-	if err := DB.QueryRow(`
-		SELECT raids_enabled,defense_strategy,shield_until,revision,
-		       EXISTS(SELECT 1 FROM settlement_defense_snapshots snapshot WHERE snapshot.settlement_id=$1 AND snapshot.invalidated_at IS NULL)
-		FROM settlement_pvp_settings WHERE settlement_id=$1`, state.ID).Scan(
-		&state.Defense.RaidsEnabled, &state.Defense.Strategy, &shieldUntil, &state.Defense.Revision, &state.Defense.SnapshotReady); err != nil {
+	defense, err := loadSettlementDefenseFoundation(state.ID)
+	if err != nil {
 		return nil, err
 	}
-	if shieldUntil.Valid {
-		value := shieldUntil.Time.UTC()
-		state.Defense.ShieldUntil = &value
+	state.Defense = defense
+	promotion, err := pendingSettlementPromotion(state.ID)
+	if err != nil {
+		return nil, err
 	}
+	state.PendingPromotion = promotion
 	if state.Population >= state.PopulationCapacity {
 		state.GrowthBlockedReason = "Moradia lotada: melhore a Cabana do Aventureiro para abrir novas vagas"
 	} else if nextMilestone, exists := game.NextSettlementResidentMilestone(state.Population); exists {

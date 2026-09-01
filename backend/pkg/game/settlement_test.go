@@ -95,3 +95,26 @@ func TestSettlementStageTerritoryGrowthMatchesBuildBounds(t *testing.T) {
 		lastArea = area
 	}
 }
+func TestSettlementStageProgressExposesVisibleRoadmap(t *testing.T) {
+	levels := map[string]int{"campfire": 2, "adventurer_hut": 1, "warehouse": 1}
+	progress := SettlementStageProgressFor(SettlementStageCamp, 75, 9, levels)
+	if progress.Next == nil || progress.Next.Key != SettlementStageOutpost {
+		t.Fatalf("próximo estágio inesperado: %+v", progress.Next)
+	}
+	if !progress.Ready || progress.CompletionPercent != 100 {
+		t.Fatalf("progresso deveria estar pronto: %+v", progress)
+	}
+	if progress.Next.PromotionHeadline == "" || len(progress.Next.Highlights) == 0 {
+		t.Fatal("roadmap visual precisa de headline e highlights")
+	}
+}
+
+func TestSettlementStageProgressIsGradualBeforeRequirementCompletion(t *testing.T) {
+	progress := SettlementStageProgressFor(SettlementStageCamp, 38, 5, map[string]int{"campfire": 1})
+	if progress.CompletionPercent <= 0 || progress.CompletionPercent >= 100 {
+		t.Fatalf("barra deve refletir progresso parcial, recebido=%d%%", progress.CompletionPercent)
+	}
+	if progress.CompletedRequirements != 0 {
+		t.Fatalf("nenhum requisito completo era esperado, recebido=%d", progress.CompletedRequirements)
+	}
+}

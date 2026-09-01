@@ -1,11 +1,11 @@
 # Reino do Avesso — Assentamento Vivo, Arenas Isométricas & Economia Persistente
 
-Estado atual: catálogo `2026.08-performance-v2-equipment-identity-v1`, com 9 regiões, 40 monstros/bosses, 13 profissões, assentamento persistente, prólogo de Reino do Avesso, combate autoritativo e progressão offline determinística. A Floresta e a Vila do Shereque usam arenas isométricas com terreno próprio; as demais regiões ainda evoluem a partir dos renderers legados.
+Estado atual: M6 Scouting sobre o catálogo `2026.09-m5c-defense-stage-feedback-v1`, com 9 regiões, 40 monstros/bosses, 13 profissões, assentamento persistente, prólogo de Reino do Avesso, combate autoritativo e progressão offline determinística. A Floresta e a Vila do Shereque usam arenas isométricas com terreno próprio; as demais regiões ainda evoluem a partir dos renderers legados.
 
 O índice de divergências, documentos históricos e fontes canônicas está em
 [`docs/DOCUMENTATION_STATUS.md`](docs/DOCUMENTATION_STATUS.md).
 
-O roadmap ativo está em `docs/MULTIPLAYER_PVP_MASTER_PLAN_V1.md`. A etapa **CFF-A — Combat Feel Presentation Foundation** foi concluída antes da M5-B e está documentada em `docs/COMBAT_FEEL_MASTER_PLAN.md`; ela melhora impacto visual sem alterar matemática autoritativa. A **M5-B — Fortificações e defesa ativa** está concluída; a próxima etapa é **M5-C — Engenheiro, Defense Power e Snapshot defensivo**.
+O roadmap ativo está em `docs/MULTIPLAYER_PVP_MASTER_PLAN_V1.md`. A etapa **CFF-A — Combat Feel Presentation Foundation** foi concluída antes da M5-B e está documentada em `docs/COMBAT_FEEL_MASTER_PLAN.md`; ela melhora impacto visual sem alterar matemática autoritativa. A **M5-C**, a simplificação **S1**, o **M5-D — Mapa Territorial** e a **M6 — Scouting/Inteligência** estão concluídos. A próxima fase de produto é **M7 — Raid Reino vs Reino**.
 
 No jogo, abra **🏘️ Assentamento, Trabalhos & Oficina**. Em **Ordens de Trabalho**, envie um morador habilitado sem pausar a caçada; ao concluir, ele volta sozinho e deposita o que couber. Em **Ambições & Arsenal**, escolha uma receita descoberta, a raridade desejada e o limite de tentativas; os moradores reservam os custos e produzem automaticamente. Construções continuam no modal do Acampamento e nunca são iniciadas pelos trabalhadores.
 
@@ -31,7 +31,7 @@ acima.
 
 No backend de produção, inclua as origens nativas do Tauri na allowlist usada por `ALLOWED_ORIGINS` (`http://tauri.localhost` para Windows e `tauri://localhost` para o protocolo nativo), além de qualquer origem web oficial.
 
-No assentamento, o **Layout V4** separa o terreno urbano das arenas de combate. O mundo territorial máximo é `44x32`, mas a área construtiva cresce com o estágio: Acampamento `24x18`, Posto `28x20`, Vilarejo `32x22`, Vila `36x24`, Cidade `40x28` e Reino `44x32`. Construções descobertas podem ser posicionadas antes do primeiro nível e reorganizadas depois de prontas por drag-and-drop; durante o arraste, pressione **R** para girar em 90°. O backend valida estágio, limites, footprint, rotação e colisões antes de salvar. A câmera do assentamento aceita roda do mouse para zoom, botão do meio ou `Alt+arrastar` para pan e **fit** para reenquadrar a área liberada.
+No assentamento, o **Layout V5** separa o terreno urbano das arenas de combate. O mundo territorial máximo é `52x38`, e a área construtiva cresce com o estágio: Acampamento `24x18`, Posto `28x20`, Vilarejo `32x22`, Vila `36x24`, Cidade `40x28` e Reino `52x38`. O estágio atual e o próximo objetivo aparecem no Dashboard; cada promoção gera notificação e modal persistente até reconhecimento do jogador. Construções descobertas podem ser posicionadas antes do primeiro nível e reorganizadas depois de prontas por drag-and-drop; durante o arraste, pressione **R** para girar em 90°. O backend valida estágio, limites, footprint, rotação e colisões antes de salvar. A câmera do assentamento aceita roda do mouse para zoom, botão do meio ou `Alt+arrastar` para pan e **fit** para reenquadrar a área liberada.
 
 ## Executar com Docker
 
@@ -47,7 +47,7 @@ docker compose up --build
 - PostgreSQL: `localhost:5432` (`atlas` / `atlas_password`)
 
 O backend aplica as migrations embutidas no startup e encerra imediatamente se o schema ou o catálogo estiver inconsistente. Em banco existente, faça backup antes do primeiro start.
-O `bootstrap.sql` não é uma segunda fonte de schema: ele apenas documenta que a autoridade está nas migrations embutidas de `backend/migrations/`, atualmente até `000035_settlement_stage_foundation.sql` (incluindo a reconciliação `000032_pvp_balance_qa.sql`).
+O `bootstrap.sql` não é uma segunda fonte de schema: ele apenas documenta que a autoridade está nas migrations embutidas de `backend/migrations/`, atualmente até `000037_m5c_defense_and_stage_feedback.sql` (incluindo Territory V5 e a reconciliação PvP `000032`).
 
 ### Conta local de QA
 
@@ -133,12 +133,28 @@ O estado padrão já é `crafting-first`. As variáveis abaixo permitem rollback
 | `ATLAS_BOSS_ARTIFACT_DROP_MULTIPLIER` | `0.02` | chance pequena de artefato pronto de chefe |
 
 Consulte [docs/IMPLEMENTATION_REPORT_GAMEPLAY_P1_2026-08-15.md](docs/IMPLEMENTATION_REPORT_GAMEPLAY_P1_2026-08-15.md), [docs/IMPLEMENTATION_REPORT_SETTLEMENT_V1.md](docs/IMPLEMENTATION_REPORT_SETTLEMENT_V1.md), [docs/IMPLEMENTATION_REPORT_ECONOMY_V2.md](docs/IMPLEMENTATION_REPORT_ECONOMY_V2.md) e [docs/MIGRATION_RUNBOOK_ECONOMY_V2.md](docs/MIGRATION_RUNBOOK_ECONOMY_V2.md).
-## Estado atual — M5-B.1 (2026-08-30)
+## Estado atual — M6 (2026-09-01)
 
 - Settlement Layout V5: Reino 52x38, Cidade 40x28.
-- Migration: `000036_settlement_territory_v5.sql`.
-- Contrato territorial backend-authoritative via GameCatalog.
-- Construções: hover explica, click usa, drag move.
-- Centro de Comando do Reino criado como shell de navegação.
-- Plano canônico de RvR: `docs/KINGDOM_VS_KINGDOM_MASTER_PLAN.md`.
-- Próximo passo: M5-C (Defense Power / Readiness / Snapshot defensivo).
+- Migration mais recente: `000040_m6_scouting.sql`.
+- Promoções territoriais possuem card, notificação e modal persistente com ACK.
+- Centro de Comando mostra Defense Power, Readiness, componentes e estratégia.
+- Quartel usa guarnição automática limitada pela população, sem microgestão.
+- Snapshot defensivo v1 é determinístico e hashado; raids continuam desligadas.
+- Planos canônicos: `docs/KINGDOM_VS_KINGDOM_MASTER_PLAN.md`, `docs/HERO_PROGRESSION_SIMPLIFICATION_PLAN.md` e `docs/WORLD_COORDINATE_MAP_MASTER_PLAN.md`.
+
+## Roadmap atual — setembro/2026
+
+```text
+✅ M5-C  Defesa territorial + feedback de promoção
+✅ S1    Simplificação do herói
+✅ M5-D  Mapa Territorial por coordenadas (x,y)
+✅ M6    Scouting / Inteligência
+➡️ M7    Raid Reino vs Reino
+```
+
+A Sala de Guerra centraliza Defense Power/Readiness. O RvR real continua desabilitado até M7.
+
+## Mapa Territorial e Inteligência M6
+
+O botão **🗺️ Território** abre o mapa persistente por coordenadas. Na Cidade, a **Sala de Guerra** libera scouting: selecione outro Reino e use **Enviar batedores**. Distância, Rastreador e coordenação alteram custo/duração/qualidade; Torre de Vigia e comando defensivo participam da contraespionagem. O cliente recebe somente estimativas temporárias, nunca snapshots ou valores privados exatos. Raids continuam desligadas até M7.

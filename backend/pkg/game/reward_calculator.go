@@ -36,7 +36,7 @@ func CalculateKillGold(isBoss bool, goldBonusPct float64, rng RNG) int64 {
 }
 
 // ApplyExperienceGain adiciona experiência ao personagem e processa todos os level-ups
-// acumulados de forma determinística, distribuindo pontos de atributos e restaurando HP/Mana.
+// acumulados de forma determinística. S1 remove pontos manuais; nível restaura HP/Mana.
 func ApplyExperienceGain(char *CharacterData, xpGained int64) (bool, int, int) {
 	if char == nil || xpGained <= 0 {
 		return false, 0, 0
@@ -57,13 +57,11 @@ func ApplyExperienceGain(char *CharacterData, xpGained int64) (bool, int, int) {
 	}
 	initialLevel := char.Level
 	leveledUp := false
-	statPointsGained := 0
+	statPointsGained := 0 // compatibilidade de assinatura: S1 sempre retorna zero.
 
 	for char.Level < MaxCharacterLevel && char.Experience >= GetRequiredXPForLevel(char.Level) {
 		char.Experience -= GetRequiredXPForLevel(char.Level)
 		char.Level++
-		char.UnspentPoints += 3
-		statPointsGained += 3
 		leveledUp = true
 	}
 
